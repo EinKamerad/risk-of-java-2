@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "mI/3bDlvJws=",
+  "dgSpecHash": "vF7C+Okn6jI=",
   "success": true,
-  "projectFilePath": "/home/10160@stud.pgt.su/Музыка/rir2c/RiskOfCSharp2/RiskOfCSharp2.csproj",
+  "projectFilePath": "/home/10160@stud.pgt.su/Видео/rir2c/RiskOfCSharp2/RiskOfCSharp2.csproj",
   "expectedPackageFiles": [
     "/home/10160@stud.pgt.su/.nuget/packages/raylib-cs/6.0.0/raylib-cs.6.0.0.nupkg.sha512",
     "/home/10160@stud.pgt.su/.nuget/packages/system.numerics.vectors/4.5.0/system.numerics.vectors.4.5.0.nupkg.sha512"

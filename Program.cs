@@ -44,10 +44,19 @@ namespace RiskOfCSharp2
                 return MathF.Max(1f, MathF.Floor(raw * transMult * fluxMult * tonicMult * glassDiv));
             }
         }
-        public int Gold { get; set; } = 150;
-        public int LunarCoins { get; set; } = 8;
+        public int Gold { get; set; } = 35;
+        public int LunarCoins { get; set; } = 5;
         public bool BlueOrbSpawned { get; set; } = false;
-        public bool IsBossAlive => false;
+        public CombatTarget? ActiveBoss;
+        public string BossTitle = "";
+        public bool IsBossAlive => IsValid(ActiveBoss) && !ActiveBoss!.IsAlly;
+        public float MoonDetonationTimer { get; set; } = 0f;
+        public bool MithrixSpawned = false;
+
+        public float ElapsedTime = 0f;
+        public float DirectorCredits = 0f;
+        public float SpawnTimer = 1.5f;
+
         public Dictionary<string, int> Items { get; } = new();
         public List<string> ItemOrder { get; } = new();
         public List<Entity> StageEntities { get; } = new();
@@ -56,6 +65,38 @@ namespace RiskOfCSharp2
         public string StageName = "";
         public int MoonPillarsDone = 0;
         public Entity? ActiveTeleporterOrPad;
+
+        public float DifficultyCoeff
+        {
+            get
+            {
+                float minutes = ElapsedTime / 60.0f;
+                return (1.0f + 0.18f * minutes) * MathF.Pow(1.15f, Stage - 1);
+            }
+        }
+
+        public (string Label, Color Col) GetDifficultyInfo()
+        {
+            float c = DifficultyCoeff;
+            if (c < 1.3f) return ("EASY", Rgb(80, 225, 100));
+            if (c < 1.8f) return ("MEDIUM", Rgb(255, 210, 60));
+            if (c < 2.5f) return ("HARD", Rgb(255, 130, 40));
+            if (c < 3.5f) return ("VERY HARD", Rgb(245, 55, 55));
+            return ("HAHAHA (INSANE)", Rgb(210, 50, 255));
+        }
+
+        public void UnlockAchievement(string achKey)
+        {
+            if (GameData.Achievements.TryGetValue(achKey, out var ach) &&
+                !ProgressData.Instance.UnlockedAchievements.Contains(achKey))
+            {
+                ProgressData.Instance.UnlockedAchievements.Add(achKey);
+                if (ach.UnlocksItem != null)
+                    ProgressData.Instance.UnlockedItems.Add(ach.UnlocksItem);
+                ProgressData.Instance.Save();
+                ShowBanner($"ДОСТИЖЕНИЕ: {ach.Name} ({ach.RewardText})", Color.Gold, 4.0f);
+            }
+        }
 
         public void HealPlayer(float amount)
         {
@@ -88,6 +129,9 @@ namespace RiskOfCSharp2
             Items[itemKey] = (Items.TryGetValue(itemKey, out int c) ? c : 0) + 1;
             var info = GameData.ItemPool[itemKey];
             ShowBanner($"ПОДОБРАНО: {info.Name} ({info.Desc})", info.Color, 3.2f);
+            int total = 0;
+            foreach (var v in Items.Values) total += v;
+            if (total >= 6) UnlockAchievement("ach_hoarder");
         }
 
         public void SpawnItemDrop(Vector3 pos, string? itemKey = null, string poolType = "small_chest")
@@ -99,12 +143,31 @@ namespace RiskOfCSharp2
         public void ShowBanner(string msg, Color col, float duration = 2.5f)
             => Program.ShowBanner(msg, col, duration);
 
+        public void SpawnBoss(Vector3 pos, string? bossType = null)
+        {
+            var rng = new Random();
+            string bType = bossType != null && Array.IndexOf(GameData.BossTypes, bossType) >= 0
+                ? bossType
+                : GameData.BossTypes[rng.Next(GameData.BossTypes.Length)];
+            float fy = Physics.GetSurfaceHeight(pos.X, pos.Z, pos.Y);
+            var boss = new CombatTarget(new Vector3(pos.X, fy, pos.Z), bType, DifficultyCoeff);
+            ActiveBoss = boss;
+            BossTitle = GameData.BossTitles.TryGetValue(bType, out var bt) ? bt : GameData.BossTitles["boss"];
+            CombatManager.Enemies.Add(boss);
+            StageEntities.Add(boss);
+        }
+
         public void OnTeleporterActivated()
-            => ShowBanner("ТЕЛЕПОРТ АКТИВИРОВАН! ДЕРЖИТЕСЬ В ЗОНЕ ЗАРЯДКИ!", Color.Red, 3.0f);
+        {
+            Vector3 tpPos = ActiveTeleporterOrPad != null ? ActiveTeleporterOrPad.Position : PlayerPos;
+            SpawnBoss(tpPos + new Vector3(9f, 0f, 9f));
+            ShowBanner("ТЕЛЕПОРТ АКТИВИРОВАН! ПОБЕДИТЕ БОССА ТЕЛЕПОРТА!", Color.Red, 3.2f);
+        }
 
         public void NextStage()
         {
             Stage++;
+            if (Stage >= 2) UnlockAchievement("ach_traveler");
             Program.LoadStage(Stage, null);
         }
 
@@ -128,14 +191,64 @@ namespace RiskOfCSharp2
         }
 
         public void StartMithrixEncounter()
-            => ShowBanner("ВЫ ПОДНЯЛИСЬ В НЕБЕСНЫЙ КОЛИЗЕЙ МИТРИКСА (Y = 120м)!", Color.SkyBlue, 4.5f);
-    }
+        {
+            if (MithrixSpawned) return;
+            MithrixSpawned = true;
+            foreach (var e in CombatManager.Enemies.ToArray())
+            {
+                if (IsValid(e) && !e.IsBoss) Destroy(e);
+            }
+            CombatManager.Enemies.RemoveAll(e => !IsValid(e));
 
+            var boss = new CombatTarget(new Vector3(0, Physics.ColosseumY, 22.0f), "mithrix", DifficultyCoeff)
+            {
+                PhaseTransitionTimer = 1.6f,
+                AttackTimer = 2.4f,
+                SpecialTimer = 6.2f
+            };
+            ActiveBoss = boss;
+            BossTitle = "MITHRIX [PHASE 1/4] :: KING OF NOTHING";
+            CombatManager.Enemies.Add(boss);
+            StageEntities.Add(boss);
+            ShowBanner("МИТРИКС, КОРОЛЬ НИЧЕГО [ФАЗА 1/4] :: БИТВА В НЕБЕСНОМ КОЛИЗЕЕ!", Color.SkyBlue, 4.2f);
+            if (Net.NetworkManager.Instance.Connected)
+                Net.NetworkManager.Instance.Broadcast(new System.Text.Json.Nodes.JsonObject { ["type"] = "mithrix_start" });
+        }
+        public void OnMithrixDefeated(Vector3 deathPos)
+        {
+            ActiveBoss = null;
+            MoonDetonationTimer = 75.0f;
+            Vector3 shipPos = new(0, 0, -52.0f);
+            StageEntities.Add(new EscapeShip(shipPos));
+            StageEntities.Add(new LunarEscapePad(new Vector3(0, Physics.ColosseumY, -46.0f), shipPos));
+            ShowBanner("МИТРИКС ПОВЕРЖЕН! ПРЫГАЙТЕ В ЗЕЛЁНЫЙ ЛУЧ НА КРАЮ КОЛИЗЕЯ К КОРАБЛЮ (75 СЕК)!", Color.Lime, 6.5f);
+        }
+
+        public void OnRunVictory()
+            => Program.OnVictory();
+    }
     public static class Program
     {
-        private static string _screen = "lobby"; // "lobby", "logbook", "in_game"
+        private static string _screen = "main"; // "main", "mp_connect", "settings", "lobby", "logbook", "in_game"
         private static string _selectedChar = "commando";
         private static GameRunContext? _run;
+        private static bool _paused = false;
+
+        // Настройки
+        private static float _mouseSens = 0.18f;
+        private static float _fov = 60f;
+
+        // Сетевое состояние и Лобби
+        private static readonly Net.NetworkManager _net = new();
+        private static readonly Dictionary<string, (string CharKey, bool Ready)> _lobbyPlayers = new();
+        private static readonly Dictionary<string, RemotePlayer> _remotePlayers = new();
+        private static bool _myReady = false;
+        private static bool _lobbyCountdownActive = false;
+        private static float _lobbyCountdown = 60f;
+        private static bool _typingCode = false;
+        private static string _roomCodeInput = "";
+        private static string _netStatusText = "";
+        private static float _netSyncTimer = 0f;
 
         private static string _bannerText = "";
         private static Color _bannerColor = Color.Yellow;
@@ -167,18 +280,30 @@ namespace RiskOfCSharp2
 
         public static void Main()
         {
-            Engine.Init(1536, 864, "Risk of C# 2 - LAN & Room Code Co-Op (Phase 3: World & Physics)");
+            Engine.Init(1536, 864, "Risk of C# 2 - LAN & Room Code Co-Op");
+            _netStatusText = $"Ваш локальный IP: {_net.HostIp}";
             SetupDiorama();
 
             while (!Raylib.WindowShouldClose())
             {
                 float dt = Math.Min(Raylib.GetFrameTime(), 0.05f);
+                ProcessNetwork();
                 if (_bannerTimer > 0f) _bannerTimer -= dt;
 
                 if (_screen == "in_game")
                 {
-                    UpdateInGame(dt);
-                    Engine.Update(dt);
+                    if (Raylib.IsKeyPressed(KeyboardKey.Escape))
+                    {
+                        _paused = !_paused;
+                        if (_paused) Raylib.EnableCursor();
+                        else Raylib.DisableCursor();
+                    }
+
+                    if (!_paused)
+                    {
+                        UpdateInGame(dt);
+                        Engine.Update(dt);
+                    }
                 }
                 else
                 {
@@ -186,8 +311,19 @@ namespace RiskOfCSharp2
                     Engine.Update(dt);
                     UpdateDiorama(dt);
                     Engine.Camera.Position = new Vector3(0f, 2.15f, -8.6f);
+                    Engine.Camera.FovY = _fov;
                     Engine.CameraEuler = new Vector3(5f, 0f, 0f);
                     Engine.UpdateCameraTargetFromEuler();
+
+                    if (_screen == "lobby" && _net.Connected && _lobbyCountdownActive)
+                    {
+                        _lobbyCountdown = MathF.Max(0f, _lobbyCountdown - dt);
+                        if (_net.Mode == "host" && _lobbyCountdown <= 0f)
+                        {
+                            _lobbyCountdownActive = false;
+                            StartRun(_selectedChar);
+                        }
+                    }
                 }
 
                 Raylib.BeginDrawing();
@@ -199,17 +335,145 @@ namespace RiskOfCSharp2
 
                 Engine.Draw3DBillboardLabels(Engine.Camera);
 
-                if (_screen == "in_game") DrawInGameHUD();
+                if (_screen == "in_game")
+                {
+                    DrawInGameHUD();
+                    if (_paused) DrawPauseOverlay();
+                }
+                else if (_screen == "main") DrawMainMenuUI();
+                else if (_screen == "mp_connect") DrawMpConnectUI();
+                else if (_screen == "settings") DrawSettingsUI();
                 else if (_screen == "lobby") DrawLobbyUI();
                 else DrawLogbookUI();
 
+                // Компактный тост уведомлений внизу экрана (не закрывает прицел и полоску Босса!)
                 if (_bannerTimer > 0f && !string.IsNullOrEmpty(_bannerText))
-                    Engine.DrawTextCentered(_bannerText, Raylib.GetScreenWidth() * 0.5f, 155f, 24f, _bannerColor);
+                {
+                    int sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();
+                    float ty = _screen == "in_game" ? sh - 128f : 108f;
+                    Raylib.DrawRectangle(sw / 2 - 420, (int)ty - 18, 840, 36, Rgb(10, 14, 24, 210));
+                    Raylib.DrawRectangle(sw / 2 - 420, (int)ty - 18, 840, 2, _bannerColor);
+                    Engine.DrawTextCentered(_bannerText, sw * 0.5f, ty, 18f, _bannerColor);
+                }
 
                 Raylib.EndDrawing();
             }
 
+            _net.StopSession();
             Raylib.CloseWindow();
+        }
+
+        private static void ProcessNetwork()
+        {
+            foreach (var msg in _net.PollMessages())
+            {
+                string mtype = msg["type"]?.GetValue<string>() ?? "";
+                if (mtype == "welcome")
+                {
+                    _net.MyId = msg["player_id"]?.GetValue<string>() ?? "p2";
+                    _net.RoomCode = msg["room_code"]?.GetValue<string>() ?? _net.RoomCode;
+                    ShowBanner($"ПОДКЛЮЧЕНО К КОМНАТЕ {_net.RoomCode}!", Color.Lime, 3.0f);
+                    BroadcastLobbyState();
+                }
+                else if (mtype == "client_joined")
+                {
+                    string pid = msg["player_id"]?.GetValue<string>() ?? "p2";
+                    if (pid != _net.MyId) _lobbyPlayers[pid] = ("commando", false);
+                    ShowBanner($"ИГРОК [{pid.ToUpper()}] ВОШЁЛ В ЛОББИ!", Color.SkyBlue, 2.5f);
+                    BroadcastLobbyState();
+                }
+                else if (mtype == "player_left")
+                {
+                    string pid = msg["player_id"]?.GetValue<string>() ?? "";
+                    _lobbyPlayers.Remove(pid);
+                    if (_remotePlayers.TryGetValue(pid, out var rp))
+                    {
+                        Destroy(rp);
+                        _remotePlayers.Remove(pid);
+                    }
+                    ShowBanner($"ИГРОК [{pid.ToUpper()}] ПОКИНУЛ ИГРУ", Color.Orange, 2.5f);
+                }
+                else if (mtype == "disconnected")
+                {
+                    _lobbyPlayers.Clear();
+                    if (_screen == "in_game") QuitRunToLobby();
+                    _screen = "main";
+                    ShowBanner("СОЕДИНЕНИЕ С ХОСТОМ ПОТЕРЯНО", Color.Red, 3.5f);
+                }
+                else if (mtype == "lobby_state")
+                {
+                    string pid = msg["player_id"]?.GetValue<string>() ?? "";
+                    if (!string.IsNullOrEmpty(pid) && pid != _net.MyId)
+                    {
+                        bool isNew = !_lobbyPlayers.ContainsKey(pid);
+                        _lobbyPlayers[pid] = (
+                            msg["char_key"]?.GetValue<string>() ?? "commando",
+                            msg["ready"]?.GetValue<bool>() ?? false
+                        );
+                        if (isNew) BroadcastLobbyState();
+                        EvaluateLobbyCountdown();
+                    }
+                }
+                else if (mtype == "lobby_start_run")
+                {
+                    int st = msg["stage"]?.GetValue<int>() ?? 1;
+                    int seed = msg["seed"]?.GetValue<int>() ?? 1001;
+                    if (_screen != "in_game")
+                        StartRun(_selectedChar, seed, fromNetwork: true, startStage: st);
+                }
+                else if (mtype == "player_state" && _screen == "in_game" && _run != null)
+                {
+                    string pid = msg["player_id"]?.GetValue<string>() ?? "";
+                    if (!string.IsNullOrEmpty(pid) && pid != _net.MyId)
+                    {
+                        if (!_remotePlayers.TryGetValue(pid, out var rp) || !IsValid(rp))
+                        {
+                            rp = new RemotePlayer(pid, msg["char_key"]?.GetValue<string>() ?? "commando");
+                            _remotePlayers[pid] = rp;
+                            _run.StageEntities.Add(rp);
+                        }
+                        rp.ApplyNetState(msg);
+                    }
+                }
+                else if (mtype == "stage_sync" && _screen == "in_game" && _run != null)
+                {
+                    int newStage = msg["stage"]?.GetValue<int>() ?? _run.Stage;
+                    int newSeed = msg["seed"]?.GetValue<int>() ?? 1001;
+                    string? newMode = msg["special_mode"]?.GetValue<string>();
+                    LoadStage(newStage, newMode, newSeed, fromNetwork: true);
+                }
+                else if (mtype == "mithrix_start" && _screen == "in_game" && _run != null)
+                {
+                    _run.StartMithrixEncounter();
+                }
+            }
+        }
+
+        private static void BroadcastLobbyState()
+        {
+            if (!_net.Connected) return;
+            _net.Broadcast(new System.Text.Json.Nodes.JsonObject
+            {
+                ["type"] = "lobby_state",
+                ["player_id"] = _net.MyId,
+                ["char_key"] = _selectedChar,
+                ["ready"] = _myReady
+            });
+        }
+
+        private static void EvaluateLobbyCountdown()
+        {
+            if (!_net.Connected) return;
+            int totalP = 1 + _lobbyPlayers.Count;
+            int readyP = (_myReady ? 1 : 0);
+            foreach (var v in _lobbyPlayers.Values) if (v.Ready) readyP++;
+            if (readyP >= 1 && !_lobbyCountdownActive)
+            {
+                _lobbyCountdownActive = true;
+                _lobbyCountdown = 60f;
+            }
+            if (readyP >= totalP && _lobbyCountdownActive)
+                _lobbyCountdown = MathF.Min(_lobbyCountdown, 3.0f);
         }
 
         private static void SetupDiorama()
@@ -242,6 +506,7 @@ namespace RiskOfCSharp2
             _pedestalRing.Color = cfg.BodyColor;
             _previewSurvivorParts = SurvivorDatabase.BuildSurvivorMesh(_previewActor, charKey);
             new VisualFX(_mainPedestal.Position + new Vector3(0, 1.2f, 0), cfg.BodyColor, maxScale: 3.0f, duration: 0.25f);
+            BroadcastLobbyState();
         }
 
         private static void SelectLogbookEntry(string category, string key)
@@ -253,7 +518,7 @@ namespace RiskOfCSharp2
             _previewEnemyParts = null;
             _previewActor.Rotation = new Vector3(0, 20f, 0);
 
-            if (category == "items" && Data.GameData.ItemPool.TryGetValue(key, out var item))
+            if (category == "items" && GameData.ItemPool.TryGetValue(key, out var item))
             {
                 _previewBaseScale = 1.85f;
                 _previewActor.Position = new Vector3(0, 1.35f, 0);
@@ -286,8 +551,8 @@ namespace RiskOfCSharp2
             }
             else if (category == "stages")
             {
-                var pal = Data.GameData.StagePalettes.Find(p => p.Id == key)
-                          ?? (Data.GameData.SpecialPalettes.TryGetValue(key, out var sp) ? sp : Data.GameData.StagePalettes[0]);
+                var pal = GameData.StagePalettes.Find(p => p.Id == key)
+                          ?? (GameData.SpecialPalettes.TryGetValue(key, out var sp) ? sp : GameData.StagePalettes[0]);
                 _previewBaseScale = 0.24f;
                 _previewActor.Position = new Vector3(0, 0.45f, 0);
                 _pedestalRing.Color = pal.Accent;
@@ -297,9 +562,9 @@ namespace RiskOfCSharp2
                 string stType = key is "roost" or "moon" ? "arch" : (key is "acres" or "bazaar" ? "monolith" : "crystals");
                 WorldStructuresBuilder.BuildMapStructure(root, stType, pal, Vector3.Zero, 25f);
             }
-            else if (category == "achievements" && Data.GameData.Achievements.TryGetValue(key, out var ach))
+            else if (category == "achievements" && GameData.Achievements.TryGetValue(key, out var ach))
             {
-                bool unlocked = Data.ProgressData.Instance.UnlockedAchievements.Contains(key);
+                bool unlocked = ProgressData.Instance.UnlockedAchievements.Contains(key);
                 _previewBaseScale = 1.45f;
                 _previewActor.Position = new Vector3(0, 1.25f, 0);
                 _pedestalRing.Color = unlocked ? Color.Gold : Color.Gray;
@@ -312,11 +577,31 @@ namespace RiskOfCSharp2
 
         private static void HandleInput(float dt)
         {
-            if (Raylib.IsKeyPressed(KeyboardKey.Tab))
+            if (_screen == "mp_connect" && _typingCode)
             {
-                _screen = _screen == "lobby" ? "logbook" : "lobby";
-                if (_screen == "lobby") SelectCharacter(_selectedChar);
-                else SelectLogbookEntry(_logCategory, _logSelectedKey);
+                int ch = Raylib.GetCharPressed();
+                while (ch > 0)
+                {
+                    char c = char.ToUpperInvariant((char)ch);
+                    if ((char.IsLetterOrDigit(c) || c is '-' or '.' or ':') && _roomCodeInput.Length < 21)
+                        _roomCodeInput += c;
+                    ch = Raylib.GetCharPressed();
+                }
+                if (Raylib.IsKeyPressed(KeyboardKey.Backspace) && _roomCodeInput.Length > 0)
+                    _roomCodeInput = _roomCodeInput[..^1];
+                if (Raylib.IsKeyPressed(KeyboardKey.Enter))
+                    _typingCode = false;
+                if (Raylib.IsKeyPressed(KeyboardKey.Escape))
+                    _typingCode = false;
+                return;
+            }
+
+            if (Raylib.IsKeyPressed(KeyboardKey.Escape) && _screen != "main")
+            {
+                if (_screen == "lobby") _net.StopSession();
+                _screen = "main";
+                SelectCharacter(_selectedChar);
+                return;
             }
 
             if (_screen == "lobby")
@@ -342,7 +627,6 @@ namespace RiskOfCSharp2
                 _manualTimer = 4.0f;
             }
 
-            // Вращение 3D-превью мышью (в правой половине экрана или ПКМ)
             bool dragging = Raylib.IsMouseButtonDown(MouseButton.Right) ||
                             (Raylib.IsMouseButtonDown(MouseButton.Left) && Raylib.GetMouseX() > 760);
             if (dragging)
@@ -385,22 +669,138 @@ namespace RiskOfCSharp2
         private static void DrawHeader()
         {
             int sw = Raylib.GetScreenWidth();
-            Raylib.DrawRectangle(0, 0, sw, 58, Rgb(12, 16, 26, 235));
-            Raylib.DrawRectangle(0, 58, sw, 3, Rgb(255, 165, 50));
-            Engine.DrawTextCentered("RISK OF C# 2 : LAN & CO-OP (PHASE 2: 14 SURVIVORS & LOGBOOK)", sw * 0.5f, 29f, 24f, Rgb(255, 185, 60));
+            Raylib.DrawRectangle(0, 0, sw, 54, Rgb(12, 16, 26, 235));
+            Raylib.DrawRectangle(0, 54, sw, 3, Rgb(255, 165, 50));
+            Engine.DrawTextCentered("RISK OF C# 2 : LAN & ROOM CODE CO-OP", sw * 0.5f, 27f, 23f, Rgb(255, 185, 60));
+        }
 
-            string switchTxt = _screen == "lobby" ? "ОТКРЫТЬ ЖУРНАЛ (LOGBOOK) [TAB]" : "<- ВЕРНУТЬСЯ В ЛОББИ [TAB]";
-            if (Engine.DrawButton(new Rectangle(sw - 340, 10, 320, 38), switchTxt, Rgb(95, 55, 145), Rgb(135, 80, 195), Color.White, 16f))
+        private static void DrawMainMenuUI()
+        {
+            DrawHeader();
+            Raylib.DrawRectangle(60, 140, 480, 500, Rgb(14, 18, 30, 238));
+            Raylib.DrawRectangle(60, 140, 480, 4, Color.SkyBlue);
+            Engine.DrawTextCentered("ГЛАВНОЕ МЕНЮ", 300, 180, 24f, Color.White);
+
+            if (Engine.DrawButton(new Rectangle(100, 225, 400, 56), "ОДИНОЧНАЯ ИГРА", Rgb(38, 105, 70), Rgb(55, 150, 95), Color.White, 19f))
             {
-                _screen = _screen == "lobby" ? "logbook" : "lobby";
-                if (_screen == "lobby") SelectCharacter(_selectedChar);
-                else SelectLogbookEntry(_logCategory, _logSelectedKey);
+                _net.StopSession();
+                _lobbyPlayers.Clear();
+                _myReady = false;
+                _lobbyCountdownActive = false;
+                _screen = "lobby";
+                SelectCharacter(_selectedChar);
             }
+            if (Engine.DrawButton(new Rectangle(100, 298, 400, 56), "СЕТЕВАЯ ИГРА (CO-OP)", Rgb(40, 85, 145), Rgb(60, 125, 205), Color.White, 19f))
+            {
+                _typingCode = false;
+                _netStatusText = $"Ваш локальный IP: {_net.HostIp}";
+                _screen = "mp_connect";
+            }
+            if (Engine.DrawButton(new Rectangle(100, 371, 400, 56), "ЖУРНАЛ (LOGBOOK)", Rgb(125, 75, 165), Rgb(165, 105, 215), Color.White, 19f))
+            {
+                _screen = "logbook";
+                var list = GetLogEntries(_logCategory);
+                if (list.Count > 0) SelectLogbookEntry(_logCategory, list[0].Key);
+            }
+            if (Engine.DrawButton(new Rectangle(100, 444, 400, 56), "НАСТРОЙКИ", Rgb(65, 72, 95), Rgb(95, 105, 135), Color.White, 19f))
+            {
+                _screen = "settings";
+            }
+            if (Engine.DrawButton(new Rectangle(100, 517, 400, 56), "ВЫХОД ИЗ ИГРЫ", Rgb(135, 40, 45), Rgb(185, 60, 65), Color.White, 19f))
+            {
+                _net.StopSession();
+                Raylib.CloseWindow();
+                Environment.Exit(0);
+            }
+        }
+
+        private static void DrawMpConnectUI()
+        {
+            DrawHeader();
+            Raylib.DrawRectangle(60, 130, 580, 540, Rgb(14, 18, 30, 240));
+            Raylib.DrawRectangle(60, 130, 580, 4, Color.SkyBlue);
+            Engine.DrawTextCentered("СЕТЕВАЯ ИГРА (LAN / КОД КОМНАТЫ)", 350, 168, 21f, Rgb(150, 225, 255));
+
+            if (Engine.DrawButton(new Rectangle(100, 215, 500, 58), "СОЗДАТЬ КОМНАТУ (HOST)", Rgb(35, 100, 68), Rgb(50, 145, 95), Color.White, 19f))
+            {
+                _typingCode = false;
+                _lobbyPlayers.Clear();
+                var (ok, info) = _net.HostRoom();
+                if (ok)
+                {
+                    _myReady = false;
+                    _lobbyCountdownActive = false;
+                    _screen = "lobby";
+                    ShowBanner($"КОМНАТА СОЗДАНА! КОД: {info}", Color.Lime, 4.0f);
+                }
+                else _netStatusText = $"Ошибка: {info}";
+            }
+
+            string codeShown = string.IsNullOrEmpty(_roomCodeInput)
+                ? (_typingCode ? "ВВЕДИТЕ КОД..." : "НАЖМИТЕ ДЛЯ ВВОДА")
+                : _roomCodeInput;
+            string boxTitle = _typingCode ? $"КОД: > {codeShown}_ <" : $"КОД: [ {codeShown} ]";
+            if (Engine.DrawButton(new Rectangle(100, 292, 500, 54), boxTitle,
+                _typingCode ? Rgb(55, 75, 115) : Rgb(28, 36, 54), Rgb(45, 60, 88), Color.Yellow, 18f, Color.SkyBlue))
+            {
+                _typingCode = !_typingCode;
+            }
+
+            if (Engine.DrawButton(new Rectangle(100, 364, 242, 54), "ПО КОДУ", Rgb(40, 85, 145), Rgb(60, 120, 200), Color.White, 18f))
+            {
+                _typingCode = false;
+                var (ok, info) = _net.JoinByCode(_roomCodeInput);
+                if (ok) { _myReady = false; _screen = "lobby"; }
+                else _netStatusText = info;
+            }
+            if (Engine.DrawButton(new Rectangle(358, 364, 242, 54), "НАЙТИ В LAN (АВТО)", Rgb(95, 55, 145), Rgb(130, 80, 195), Color.White, 18f))
+            {
+                _typingCode = false;
+                var (ok, info) = _net.JoinLanAuto();
+                if (ok) { _roomCodeInput = info; _myReady = false; _screen = "lobby"; }
+                else _netStatusText = $"Не найдено ({info})";
+            }
+
+            Engine.DrawTextCentered(_netStatusText, 350, 465, 17f, Color.SkyBlue);
+
+            if (Engine.DrawButton(new Rectangle(160, 580, 380, 50), "<- НАЗАД В ГЛАВНОЕ МЕНЮ", Rgb(60, 65, 82), Rgb(85, 92, 115), Color.White, 17f))
+            {
+                _typingCode = false;
+                _screen = "main";
+            }
+        }
+
+        private static void DrawSettingsUI()
+        {
+            DrawHeader();
+            Raylib.DrawRectangle(60, 130, 580, 520, Rgb(14, 18, 30, 240));
+            Raylib.DrawRectangle(60, 130, 580, 4, Color.Gold);
+            Engine.DrawTextCentered("НАСТРОЙКИ ИГРЫ", 350, 168, 22f, Color.Gold);
+
+            Engine.DrawTextLeft($"Чувствительность мыши: {(int)(_mouseSens * 250f)}", 95, 232, 18f, Color.White);
+            if (Engine.DrawButton(new Rectangle(460, 224, 52, 40), "-", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+                _mouseSens = Math.Clamp(_mouseSens - 0.02f, 0.04f, 0.50f);
+            if (Engine.DrawButton(new Rectangle(524, 224, 52, 40), "+", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+                _mouseSens = Math.Clamp(_mouseSens + 0.02f, 0.04f, 0.50f);
+
+            Engine.DrawTextLeft($"Угол обзора камеры (FOV): {(int)_fov}", 95, 302, 18f, Color.White);
+            if (Engine.DrawButton(new Rectangle(460, 294, 52, 40), "-", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+                _fov = Math.Clamp(_fov - 5f, 45f, 95f);
+            if (Engine.DrawButton(new Rectangle(524, 294, 52, 40), "+", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+                _fov = Math.Clamp(_fov + 5f, 45f, 95f);
+
+            bool isFs = Raylib.IsWindowFullscreen();
+            if (Engine.DrawButton(new Rectangle(160, 380, 380, 48), $"ПОЛНЫЙ ЭКРАН: {(isFs ? "ВКЛ" : "ВЫКЛ")}", Rgb(45, 65, 95), Rgb(65, 95, 135), Color.White, 18f))
+                Raylib.ToggleFullscreen();
+
+            if (Engine.DrawButton(new Rectangle(160, 560, 380, 50), "<- НАЗАД В ГЛАВНОЕ МЕНЮ", Rgb(60, 65, 82), Rgb(85, 92, 115), Color.White, 17f))
+                _screen = "main";
         }
 
         private static void DrawLobbyUI()
         {
             DrawHeader();
+            int sw = Raylib.GetScreenWidth();
             var cfg = SurvivorDatabase.Classes[_selectedChar];
             string[] hotkeys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "[", "]" };
 
@@ -409,7 +809,7 @@ namespace RiskOfCSharp2
                 string k = SurvivorDatabase.OrderedKeys[i];
                 var scfg = SurvivorDatabase.Classes[k];
                 int row = i / 7, col = i % 7;
-                Rectangle rect = new(36 + col * 102, 74 + row * 48, 94, 40);
+                Rectangle rect = new(36 + col * 102, 70 + row * 46, 94, 38);
                 bool isSel = k == _selectedChar;
                 if (Engine.DrawButton(rect, $"[{hotkeys[i]}] {scfg.Icon}", Rgb(22, 28, 42, 245), scfg.BodyColor,
                     isSel ? Color.Yellow : Color.White, 15f, isSel ? Color.White : scfg.BodyColor))
@@ -418,13 +818,13 @@ namespace RiskOfCSharp2
                 }
             }
 
-            Raylib.DrawRectangle(36, 178, 700, 640, Rgb(12, 16, 28, 238));
-            Raylib.DrawRectangle(36, 178, 700, 4, cfg.BodyColor);
-            Engine.DrawTextLeft(cfg.Name, 56, 194, 28f, cfg.BodyColor);
-            Engine.DrawTextLeft(cfg.Subtitle, 56, 228, 19f, Rgb(175, 210, 245));
-            Engine.DrawTextLeft($"HP: {cfg.Hp}   |   Скорость: {cfg.Speed}   |   Урон: {cfg.Damage}   |   Атака: {cfg.FireRate}/с", 56, 258, 18f, Color.Gold);
+            Raylib.DrawRectangle(36, 172, 680, 640, Rgb(12, 16, 28, 238));
+            Raylib.DrawRectangle(36, 172, 680, 4, cfg.BodyColor);
+            Engine.DrawTextLeft(cfg.Name, 56, 188, 27f, cfg.BodyColor);
+            Engine.DrawTextLeft(cfg.Subtitle, 56, 222, 18f, Rgb(175, 210, 245));
+            Engine.DrawTextLeft($"HP: {cfg.Hp}   |   Скорость: {cfg.Speed}   |   Урон: {cfg.Damage}   |   Атака: {cfg.FireRate}/с", 56, 252, 17f, Color.Gold);
 
-            float sy = 300f;
+            float sy = 294f;
             foreach (var skKey in new[] { "m1", "m2", "shift", "r" })
             {
                 if (!cfg.Skills.TryGetValue(skKey, out var sk)) continue;
@@ -433,19 +833,58 @@ namespace RiskOfCSharp2
                 sy += 64f;
             }
 
-            string controls = $"FPS: {Raylib.GetFPS()}  |  Узлов Entity: {Engine.AllEntities.Count}  |  Зажмите мышь справа для 3D-осмотра";
-            Engine.DrawTextLeft(controls, 56, 780, 16f, Rgb(155, 215, 255));
-
-            if (Engine.DrawButton(new Rectangle(960, 740, 440, 66), "НАЧАТЬ ЗАБЕГ (СТАРТ) [ENTER]",
-                Rgb(38, 120, 70), Rgb(55, 165, 95), Color.White, 22f, Color.Lime) || Raylib.IsKeyPressed(KeyboardKey.Enter))
+            // Панель статуса комнаты справа сверху
+            Raylib.DrawRectangle(sw - 470, 74, 434, 190, Rgb(12, 16, 28, 225));
+            if (!_net.Connected)
             {
-                StartRun(_selectedChar);
+                Engine.DrawTextLeft("РЕЖИМ: ОДИНОЧНАЯ ИГРА", sw - 450, 90, 18f, Color.SkyBlue);
+                Engine.DrawTextLeft($"Выживший: {cfg.Name}\nНажмите кнопку ниже для старта.", sw - 450, 122, 16f, Color.White);
+            }
+            else
+            {
+                Engine.DrawTextLeft($"КОМНАТА: {_net.RoomCode} ({_net.Mode?.ToUpper()})", sw - 450, 90, 18f, Color.Lime);
+                int ly = 120;
+                Engine.DrawTextLeft($"• ВЫ [{_net.MyId.ToUpper()}]: {cfg.Name} — [{(_myReady ? "ГОТОВ ✓" : "ВЫБИРАЕТ")}]", sw - 450, ly, 16f, Color.White);
+                foreach (var kv in _lobbyPlayers)
+                {
+                    ly += 24;
+                    string cName = SurvivorDatabase.Classes.TryGetValue(kv.Value.CharKey, out var sc) ? sc.Name : "COMMANDO";
+                    Engine.DrawTextLeft($"• ИГРОК [{kv.Key.ToUpper()}]: {cName} — [{(kv.Value.Ready ? "ГОТОВ ✓" : "ВЫБИРАЕТ")}]", sw - 450, ly, 16f, Color.SkyBlue);
+                }
+                if (_lobbyCountdownActive)
+                    Engine.DrawTextCentered($"ДО СТАРТА: {_lobbyCountdown:F1} СЕК.", sw - 253, 240, 18f, Color.Yellow);
+            }
+
+            string startLabel = !_net.Connected
+                ? "НАЧАТЬ ЗАБЕГ (СТАРТ) [ENTER]"
+                : (_myReady ? "ВЫ ГОТОВЫ ✓ (ОЖИДАНИЕ)" : "ГОТОВ К БОЮ! [ENTER]");
+            if (Engine.DrawButton(new Rectangle(sw - 470, 700, 434, 62), startLabel,
+                Rgb(38, 120, 70), Rgb(55, 165, 95), Color.White, 20f, Color.Lime) || Raylib.IsKeyPressed(KeyboardKey.Enter))
+            {
+                if (!_net.Connected)
+                {
+                    StartRun(_selectedChar);
+                }
+                else if (!_myReady)
+                {
+                    _myReady = true;
+                    BroadcastLobbyState();
+                    EvaluateLobbyCountdown();
+                }
+            }
+
+            if (Engine.DrawButton(new Rectangle(sw - 470, 774, 434, 42), "<- ПОКИНУТЬ ЛОББИ [ESC]", Rgb(85, 40, 48), Rgb(125, 55, 65), Color.White, 16f))
+            {
+                _net.StopSession();
+                _lobbyPlayers.Clear();
+                _screen = "main";
             }
         }
 
-        public static void StartRun(string charKey)
+        public static void StartRun(string charKey, int? seed = null, bool fromNetwork = false, int startStage = 1)
         {
             _screen = "in_game";
+            _paused = false;
             _mainPedestal.Enabled = false;
             _menuCrystal.Enabled = false;
             Raylib.DisableCursor();
@@ -457,10 +896,21 @@ namespace RiskOfCSharp2
             _run.PlayerEntity = new Entity(position: new(0, charKey == "mindustry" ? 1.8f : 0f, 0));
             _run.Parts = SurvivorDatabase.BuildSurvivorMesh(_run.PlayerEntity, charKey);
             _run.Combat = new SurvivorCombatController(_run);
-            if (charKey == "v1") _run.Parts.Root.Enabled = false; // FPS-режим для V1
+            if (charKey == "v1") _run.Parts.Root.Enabled = false;
             _run.PlayerHp = _run.PlayerMaxHp;
 
-            LoadStage(1, null);
+            int chosenSeed = seed ?? (Environment.TickCount & 0x7FFFFFFF);
+            LoadStage(startStage, null, chosenSeed, fromNetwork: true);
+
+            if (_net.Connected && _net.Mode == "host" && !fromNetwork)
+            {
+                _net.Broadcast(new System.Text.Json.Nodes.JsonObject
+                {
+                    ["type"] = "lobby_start_run",
+                    ["stage"] = _run.Stage,
+                    ["seed"] = chosenSeed
+                });
+            }
         }
 
         private static void SpawnTestEnemiesWave(int count = 6)
@@ -476,25 +926,31 @@ namespace RiskOfCSharp2
                 float ez = Math.Clamp(_run.PlayerPos.Z + MathF.Sin(ang) * dist, -Physics.WorldBound + 4f, Physics.WorldBound - 4f);
                 float ey = Physics.GetSurfaceHeight(ex, ez, _run.PlayerPos.Y);
                 string t = types[rng.Next(types.Length)];
-                var enemy = new CombatTarget(new Vector3(ex, ey, ez), t, 1.0f + (_run.Stage - 1) * 0.25f);
+                var enemy = new CombatTarget(new Vector3(ex, ey, ez), t, _run.DifficultyCoeff);
                 CombatManager.Enemies.Add(enemy);
                 _run.StageEntities.Add(enemy);
             }
         }
 
-        public static void LoadStage(int stageNum, string? specialMode)
+        public static void LoadStage(int stageNum, string? specialMode, int? fixedSeed = null, bool fromNetwork = false)
         {
             if (_run == null) return;
             foreach (var e in CombatManager.Enemies.ToArray()) Destroy(e);
             CombatManager.Enemies.Clear();
+            foreach (var rp in _remotePlayers.Values) Destroy(rp);
+            _remotePlayers.Clear();
             foreach (var e in _run.StageEntities.ToArray()) Destroy(e);
             _run.StageEntities.Clear();
 
             _run.Stage = stageNum;
             _run.BlueOrbSpawned = false;
             _run.MoonPillarsDone = 0;
+            _run.MithrixSpawned = false;
+            _run.MoonDetonationTimer = 0f;
+            _run.ActiveBoss = null;
+            _run.DirectorCredits = 26.0f * _run.DifficultyCoeff;
 
-            int seed = Environment.TickCount & 0x7FFFFFFF;
+            int seed = fixedSeed ?? (Environment.TickCount & 0x7FFFFFFF);
             var (ents, tpOrPad, pal) = StageBuilder.BuildStageWorld(stageNum, seed, specialMode);
             _run.StageEntities.AddRange(ents);
             if (_run.CharKey == "v1")
@@ -507,8 +963,16 @@ namespace RiskOfCSharp2
             else _run.PlayerPos = new Vector3(0, 1f, 0f);
             _run.PlayerVelY = 0f;
 
-            if (specialMode != "bazaar")
-                SpawnTestEnemiesWave(8);
+            if (_net.Connected && !fromNetwork)
+            {
+                _net.Broadcast(new System.Text.Json.Nodes.JsonObject
+                {
+                    ["type"] = "stage_sync",
+                    ["stage"] = stageNum,
+                    ["seed"] = seed,
+                    ["special_mode"] = specialMode
+                });
+            }
 
             if (specialMode == "bazaar")
                 ShowBanner("БАЗАР МЕЖДУ ВРЕМЕНЕМ :: ТОРГОВЛЯ С ТРИТОНОМ", Rgb(80, 215, 255), 3.5f);
@@ -518,12 +982,21 @@ namespace RiskOfCSharp2
                 ShowBanner($"STAGE {stageNum}: {pal.Name.ToUpper()}", Color.Yellow, 3.0f);
         }
 
-        private static void QuitRunToLobby()
+        public static void OnVictory()
         {
+            QuitRunToLobby();
+            ShowBanner("ПОБЕДА! ВЫ ПОКИНУЛИ ЛУНУ НА СПАСАТЕЛЬНОМ КОРАБЛЕ (+10 ЛУННЫХ МОНЕТ)!", Color.Gold, 8.0f);
+        }
+
+        private static void QuitRunToLobby(bool toMainMenu = false)
+        {
+            _paused = false;
             if (_run != null)
             {
                 foreach (var e in CombatManager.Enemies.ToArray()) Destroy(e);
                 CombatManager.Enemies.Clear();
+                foreach (var rp in _remotePlayers.Values) Destroy(rp);
+                _remotePlayers.Clear();
                 foreach (var e in _run.StageEntities.ToArray()) Destroy(e);
                 _run.StageEntities.Clear();
                 Destroy(_run.PlayerEntity);
@@ -535,19 +1008,25 @@ namespace RiskOfCSharp2
             Engine.BackgroundColor = Rgb(18, 20, 32);
             _mainPedestal.Enabled = true;
             _menuCrystal.Enabled = true;
-            _screen = "lobby";
+            _myReady = false;
+            _lobbyCountdownActive = false;
+            if (toMainMenu)
+            {
+                _net.StopSession();
+                _lobbyPlayers.Clear();
+                _screen = "main";
+            }
+            else
+            {
+                _screen = "lobby";
+                BroadcastLobbyState();
+            }
             SelectCharacter(_selectedChar);
         }
 
         private static void UpdateInGame(float dt)
         {
             if (_run == null) return;
-
-            if (Raylib.IsKeyPressed(KeyboardKey.Escape))
-            {
-                QuitRunToLobby();
-                return;
-            }
 
             if (Raylib.IsKeyPressed(KeyboardKey.F5)) _run.NextStage();
             if (Raylib.IsKeyPressed(KeyboardKey.F6)) _run.EnterBazaar();
@@ -560,8 +1039,67 @@ namespace RiskOfCSharp2
             }
             if (Raylib.IsKeyPressed(KeyboardKey.F9))
             {
-                SpawnTestEnemiesWave(5);
-                ShowBanner("СПАВН +5 МОНСТРОВ ДЛЯ ТЕСТА БОЯ!", Color.Orange, 1.8f);
+                if (Physics.SpecialMode == "moon" && !_run.MithrixSpawned)
+                {
+                    _run.PlayerPos = new Vector3(0, Physics.ColosseumY + 1.5f, -36.0f);
+                    _run.StartMithrixEncounter();
+                }
+                else
+                {
+                    SpawnTestEnemiesWave(5);
+                    ShowBanner("СПАВН +5 МОНСТРОВ ДЛЯ ТЕСТА БОЯ!", Color.Orange, 1.8f);
+                }
+            }
+
+            _run.ElapsedTime += dt;
+            float coeff = _run.DifficultyCoeff;
+            CombatManager.Enemies.RemoveAll(e => !IsValid(e));
+
+            if (_run.MoonDetonationTimer > 0f)
+            {
+                _run.MoonDetonationTimer -= dt;
+                if (_run.MoonDetonationTimer <= 0f)
+                {
+                    QuitRunToLobby();
+                    ShowBanner("ЛУНА ДЕТОНИРОВАЛА! ВЫ НЕ УСПЕЛИ К СПАСАТЕЛЬНОМУ КОРАБЛЮ!", Color.Red, 5.0f);
+                    return;
+                }
+            }
+
+            // ИИ-Режиссёр (Combat Director)
+            if (_net.Mode != "client" && Physics.SpecialMode != "bazaar" && !_run.MithrixSpawned)
+            {
+                float tpMult = (_run.ActiveTeleporterOrPad is Teleporter tp && tp.State == "charging") ? 1.8f : 1.0f;
+                _run.DirectorCredits += (4.2f * coeff * tpMult) * dt;
+                _run.SpawnTimer -= dt;
+
+                if (_run.SpawnTimer <= 0f && CombatManager.Enemies.Count < 24)
+                {
+                    var rng = new Random();
+                    _run.SpawnTimer = 1.6f + (float)rng.NextDouble() * 1.6f;
+                    (string et, float cost)[] table = Physics.SpecialMode == "moon"
+                        ? new[] { ("lunar_chimera", 18f), ("golem", 28f), ("greater_wisp", 26f) }
+                        : new[] { ("beetle", 10f), ("lemurian", 12f), ("jellyfish", 14f), ("wisp", 16f), ("imp", 22f), ("greater_wisp", 30f), ("golem", 34f) };
+
+                    var affordable = new List<(string et, float cost)>();
+                    foreach (var pair in table)
+                        if (_run.DirectorCredits >= pair.cost) affordable.Add(pair);
+
+                    if (affordable.Count > 0)
+                    {
+                        var chosen = affordable[rng.Next(affordable.Count)];
+                        _run.DirectorCredits -= chosen.cost;
+                        float ang = (float)rng.NextDouble() * MathF.PI * 2f;
+                        float dist = 16.0f + (float)rng.NextDouble() * 12.0f;
+                        float maxB = Physics.WorldBound - 4.0f;
+                        float sx = Math.Clamp(_run.PlayerPos.X + MathF.Cos(ang) * dist, -maxB, maxB);
+                        float sz = Math.Clamp(_run.PlayerPos.Z + MathF.Sin(ang) * dist, -maxB, maxB);
+                        float sy = Physics.GetSurfaceHeight(sx, sz, _run.PlayerPos.Y);
+                        var ne = new CombatTarget(new Vector3(sx, sy, sz), chosen.et, coeff);
+                        CombatManager.Enemies.Add(ne);
+                        _run.StageEntities.Add(ne);
+                    }
+                }
             }
 
             var p = _run.PlayerEntity;
@@ -569,10 +1107,10 @@ namespace RiskOfCSharp2
             float prevY = p.Y;
 
             Vector2 md = Raylib.GetMouseDelta();
-            p.RotationY += md.X * 0.18f;
+            p.RotationY += md.X * _mouseSens;
             float maxPitch = _run.CharKey == "v1" ? 82f : 48f;
             float minPitch = _run.CharKey == "v1" ? -82f : -42f;
-            _run.CamPitch = Math.Clamp(_run.CamPitch + md.Y * 0.18f, minPitch, maxPitch);
+            _run.CamPitch = Math.Clamp(_run.CamPitch + md.Y * _mouseSens, minPitch, maxPitch);
 
             float inX = (Raylib.IsKeyDown(KeyboardKey.D) ? 1f : 0f) - (Raylib.IsKeyDown(KeyboardKey.A) ? 1f : 0f);
             float inZ = (Raylib.IsKeyDown(KeyboardKey.W) ? 1f : 0f) - (Raylib.IsKeyDown(KeyboardKey.S) ? 1f : 0f);
@@ -603,7 +1141,6 @@ namespace RiskOfCSharp2
                 _run.Parts.RightLeg.RotationX = Lerp(_run.Parts.RightLeg.RotationX, 0f, dt * 10f);
             }
 
-            // Боевые навыки: ЛКМ (M1), ПКМ (M2), Shift, R
             c.Update(dt, isMoving);
             if (Raylib.IsMouseButtonDown(MouseButton.Left) && c.M1Cd <= 0f) c.UseM1Skill();
             if (Raylib.IsMouseButtonDown(MouseButton.Right) && c.M2Cd <= 0f) c.UseM2Skill();
@@ -664,9 +1201,48 @@ namespace RiskOfCSharp2
             p.X = Math.Clamp(resolved.X, -b, b);
             p.Z = Math.Clamp(resolved.Z, -b, b);
 
+            if (Physics.SpecialMode == "moon" && _run.MithrixSpawned && _run.IsBossAlive && p.Y >= 105.0f)
+            {
+                float arenaR = MathF.Sqrt(p.X * p.X + p.Z * p.Z);
+                if (arenaR > 52.5f)
+                {
+                    float ang = MathF.Atan2(p.Z, p.X);
+                    p.X = MathF.Cos(ang) * 52.5f;
+                    p.Z = MathF.Sin(ang) * 52.5f;
+                }
+                if (p.Y < 120.0f)
+                {
+                    p.Y = 120.0f;
+                    _run.PlayerVelY = 0f;
+                    _run.PlayerGrounded = true;
+                    _run.PlayerJumpsLeft = _run.PlayerMaxJumps;
+                }
+            }
+
             if (_run.Parts.Halo != null) _run.Parts.Halo.RotationZ += 95f * dt;
 
-            // Обновление камеры (FPS для V1 или 3-е лицо для остальных)
+            // Сетевая синхронизация позиции игрока
+            if (_net.Connected)
+            {
+                _netSyncTimer -= dt;
+                if (_netSyncTimer <= 0f)
+                {
+                    _netSyncTimer = 0.05f;
+                    _net.Broadcast(new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["type"] = "player_state",
+                        ["player_id"] = _net.MyId,
+                        ["char_key"] = _run.CharKey,
+                        ["pos"] = new System.Text.Json.Nodes.JsonArray(MathF.Round(p.X, 2), MathF.Round(p.Y, 2), MathF.Round(p.Z, 2)),
+                        ["rot_y"] = MathF.Round(p.RotationY, 1),
+                        ["hp"] = MathF.Round(_run.PlayerHp, 1),
+                        ["max_hp"] = _run.PlayerMaxHp,
+                        ["moving"] = isMoving
+                    });
+                }
+            }
+
+            Engine.Camera.FovY = _fov;
             Vector3 camLookDir = c.GetAimDirection();
             if (_run.CharKey == "v1")
             {
@@ -693,101 +1269,176 @@ namespace RiskOfCSharp2
             }
         }
 
+        private static void DrawPauseOverlay()
+        {
+            int sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();
+            Raylib.DrawRectangle(0, 0, sw, sh, Rgb(6, 8, 14, 150));
+            int pw = 420, ph = 330, px = (sw - pw) / 2, py = (sh - ph) / 2;
+            Raylib.DrawRectangle(px, py, pw, ph, Rgb(14, 18, 30, 245));
+            Raylib.DrawRectangle(px, py, pw, 4, Color.SkyBlue);
+            Engine.DrawTextCentered("ПАУЗА", sw * 0.5f, py + 38f, 26f, Color.SkyBlue);
+
+            if (Engine.DrawButton(new Rectangle(px + 40, py + 82, pw - 80, 52), "ПРОДОЛЖИТЬ ИГРУ [ESC]", Rgb(38, 110, 70), Rgb(55, 155, 95), Color.White, 18f))
+            {
+                _paused = false;
+                Raylib.DisableCursor();
+            }
+            if (Engine.DrawButton(new Rectangle(px + 40, py + 150, pw - 80, 52), "ВЫЙТИ В ЛОББИ ПЕРСОНАЖЕЙ", Rgb(55, 75, 115), Rgb(80, 105, 155), Color.White, 18f))
+            {
+                QuitRunToLobby(toMainMenu: false);
+            }
+            if (Engine.DrawButton(new Rectangle(px + 40, py + 218, pw - 80, 52), "ВЫЙТИ В ГЛАВНОЕ МЕНЮ", Rgb(135, 40, 48), Rgb(185, 60, 68), Color.White, 18f))
+            {
+                QuitRunToLobby(toMainMenu: true);
+            }
+        }
+
         private static void DrawInGameHUD()
         {
             if (_run == null) return;
             int sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();
             var c = _run.Combat;
 
-            Engine.DrawTextCentered("+", sw * 0.5f, sh * 0.5f, 28f, Color.SkyBlue);
+            // Лаконичный аккуратный прицел в центре
+            Raylib.DrawCircleLines(sw / 2, sh / 2, 4f, Rgb(90, 230, 255, 180));
+            Raylib.DrawPixel(sw / 2, sh / 2, Color.White);
 
-            // Верхняя панель инвентаря
-            Raylib.DrawRectangle(24, 16, 860, 86, Rgb(14, 18, 28, 215));
-            Engine.DrawTextLeft("INVENTORY  [HOLD TAB — Подробная статистика | F8: +Золото | F9: +Враги]", 38, 22, 16f, Rgb(175, 195, 225));
+            // 1. КОМПАКТНАЯ ЛЕНТА ПРЕДМЕТОВ СЛЕВА СВЕРХУ (RoR2-style)
             if (_run.ItemOrder.Count == 0)
             {
-                Engine.DrawTextLeft("Нет собранных предметов — открывайте сундуки клавишей [E]!", 38, 52, 17f, Rgb(125, 140, 165));
+                Raylib.DrawRectangle(16, 14, 340, 26, Rgb(12, 16, 26, 135));
+                Engine.DrawTextLeft("Инвентарь пуст  [E — Сундуки | TAB — Инфо]", 24, 19, 14f, Rgb(155, 175, 200));
             }
             else
             {
-                for (int i = 0; i < Math.Min(12, _run.ItemOrder.Count); i++)
+                int perRow = 16;
+                int rows = (_run.ItemOrder.Count - 1) / perRow + 1;
+                int stripW = Math.Min(_run.ItemOrder.Count, perRow) * 48 + 12;
+                Raylib.DrawRectangle(16, 12, stripW, rows * 38 + 8, Rgb(12, 16, 26, 155));
+                for (int i = 0; i < _run.ItemOrder.Count; i++)
                 {
                     string k = _run.ItemOrder[i];
                     var info = GameData.ItemPool[k];
                     int cnt = _run.Items[k];
-                    int bx = 38 + i * 68;
-                    Raylib.DrawRectangle(bx, 46, 62, 46, Rgb(38, 48, 70, 235));
-                    Raylib.DrawRectangle(bx, 46, 62, 4, info.Color);
-                    Engine.DrawTextCentered($"{info.Short}\nx{cnt}", bx + 31, 70, 14f, info.Color);
+                    int r = i / perRow, colIdx = i % perRow;
+                    int bx = 22 + colIdx * 48, by = 16 + r * 38;
+                    Raylib.DrawRectangle(bx, by, 44, 34, Rgb(28, 36, 54, 210));
+                    Raylib.DrawRectangle(bx, by, 44, 3, info.Color);
+                    Engine.DrawTextCentered(info.Short, bx + 22, by + 11, 12f, info.Color);
+                    Engine.DrawTextCentered($"x{cnt}", bx + 22, by + 25, 12f, Color.White);
                 }
             }
 
-            // Правая верхняя панель этапа
-            Raylib.DrawRectangle(sw - 440, 16, 416, 86, Rgb(14, 18, 28, 215));
-            Raylib.DrawRectangle(sw - 440, 16, 416, 5, Rgb(80, 225, 100));
-            Engine.DrawTextLeft($"STAGE {_run.Stage}: {_run.StageName}  |  ВРАГОВ: {CombatManager.Enemies.Count}\nF5: Этап | F6: Базар | F7: Луна | F8: +$500 | F9: +Враги", sw - 424, 30, 16f, Color.White);
+            // 2. КОМПАКТНЫЙ ВИДЖЕТ ВРЕМЕНИ И СЛОЖНОСТИ СПРАВА СВЕРХУ (256x58)
+            var (diffLabel, diffCol) = _run.GetDifficultyInfo();
+            int mins = (int)(_run.ElapsedTime / 60f);
+            int secs = (int)(_run.ElapsedTime % 60f);
+            int rx = sw - 272, ry = 12;
+            Raylib.DrawRectangle(rx, ry, 256, 58, Rgb(12, 16, 26, 185));
+            Raylib.DrawRectangle(rx, ry, 256, 3, diffCol);
+            Engine.DrawTextLeft($"{mins:00}:{secs:00}", rx + 12, ry + 8, 22f, Color.White);
+            Engine.DrawTextLeft($"{diffLabel} (x{_run.DifficultyCoeff:F2})", rx + 82, ry + 11, 15f, diffCol);
+            string detStr = _run.MoonDetonationTimer > 0f ? $" | ESCAPE: {_run.MoonDetonationTimer:F0}s!" : "";
+            Engine.DrawTextLeft($"Stage {_run.Stage}: {_run.StageName}{detStr}  [{CombatManager.Enemies.Count}]", rx + 12, ry + 35, 14f, Rgb(185, 205, 230));
 
-            // Левая нижняя панель здоровья, щита и валюты
-            Raylib.DrawRectangle(24, sh - 110, 440, 90, Rgb(14, 18, 28, 220));
-            Engine.DrawTextLeft($"${_run.Gold}  |  LUNAR: {_run.LunarCoins}C  |  {SurvivorDatabase.Classes[_run.CharKey].Name}", 40, sh - 98, 20f, Color.Gold);
-            float hpRatio = Math.Clamp(_run.PlayerHp / _run.PlayerMaxHp, 0f, 1f);
-            Raylib.DrawRectangle(40, sh - 62, 408, 28, Rgb(50, 20, 22));
-            Raylib.DrawRectangle(40, sh - 62, (int)(408 * hpRatio), 28, c.Shield >= 1f ? Rgb(75, 195, 255) : Rgb(85, 225, 95));
-            string hpTxt = c.Shield >= 1f
-                ? $"{(int)_run.PlayerHp} (+{(int)c.Shield}) / {(int)_run.PlayerMaxHp} HP"
-                : $"{(int)_run.PlayerHp} / {(int)_run.PlayerMaxHp} HP";
-            Engine.DrawTextCentered(hpTxt, 244, sh - 48, 18f, Color.White);
-
-            // Правая нижняя панель 4 навыков (M1, M2, SHIFT, ULT [R])
-            (string key, string title, float cd, Color col)[] skBoxes =
+            // 3. ТОНКАЯ ПОЛОСКА ЗДОРОВЬЯ БОССА ВВЕРХУ ПО ЦЕНТРУ (не мешает прицелу!)
+            if (_run.IsBossAlive && _run.ActiveBoss != null)
             {
-                ("m1", "M1", c.M1Cd, Color.Yellow),
-                ("m2", "M2", c.M2Cd, Color.Orange),
-                ("shift", "SHIFT", c.ShiftCd, Color.SkyBlue),
-                ("r", "ULT [R]", c.RCd, Color.Magenta)
+                var boss = _run.ActiveBoss;
+                string bTitle = boss.EnemyType == "mithrix"
+                    ? $"MITHRIX [PHASE {boss.Phase}/4] :: KING OF NOTHING"
+                    : _run.BossTitle;
+                Color bCol = boss.EnemyType == "mithrix"
+                    ? (boss.Phase == 4 ? Color.Magenta : Color.SkyBlue)
+                    : Color.Red;
+                int bw = 500, bx = (sw - bw) / 2, by = 52;
+                Engine.DrawTextCentered(bTitle, sw * 0.5f, by - 14f, 17f, bCol);
+                float bRatio = Math.Clamp(boss.Hp / MathF.Max(1f, boss.MaxHp), 0f, 1f);
+                Raylib.DrawRectangle(bx, by, bw, 14, Rgb(35, 12, 16, 210));
+                Raylib.DrawRectangle(bx, by, (int)(bw * bRatio), 14, bCol);
+                Engine.DrawTextCentered($"{(int)MathF.Max(0, boss.Hp)} / {(int)boss.MaxHp}", sw * 0.5f, by + 7f, 13f, Color.White);
+            }
+
+            // 4. КОМПАКТНЫЙ БЛОК ЗДОРОВЬЯ И ВАЛЮТ СЛЕВА ВНИЗУ (300x60)
+            int hx = 20, hy = sh - 78;
+            Raylib.DrawRectangle(hx, hy, 300, 58, Rgb(12, 16, 26, 190));
+            Engine.DrawTextLeft($"${_run.Gold}", hx + 12, hy + 7, 18f, Color.Gold);
+            Engine.DrawTextLeft($"{_run.LunarCoins}C", hx + 95, hy + 7, 17f, Color.SkyBlue);
+            Engine.DrawTextLeft(SurvivorDatabase.Classes[_run.CharKey].Name, hx + 155, hy + 8, 15f, Rgb(190, 210, 235));
+
+            float hpRatio = Math.Clamp(_run.PlayerHp / _run.PlayerMaxHp, 0f, 1f);
+            float shRatio = Math.Clamp(c.Shield / _run.PlayerMaxHp, 0f, 1f);
+            Raylib.DrawRectangle(hx + 10, hy + 30, 280, 20, Rgb(42, 18, 22, 230));
+            Raylib.DrawRectangle(hx + 10, hy + 30, (int)(280 * hpRatio), 20, hpRatio > 0.3f ? Rgb(80, 215, 95) : Rgb(240, 65, 60));
+            if (shRatio > 0.01f)
+                Raylib.DrawRectangle(hx + 10, hy + 30, (int)(280 * shRatio), 6, Rgb(85, 210, 255));
+
+            string hpTxt = c.Shield >= 1f
+                ? $"{(int)_run.PlayerHp} (+{(int)c.Shield}) / {(int)_run.PlayerMaxHp}"
+                : $"{(int)_run.PlayerHp} / {(int)_run.PlayerMaxHp}";
+            Engine.DrawTextCentered(hpTxt, hx + 150, hy + 40, 15f, Color.White);
+
+            // 5. АККУРАТНЫЙ ДОК СПОСОБНОСТЕЙ СПРАВА ВНИЗУ (4 иконки 56x56)
+            (string key, string bind, float cd, float maxCd, Color col)[] skBoxes =
+            {
+                ("m1", "M1", c.M1Cd, MathF.Max(0.1f, c.Cfg.Skills["m1"].Cd), Color.Yellow),
+                ("m2", "M2", c.M2Cd, MathF.Max(0.1f, c.Cfg.Skills["m2"].Cd), Color.Orange),
+                ("shift", "Shift", c.ShiftCd, MathF.Max(0.1f, c.Cfg.Skills["shift"].Cd), Color.SkyBlue),
+                ("r", "R", c.RCd, MathF.Max(0.1f, c.Cfg.Skills["r"].Cd), Color.Magenta)
             };
             for (int i = 0; i < skBoxes.Length; i++)
             {
-                var (_, title, cd, col) = skBoxes[i];
-                int sx = sw - 460 + i * 108;
-                int sy = sh - 106;
-                Raylib.DrawRectangle(sx, sy, 96, 82, cd <= 0f ? Rgb(35, 55, 75, 235) : Rgb(22, 24, 32, 235));
-                Raylib.DrawRectangle(sx, sy, 96, 4, col);
-                Engine.DrawTextCentered(title, sx + 48, sy + 24, 16f, col);
-                Engine.DrawTextCentered(cd <= 0f ? "READY" : $"{cd:F1}s", sx + 48, sy + 56, 17f, cd <= 0f ? Color.White : Color.Red);
+                var (_, bind, cd, maxCd, col) = skBoxes[i];
+                int sx = sw - 268 + i * 62;
+                int sy = sh - 76;
+                Raylib.DrawRectangle(sx, sy, 56, 56, cd <= 0f ? Rgb(26, 38, 56, 215) : Rgb(16, 18, 26, 215));
+                if (cd > 0f)
+                {
+                    int fillH = (int)(56 * Math.Clamp(cd / maxCd, 0f, 1f));
+                    Raylib.DrawRectangle(sx, sy + (56 - fillH), 56, fillH, Rgb(220, 45, 55, 95));
+                }
+                Raylib.DrawRectangle(sx, sy, 56, 3, cd <= 0f ? col : Color.Gray);
+                Engine.DrawTextCentered(bind, sx + 28, sy + 16, 13f, col);
+                Engine.DrawTextCentered(cd <= 0f ? "OK" : $"{cd:F1}", sx + 28, sy + 38, 15f, cd <= 0f ? Color.White : Color.Red);
             }
 
-            // Панель ULTRAKILL STYLE METER для V1
+            // 6. КОМПАКТНЫЙ ULTRAKILL STYLE METER (только для V1)
             if (_run.CharKey == "v1")
             {
                 var (rName, rCol, rMult) = c.V1GetStyleRankInfo();
-                Raylib.DrawRectangle(sw - 380, 130, 356, 220, Rgb(10, 12, 20, 225));
-                Raylib.DrawRectangle(sw - 380, 130, 356, 5, rCol);
-                Engine.DrawTextLeft($"{rName} (x{rMult:F2})", sw - 364, 142, 24f, rCol);
-                Raylib.DrawRectangle(sw - 364, 174, 320, 12, Rgb(35, 38, 50));
-                Raylib.DrawRectangle(sw - 364, 174, (int)(320 * (c.V1StylePoints / 1000f)), 12, rCol);
-                for (int i = 0; i < c.V1StyleLog.Count; i++)
-                    Engine.DrawTextLeft(c.V1StyleLog[i].Text, sw - 364, 196 + i * 22, 16f, c.V1StyleLog[i].Col);
+                int vx = sw - 252, vy = 84;
+                Raylib.DrawRectangle(vx, vy, 236, 138, Rgb(10, 12, 20, 175));
+                Raylib.DrawRectangle(vx, vy, 236, 3, rCol);
+                Engine.DrawTextLeft($"{rName} (x{rMult:F2})", vx + 10, vy + 8, 18f, rCol);
+                Raylib.DrawRectangle(vx + 10, vy + 32, 216, 7, Rgb(35, 38, 50));
+                Raylib.DrawRectangle(vx + 10, vy + 32, (int)(216 * (c.V1StylePoints / 1000f)), 7, rCol);
+                for (int i = 0; i < Math.Min(4, c.V1StyleLog.Count); i++)
+                    Engine.DrawTextLeft(c.V1StyleLog[i].Text, vx + 10, vy + 46 + i * 19, 14f, c.V1StyleLog[i].Col);
 
-                Engine.DrawTextLeft($"ОРУЖИЕ [{c.V1Weapon}/5] | МОНЕТЫ: {(int)c.V1Coins}/4 | RAIL: {(int)c.V1RailCharge}% | СТАМИНА: {(int)c.V1Stamina}/3",
-                    sw - 540, sh - 135, 16f, Color.Gold);
+                Engine.DrawTextLeft($"WPN [{c.V1Weapon}/5] | COIN {(int)c.V1Coins} | RAIL {(int)c.V1RailCharge}% | DASH {(int)c.V1Stamina}",
+                    sw - 268, sh - 98, 13f, Color.Gold);
             }
 
-            // Детальная статистика по удержанию [TAB]
+            // 7. ОКНО ДЕТАЛЬНОЙ СТАТИСТИКИ ПО УДЕРЖАНИЮ [TAB]
             if (Raylib.IsKeyDown(KeyboardKey.Tab))
             {
-                Raylib.DrawRectangle(sw / 2 - 450, sh / 2 - 240, 900, 480, Rgb(12, 16, 26, 245));
-                Raylib.DrawRectangle(sw / 2 - 450, sh / 2 - 240, 900, 4, Color.SkyBlue);
-                Engine.DrawTextLeft($"=== SURVIVOR OVERVIEW: {SurvivorDatabase.Classes[_run.CharKey].Name} ===", sw / 2 - 420, sh / 2 - 215, 22f, Color.Gold);
-                Engine.DrawTextLeft($"Base Damage: {c.BaseDamage:F1}   |   Fire Rate: {c.FireRate:F1}/s   |   Move Speed: {c.MoveSpeed:F1}   |   Crit: {c.CritChance * 100f:F0}%",
-                    sw / 2 - 420, sh / 2 - 175, 18f, Color.White);
-                int sy = sh / 2 - 125;
+                int tw = 780, th = 420, tx = (sw - tw) / 2, ty = (sh - th) / 2;
+                Raylib.DrawRectangle(tx, ty, tw, th, Rgb(12, 16, 26, 240));
+                Raylib.DrawRectangle(tx, ty, tw, 3, Color.SkyBlue);
+                string netInfo = _net.Connected ? $"Кооп: Комната {_net.RoomCode} ({1 + _remotePlayers.Count} игр.)" : "Одиночная игра";
+                Engine.DrawTextLeft($"{SurvivorDatabase.Classes[_run.CharKey].Name}  |  {netInfo}", tx + 24, ty + 18, 20f, Color.Gold);
+                Engine.DrawTextLeft($"Урон: {c.BaseDamage:F1}  |  Атака: {c.FireRate:F1}/с  |  Скорость: {c.MoveSpeed:F1}  |  Крит: {c.CritChance * 100f:F0}%  |  Блок: {c.BlockChance * 100f:F0}%",
+                    tx + 24, ty + 48, 16f, Color.White);
+                Engine.DrawTextLeft("Чит-клавиши теста: [F5] След. этап | [F6] Базар | [F7] Луна | [F8] +$500 | [F9] +Враги/Митрикс",
+                    tx + 24, ty + 74, 14f, Rgb(150, 195, 235));
+
+                int sy = ty + 108;
                 foreach (var k in _run.ItemOrder)
                 {
-                    if (sy > sh / 2 + 200) break;
+                    if (sy > ty + th - 32) break;
                     var info = GameData.ItemPool[k];
-                    Engine.DrawTextLeft($"• {info.Name} [x{_run.Items[k]}]: {info.Desc}", sw / 2 - 420, sy, 17f, info.Color);
-                    sy += 26;
+                    Engine.DrawTextLeft($"• {info.Name} [x{_run.Items[k]}] — {info.Desc}", tx + 24, sy, 15f, info.Color);
+                    sy += 23;
                 }
             }
         }

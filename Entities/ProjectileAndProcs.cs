@@ -222,10 +222,27 @@ namespace RiskOfCSharp2.Entities
             g.Gold += dead.GoldReward;
 
             ProgressData.Instance.Kills++;
-            ProgressData.Instance.Save();
+            if (ProgressData.Instance.Kills >= 12)
+                g.UnlockAchievement("ach_slayer");
 
             if (p.CharKey == "v1")
                 p.V1AddStyle(dead.IsBoss ? "+ BIG KILL" : "+ KILL", dead.IsBoss ? Color.Red : Color.White, dead.IsBoss ? 160f : 45f);
+
+            if (dead.IsBoss || _rng.NextDouble() < 0.08)
+            {
+                int gain = dead.EnemyType == "mithrix" ? 5 : (dead.IsBoss ? 2 : 1);
+                g.LunarCoins += gain;
+            }
+
+            if (dead.EnemyType == "mithrix" && dead.StolenItems.Count > 0)
+            {
+                foreach (var retKey in dead.StolenItems)
+                {
+                    if (!g.ItemOrder.Contains(retKey)) g.ItemOrder.Add(retKey);
+                    g.Items[retKey] = (g.Items.TryGetValue(retKey, out int c) ? c : 0) + 1;
+                }
+                dead.StolenItems.Clear();
+            }
 
             int tooth = GetItemCount("monster_tooth");
             if (tooth > 0) g.HealPlayer(4.0f + 4.0f * tooth);
@@ -275,6 +292,18 @@ namespace RiskOfCSharp2.Entities
                         other.TakeDamage(burnDmg);
                 }
             }
+
+            if (dead.IsBoss)
+            {
+                ProgressData.Instance.BossKills++;
+                g.UnlockAchievement("ach_boss");
+                if (dead.EnemyType == "mithrix")
+                    g.OnMithrixDefeated(deathPos);
+                else
+                    g.SpawnItemDrop(deathPos, null, "boss");
+            }
+
+            ProgressData.Instance.Save();
         }
 
         public static void DamagePlayer(float amount)
