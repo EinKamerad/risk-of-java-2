@@ -1,0 +1,72 @@
+{
+  "format": 1,
+  "restore": {
+    "/home/10160@stud.pgt.su/Музыка/rir2c/RiskOfCSharp2/RiskOfCSharp2.csproj": {}
+  },
+  "projects": {
+    "/home/10160@stud.pgt.su/Музыка/rir2c/RiskOfCSharp2/RiskOfCSharp2.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/home/10160@stud.pgt.su/Музыка/rir2c/RiskOfCSharp2/RiskOfCSharp2.csproj",
+        "projectName": "RiskOfCSharp2",
+        "projectPath": "/home/10160@stud.pgt.su/Музыка/rir2c/RiskOfCSharp2/RiskOfCSharp2.csproj",
+        "packagesPath": "/home/10160@stud.pgt.su/.nuget/packages/",
+        "outputPath": "/home/10160@stud.pgt.su/Музыка/rir2c/RiskOfCSharp2/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/home/10160@stud.pgt.su/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "Raylib-cs": {
+              "target": "Package",
+              "version": "[6.0.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/home/10160@stud.pgt.su/.dotnet/sdk/8.0.426/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
