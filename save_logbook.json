@@ -1,6 +1,6 @@
 {
-  "kills": 109,
-  "boss_kills": 3,
+  "kills": 9,
+  "boss_kills": 0,
   "max_stage": 1,
   "unlocked_items": [
     "syringe",
@@ -62,14 +62,13 @@
     "spinel_tonic"
   ],
   "unlocked_achievements": [
-    "ach_slayer",
-    "ach_hoarder",
-    "ach_boss",
     "ach_traveler"
   ],
   "discovered_stages": [
     "roost",
     "acres",
-    "moon"
+    "bazaar",
+    "depths",
+    "siren"
   ]
 }

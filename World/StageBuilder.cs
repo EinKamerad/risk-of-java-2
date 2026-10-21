@@ -18,11 +18,15 @@ namespace RiskOfCSharp2.World
         {
             Color cMain = col ?? Rgb(200, 212, 232);
             Color cAcc = accent ?? Rgb(75, 215, 255);
+            float physThick = MathF.Max(2.2f, thickness * 1.6f);
             var plat = new Entity(position: pos);
-            new Entity(parent: plat, model: "sphere", scale: new(radius * 2f, thickness, radius * 2f), position: new(0, -thickness * 0.45f, 0), color: cMain);
+            // Плотная верхняя плита и массивное каменное основание снизу (исключает визуальные щели)
+            new Entity(parent: plat, model: "cube", scale: new(radius * 1.52f, physThick * 0.75f, radius * 1.52f), position: new(0, -physThick * 0.40f, 0), color: Rgb(62, 74, 98));
+            new Entity(parent: plat, model: "cube", scale: new(radius * 1.52f, physThick * 0.75f, radius * 1.52f), position: new(0, -physThick * 0.40f, 0), rotation: new(0, 45f, 0), color: cMain);
+            new Entity(parent: plat, model: "sphere", scale: new(radius * 2f, thickness, radius * 2f), position: new(0, -thickness * 0.35f, 0), color: cMain);
             new Entity(parent: plat, model: "diamond", scale: new(radius * 2.05f, 0.22f, radius * 2.05f), color: cAcc, unlit: true);
             entitiesList.Add(plat);
-            skyPlatforms.Add(new SkyPlatform(pos.X, pos.Z, radius, pos.Y));
+            skyPlatforms.Add(new SkyPlatform(pos.X, pos.Z, radius, pos.Y, physThick));
             return plat;
         }
 

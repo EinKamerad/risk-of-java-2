@@ -42,3 +42,4 @@
 /home/10160@stud.pgt.su/Видео/rir2c/RiskOfCSharp2/obj/Debug/net8.0/RiskOfCSharp2.pdb
 /home/10160@stud.pgt.su/Видео/rir2c/RiskOfCSharp2/obj/Debug/net8.0/RiskOfCSharp2.genruntimeconfig.cache
 /home/10160@stud.pgt.su/Видео/rir2c/RiskOfCSharp2/obj/Debug/net8.0/ref/RiskOfCSharp2.dll
+/home/10160@stud.pgt.su/Видео/rir2c/RiskOfCSharp2/obj/Debug/net8.0/RiskOfCSharp2.sourcelink.json

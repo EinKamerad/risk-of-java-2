@@ -13,19 +13,26 @@ namespace RiskOfCSharp2.Entities
     public class LunarShockwaveRing : Entity
     {
         private readonly float _damage;
-        private float _curRadius = 1.5f;
+        private float _curRadius = 2.0f;
         private readonly float _maxRadius;
         private readonly float _speed;
         private bool _hitPlayer = false;
-        private readonly Entity _ring;
+        private readonly List<Entity> _segments = new();
+        private const int SegCount = 24;
 
-        public LunarShockwaveRing(Vector3 centerPos, float damage, float maxRadius = 54.0f, float speed = 22.0f)
-            : base(position: centerPos + new Vector3(0, 0.15f, 0))
+        public LunarShockwaveRing(Vector3 centerPos, float damage, float maxRadius = 54.0f, float speed = 19.5f)
+            : base(position: new Vector3(centerPos.X, centerPos.Y + 0.12f, centerPos.Z))
         {
             _damage = damage;
             _maxRadius = maxRadius;
             _speed = speed;
-            _ring = new Entity(parent: this, model: "diamond", scale: new(3.0f, 0.45f, 3.0f), color: Rgb(80, 230, 255, 175), unlit: true);
+            for (int i = 0; i < SegCount; i++)
+            {
+                float angDeg = i * (360f / SegCount);
+                var seg = new Entity(parent: this, model: "cube", scale: new(0.6f, 0.28f, 0.45f),
+                    rotation: new(0, angDeg, 0), color: Rgb(85, 235, 255), unlit: true);
+                _segments.Add(seg);
+            }
         }
 
         public override void OnUpdate(float dt)
@@ -40,17 +47,25 @@ namespace RiskOfCSharp2.Entities
                 return;
             }
 
-            _ring.Scale = new Vector3(_curRadius * 2.0f, 0.45f, _curRadius * 2.0f);
-            _ring.RotationY += 90f * dt;
+            float arcLen = (2.0f * MathF.PI * _curRadius) / SegCount;
+            for (int i = 0; i < SegCount; i++)
+            {
+                float rad = i * (MathF.PI * 2f / SegCount);
+                var seg = _segments[i];
+                seg.Position = new Vector3(MathF.Sin(rad) * _curRadius, 0f, MathF.Cos(rad) * _curRadius);
+                seg.Scale = new Vector3(arcLen * 0.92f, 0.28f, 0.42f);
+            }
 
             if (!_hitPlayer)
             {
                 Vector3 pPos = g.PlayerPos;
-                if (MathF.Abs(Physics.Distance2D(pPos, Position) - _curRadius) <= 1.4f && MathF.Abs(pPos.Y - Y) < 1.45f)
+                // Тонкий контур кольца и низкий порог по высоте (0.55м), чтобы прыжок на Space легко перепрыгивал волну!
+                if (MathF.Abs(Physics.Distance2D(pPos, Position) - _curRadius) <= 0.95f &&
+                    pPos.Y >= Y - 0.5f && (pPos.Y - Y) <= 0.55f)
                 {
                     _hitPlayer = true;
                     CombatManager.DamagePlayer(_damage);
-                    new VisualFX(pPos + new Vector3(0, 1f, 0), Color.SkyBlue, 2.5f, 0.25f);
+                    new VisualFX(pPos + new Vector3(0, 0.8f, 0), Color.SkyBlue, 2.2f, 0.22f);
                 }
             }
         }
@@ -427,6 +442,7 @@ namespace RiskOfCSharp2.Entities
             }
 
             float dist = Physics.Distance2D(Position, pPos);
+            float heightDiff = MathF.Abs(pPos.Y - Y);
             LookAt2D(pPos);
             float floorY = Physics.GetSurfaceHeight(X, Z, Y);
             bool projIsPlayer = IsAlly;
@@ -444,7 +460,7 @@ namespace RiskOfCSharp2.Entities
             if (EnemyType == "lemurian")
             {
                 if (Parts.Tail != null) Parts.Tail.RotationY = MathF.Sin(t * 6f) * 22f;
-                if (dist > 1.7f)
+                if (dist > 1.7f || heightDiff > 2.6f)
                 {
                     Position += Forward * effSpeed * dt;
                     Vector3 res = Physics.ResolveHorizontalCollision(Position, 0.7f, floorY);
@@ -467,7 +483,7 @@ namespace RiskOfCSharp2.Entities
             }
             else if (EnemyType == "beetle")
             {
-                if (dist > 1.65f)
+                if (dist > 1.65f || heightDiff > 2.4f)
                 {
                     Position += Forward * effSpeed * dt;
                     Vector3 res = Physics.ResolveHorizontalCollision(Position, 0.65f, floorY);
@@ -492,7 +508,11 @@ namespace RiskOfCSharp2.Entities
             {
                 if (Parts.Core != null) Parts.Core.Y = 2.2f + MathF.Sin(t * 5.0f) * 0.3f;
                 if (Parts.Tentacles != null) Parts.Tentacles.RotationY += 90f * dt;
-                if (dist > 2.2f) Position += Forward * effSpeed * dt;
+                if (dist > 2.2f || heightDiff > 3.2f)
+                {
+                    Position += Forward * effSpeed * dt;
+                    Y = Lerp(Y, MathF.Max(floorY, pPos.Y - 0.5f), dt * 2.5f);
+                }
                 else
                 {
                     AttackTimer -= dt;
@@ -500,7 +520,7 @@ namespace RiskOfCSharp2.Entities
                     {
                         AttackTimer = 1.8f;
                         new VisualFX(Position + new Vector3(0, 2.0f, 0), Color.SkyBlue, 5.5f, 0.35f);
-                        if (dist <= 4.5f)
+                        if (dist <= 4.5f && heightDiff <= 3.5f)
                         {
                             if (IsAlly && IsValid(allyEnemyTarget)) allyEnemyTarget!.TakeDamage(Damage);
                             else if (!IsAlly) CombatManager.DamagePlayer(Damage);
@@ -514,12 +534,14 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.Ring2 != null) Parts.Ring2.RotationY += 145f * dt;
                 if (Parts.Core != null) Parts.Core.Y = 2.3f + MathF.Sin(t * 4f) * 0.28f;
                 if (dist > 16.0f) Position += Forward * effSpeed * dt;
+                Y = Lerp(Y, MathF.Max(floorY, pPos.Y), dt * 2.0f);
                 AttackTimer -= dt;
-                if (AttackTimer <= 0f && dist < 36.0f)
+                Vector3 sp = Position + new Vector3(0, 2.3f, 0);
+                Vector3 aimPoint = pPos + new Vector3(0, 1.2f, 0);
+                if (AttackTimer <= 0f && dist < 36.0f && Physics.HasLineOfSight(sp, aimPoint))
                 {
                     AttackTimer = 2.4f;
-                    Vector3 sp = Position + new Vector3(0, 2.3f, 0);
-                    new Projectile(sp, (pPos + new Vector3(0, 1.2f, 0)) - sp, 25f, Damage, 0.35f, IsAlly ? Color.Lime : Color.Orange, isPlayer: projIsPlayer, canProc: false);
+                    new Projectile(sp, aimPoint - sp, 25f, Damage, 0.35f, IsAlly ? Color.Lime : Color.Orange, isPlayer: projIsPlayer, canProc: false);
                 }
             }
             else if (EnemyType == "greater_wisp")
@@ -527,14 +549,16 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.Ring1 != null) Parts.Ring1.RotationY += 110f * dt;
                 if (Parts.Core != null) Parts.Core.Y = 2.7f + MathF.Sin(t * 3.2f) * 0.3f;
                 if (dist > 18.0f) Position += Forward * effSpeed * dt;
+                Y = Lerp(Y, MathF.Max(floorY, pPos.Y), dt * 2.0f);
                 AttackTimer -= dt;
-                if (AttackTimer <= 0f && dist < 40.0f)
+                Vector3 aimPoint = pPos + new Vector3(0, 1.2f, 0);
+                if (AttackTimer <= 0f && dist < 40.0f && Physics.HasLineOfSight(Position + new Vector3(0, 2.7f, 0), aimPoint))
                 {
                     AttackTimer = 2.8f;
                     foreach (float sx in new[] { -1.1f, 1.1f })
                     {
                         Vector3 sp = Position + new Vector3(0, 2.7f, 0) + Right * sx;
-                        new Projectile(sp, (pPos + new Vector3(0, 1.2f, 0)) - sp, 28f, Damage, 0.52f, Color.Lime, isPlayer: projIsPlayer, canProc: false);
+                        new Projectile(sp, aimPoint - sp, 28f, Damage, 0.52f, Color.Lime, isPlayer: projIsPlayer, canProc: false);
                     }
                 }
             }
@@ -550,19 +574,20 @@ namespace RiskOfCSharp2.Entities
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -stomp;
                 }
                 AttackTimer -= dt;
-                if (AttackTimer <= 0f && dist < 32.0f)
+                Vector3 eyePos = Position + new Vector3(0, 2.7f, 0);
+                Vector3 aimPoint = pPos + new Vector3(0, 1.2f, 0);
+                if (AttackTimer <= 0f && dist < 32.0f && Physics.HasLineOfSight(eyePos, aimPoint))
                 {
                     AttackTimer = 3.0f;
-                    Vector3 eyePos = Position + new Vector3(0, 2.7f, 0);
                     Color col = IsAlly ? Color.Lime : Color.Red;
-                    new LightningBeam(eyePos, pPos + new Vector3(0, 1.2f, 0), col, 0.28f);
-                    new Projectile(eyePos, (pPos + new Vector3(0, 1.2f, 0)) - eyePos, 46f, Damage, 0.48f, col, isPlayer: projIsPlayer, canProc: false);
+                    new LightningBeam(eyePos, aimPoint, col, 0.28f);
+                    new Projectile(eyePos, aimPoint - eyePos, 46f, Damage, 0.48f, col, isPlayer: projIsPlayer, canProc: false);
                 }
             }
             else if (EnemyType == "imp")
             {
                 SpecialTimer -= dt;
-                if (SpecialTimer <= 0f && dist > 6.0f && dist < 24.0f)
+                if (SpecialTimer <= 0f && dist > 6.0f && dist < 24.0f && heightDiff < 3.0f)
                 {
                     SpecialTimer = 4.2f;
                     new VisualFX(Position + new Vector3(0, 1.2f, 0), Rgb(245, 35, 70), 2.5f, 0.25f);
@@ -570,9 +595,11 @@ namespace RiskOfCSharp2.Entities
                     Position = new Vector3(jumpPos.X, floorY, jumpPos.Z);
                     new VisualFX(Position + new Vector3(0, 1.2f, 0), Rgb(245, 35, 70), 2.5f, 0.25f);
                 }
-                if (dist > 1.8f)
+                if (dist > 1.8f || heightDiff > 2.6f)
                 {
                     Position += Forward * effSpeed * dt;
+                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 0.7f, floorY);
+                    Position = new Vector3(res.X, floorY, res.Z);
                     float swing = MathF.Sin(t * 13f) * 38f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = swing;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -swing;
