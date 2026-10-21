@@ -1,6 +1,6 @@
 {
-  "kills": 6,
-  "boss_kills": 0,
+  "kills": 109,
+  "boss_kills": 3,
   "max_stage": 1,
   "unlocked_items": [
     "syringe",
@@ -61,8 +61,15 @@
     "lunar_pauldron",
     "spinel_tonic"
   ],
-  "unlocked_achievements": [],
+  "unlocked_achievements": [
+    "ach_slayer",
+    "ach_hoarder",
+    "ach_boss",
+    "ach_traveler"
+  ],
   "discovered_stages": [
-    "roost"
+    "roost",
+    "acres",
+    "moon"
   ]
 }

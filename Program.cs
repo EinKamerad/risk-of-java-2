@@ -44,10 +44,19 @@ namespace RiskOfCSharp2
                 return MathF.Max(1f, MathF.Floor(raw * transMult * fluxMult * tonicMult * glassDiv));
             }
         }
-        public int Gold { get; set; } = 150;
-        public int LunarCoins { get; set; } = 8;
+        public int Gold { get; set; } = 35;
+        public int LunarCoins { get; set; } = 5;
         public bool BlueOrbSpawned { get; set; } = false;
-        public bool IsBossAlive => false;
+        public CombatTarget? ActiveBoss;
+        public string BossTitle = "";
+        public bool IsBossAlive => IsValid(ActiveBoss) && !ActiveBoss!.IsAlly;
+        public float MoonDetonationTimer { get; set; } = 0f;
+        public bool MithrixSpawned = false;
+
+        public float ElapsedTime = 0f;
+        public float DirectorCredits = 0f;
+        public float SpawnTimer = 1.5f;
+
         public Dictionary<string, int> Items { get; } = new();
         public List<string> ItemOrder { get; } = new();
         public List<Entity> StageEntities { get; } = new();
@@ -56,6 +65,38 @@ namespace RiskOfCSharp2
         public string StageName = "";
         public int MoonPillarsDone = 0;
         public Entity? ActiveTeleporterOrPad;
+
+        public float DifficultyCoeff
+        {
+            get
+            {
+                float minutes = ElapsedTime / 60.0f;
+                return (1.0f + 0.18f * minutes) * MathF.Pow(1.15f, Stage - 1);
+            }
+        }
+
+        public (string Label, Color Col) GetDifficultyInfo()
+        {
+            float c = DifficultyCoeff;
+            if (c < 1.3f) return ("EASY", Rgb(80, 225, 100));
+            if (c < 1.8f) return ("MEDIUM", Rgb(255, 210, 60));
+            if (c < 2.5f) return ("HARD", Rgb(255, 130, 40));
+            if (c < 3.5f) return ("VERY HARD", Rgb(245, 55, 55));
+            return ("HAHAHA (INSANE)", Rgb(210, 50, 255));
+        }
+
+        public void UnlockAchievement(string achKey)
+        {
+            if (GameData.Achievements.TryGetValue(achKey, out var ach) &&
+                !ProgressData.Instance.UnlockedAchievements.Contains(achKey))
+            {
+                ProgressData.Instance.UnlockedAchievements.Add(achKey);
+                if (ach.UnlocksItem != null)
+                    ProgressData.Instance.UnlockedItems.Add(ach.UnlocksItem);
+                ProgressData.Instance.Save();
+                ShowBanner($"ДОСТИЖЕНИЕ: {ach.Name} ({ach.RewardText})", Color.Gold, 4.0f);
+            }
+        }
 
         public void HealPlayer(float amount)
         {
@@ -88,6 +129,9 @@ namespace RiskOfCSharp2
             Items[itemKey] = (Items.TryGetValue(itemKey, out int c) ? c : 0) + 1;
             var info = GameData.ItemPool[itemKey];
             ShowBanner($"ПОДОБРАНО: {info.Name} ({info.Desc})", info.Color, 3.2f);
+            int total = 0;
+            foreach (var v in Items.Values) total += v;
+            if (total >= 6) UnlockAchievement("ach_hoarder");
         }
 
         public void SpawnItemDrop(Vector3 pos, string? itemKey = null, string poolType = "small_chest")
@@ -99,12 +143,31 @@ namespace RiskOfCSharp2
         public void ShowBanner(string msg, Color col, float duration = 2.5f)
             => Program.ShowBanner(msg, col, duration);
 
+        public void SpawnBoss(Vector3 pos, string? bossType = null)
+        {
+            var rng = new Random();
+            string bType = bossType != null && Array.IndexOf(GameData.BossTypes, bossType) >= 0
+                ? bossType
+                : GameData.BossTypes[rng.Next(GameData.BossTypes.Length)];
+            float fy = Physics.GetSurfaceHeight(pos.X, pos.Z, pos.Y);
+            var boss = new CombatTarget(new Vector3(pos.X, fy, pos.Z), bType, DifficultyCoeff);
+            ActiveBoss = boss;
+            BossTitle = GameData.BossTitles.TryGetValue(bType, out var bt) ? bt : GameData.BossTitles["boss"];
+            CombatManager.Enemies.Add(boss);
+            StageEntities.Add(boss);
+        }
+
         public void OnTeleporterActivated()
-            => ShowBanner("ТЕЛЕПОРТ АКТИВИРОВАН! ДЕРЖИТЕСЬ В ЗОНЕ ЗАРЯДКИ!", Color.Red, 3.0f);
+        {
+            Vector3 tpPos = ActiveTeleporterOrPad != null ? ActiveTeleporterOrPad.Position : PlayerPos;
+            SpawnBoss(tpPos + new Vector3(9f, 0f, 9f));
+            ShowBanner("ТЕЛЕПОРТ АКТИВИРОВАН! ПОБЕДИТЕ БОССА ТЕЛЕПОРТА!", Color.Red, 3.2f);
+        }
 
         public void NextStage()
         {
             Stage++;
+            if (Stage >= 2) UnlockAchievement("ach_traveler");
             Program.LoadStage(Stage, null);
         }
 
@@ -128,9 +191,36 @@ namespace RiskOfCSharp2
         }
 
         public void StartMithrixEncounter()
-            => ShowBanner("ВЫ ПОДНЯЛИСЬ В НЕБЕСНЫЙ КОЛИЗЕЙ МИТРИКСА (Y = 120м)!", Color.SkyBlue, 4.5f);
-    }
+        {
+            if (MithrixSpawned) return;
+            MithrixSpawned = true;
+            foreach (var e in CombatManager.Enemies.ToArray())
+            {
+                if (IsValid(e) && !e.IsBoss) Destroy(e);
+            }
+            CombatManager.Enemies.RemoveAll(e => !IsValid(e));
 
+            var boss = new CombatTarget(new Vector3(0, Physics.ColosseumY, 22.0f), "mithrix", DifficultyCoeff);
+            ActiveBoss = boss;
+            BossTitle = "MITHRIX [PHASE 1/4] :: KING OF NOTHING";
+            CombatManager.Enemies.Add(boss);
+            StageEntities.Add(boss);
+            ShowBanner("МИТРИКС, КОРОЛЬ НИЧЕГО [ФАЗА 1/4] :: БИТВА В НЕБЕСНОМ КОЛИЗЕЕ!", Color.SkyBlue, 4.2f);
+        }
+
+        public void OnMithrixDefeated(Vector3 deathPos)
+        {
+            ActiveBoss = null;
+            MoonDetonationTimer = 75.0f;
+            Vector3 shipPos = new(0, 0, -52.0f);
+            StageEntities.Add(new EscapeShip(shipPos));
+            StageEntities.Add(new LunarEscapePad(new Vector3(0, Physics.ColosseumY, -46.0f), shipPos));
+            ShowBanner("МИТРИКС ПОВЕРЖЕН! ПРЫГАЙТЕ В ЗЕЛЁНЫЙ ЛУЧ НА КРАЮ КОЛИЗЕЯ К КОРАБЛЮ (75 СЕК)!", Color.Lime, 6.5f);
+        }
+
+        public void OnRunVictory()
+            => Program.OnVictory();
+    }
     public static class Program
     {
         private static string _screen = "lobby"; // "lobby", "logbook", "in_game"
@@ -493,6 +583,10 @@ namespace RiskOfCSharp2
             _run.Stage = stageNum;
             _run.BlueOrbSpawned = false;
             _run.MoonPillarsDone = 0;
+            _run.MithrixSpawned = false;
+            _run.MoonDetonationTimer = 0f;
+            _run.ActiveBoss = null;
+            _run.DirectorCredits = 26.0f * _run.DifficultyCoeff;
 
             int seed = Environment.TickCount & 0x7FFFFFFF;
             var (ents, tpOrPad, pal) = StageBuilder.BuildStageWorld(stageNum, seed, specialMode);
@@ -507,15 +601,18 @@ namespace RiskOfCSharp2
             else _run.PlayerPos = new Vector3(0, 1f, 0f);
             _run.PlayerVelY = 0f;
 
-            if (specialMode != "bazaar")
-                SpawnTestEnemiesWave(8);
-
             if (specialMode == "bazaar")
                 ShowBanner("БАЗАР МЕЖДУ ВРЕМЕНЕМ :: ТОРГОВЛЯ С ТРИТОНОМ", Rgb(80, 215, 255), 3.5f);
             else if (specialMode == "moon")
                 ShowBanner("COMMENCEMENT :: ЗАРЯДИТЕ ВСЕ 4 СТОЛПА ЛУНЫ НА БАСТИОНАХ!", Rgb(100, 225, 255), 4.5f);
             else
                 ShowBanner($"STAGE {stageNum}: {pal.Name.ToUpper()}", Color.Yellow, 3.0f);
+        }
+
+        public static void OnVictory()
+        {
+            QuitRunToLobby();
+            ShowBanner("ПОБЕДА! ВЫ ПОКИНУЛИ ЛУНУ НА СПАСАТЕЛЬНОМ КОРАБЛЕ (+10 ЛУННЫХ МОНЕТ)!", Color.Gold, 8.0f);
         }
 
         private static void QuitRunToLobby()
@@ -560,8 +657,68 @@ namespace RiskOfCSharp2
             }
             if (Raylib.IsKeyPressed(KeyboardKey.F9))
             {
-                SpawnTestEnemiesWave(5);
-                ShowBanner("СПАВН +5 МОНСТРОВ ДЛЯ ТЕСТА БОЯ!", Color.Orange, 1.8f);
+                if (Physics.SpecialMode == "moon" && !_run.MithrixSpawned)
+                {
+                    _run.PlayerPos = new Vector3(0, Physics.ColosseumY + 1.5f, -36.0f);
+                    _run.StartMithrixEncounter();
+                }
+                else
+                {
+                    SpawnTestEnemiesWave(5);
+                    ShowBanner("СПАВН +5 МОНСТРОВ ДЛЯ ТЕСТА БОЯ!", Color.Orange, 1.8f);
+                }
+            }
+
+            _run.ElapsedTime += dt;
+            float coeff = _run.DifficultyCoeff;
+            CombatManager.Enemies.RemoveAll(e => !IsValid(e));
+
+            // Таймер детонации Луны после победы над Митриксом
+            if (_run.MoonDetonationTimer > 0f)
+            {
+                _run.MoonDetonationTimer -= dt;
+                if (_run.MoonDetonationTimer <= 0f)
+                {
+                    QuitRunToLobby();
+                    ShowBanner("ЛУНА ДЕТОНИРОВАЛА! ВЫ НЕ УСПЕЛИ К СПАСАТЕЛЬНОМУ КОРАБЛЮ!", Color.Red, 5.0f);
+                    return;
+                }
+            }
+
+            // ИИ-Режиссёр (Combat Director)
+            if (Physics.SpecialMode != "bazaar" && !_run.MithrixSpawned)
+            {
+                float tpMult = (_run.ActiveTeleporterOrPad is Teleporter tp && tp.State == "charging") ? 1.8f : 1.0f;
+                _run.DirectorCredits += (4.2f * coeff * tpMult) * dt;
+                _run.SpawnTimer -= dt;
+
+                if (_run.SpawnTimer <= 0f && CombatManager.Enemies.Count < 24)
+                {
+                    var rng = new Random();
+                    _run.SpawnTimer = 1.6f + (float)rng.NextDouble() * 1.6f;
+                    (string et, float cost)[] table = Physics.SpecialMode == "moon"
+                        ? new[] { ("lunar_chimera", 18f), ("golem", 28f), ("greater_wisp", 26f) }
+                        : new[] { ("beetle", 10f), ("lemurian", 12f), ("jellyfish", 14f), ("wisp", 16f), ("imp", 22f), ("greater_wisp", 30f), ("golem", 34f) };
+
+                    var affordable = new List<(string et, float cost)>();
+                    foreach (var pair in table)
+                        if (_run.DirectorCredits >= pair.cost) affordable.Add(pair);
+
+                    if (affordable.Count > 0)
+                    {
+                        var chosen = affordable[rng.Next(affordable.Count)];
+                        _run.DirectorCredits -= chosen.cost;
+                        float ang = (float)rng.NextDouble() * MathF.PI * 2f;
+                        float dist = 16.0f + (float)rng.NextDouble() * 12.0f;
+                        float maxB = Physics.WorldBound - 4.0f;
+                        float sx = Math.Clamp(_run.PlayerPos.X + MathF.Cos(ang) * dist, -maxB, maxB);
+                        float sz = Math.Clamp(_run.PlayerPos.Z + MathF.Sin(ang) * dist, -maxB, maxB);
+                        float sy = Physics.GetSurfaceHeight(sx, sz, _run.PlayerPos.Y);
+                        var ne = new CombatTarget(new Vector3(sx, sy, sz), chosen.et, coeff);
+                        CombatManager.Enemies.Add(ne);
+                        _run.StageEntities.Add(ne);
+                    }
+                }
             }
 
             var p = _run.PlayerEntity;
@@ -603,7 +760,6 @@ namespace RiskOfCSharp2
                 _run.Parts.RightLeg.RotationX = Lerp(_run.Parts.RightLeg.RotationX, 0f, dt * 10f);
             }
 
-            // Боевые навыки: ЛКМ (M1), ПКМ (M2), Shift, R
             c.Update(dt, isMoving);
             if (Raylib.IsMouseButtonDown(MouseButton.Left) && c.M1Cd <= 0f) c.UseM1Skill();
             if (Raylib.IsMouseButtonDown(MouseButton.Right) && c.M2Cd <= 0f) c.UseM2Skill();
@@ -664,9 +820,27 @@ namespace RiskOfCSharp2
             p.X = Math.Clamp(resolved.X, -b, b);
             p.Z = Math.Clamp(resolved.Z, -b, b);
 
+            // Удержание игрока на арене Колизея во время дуэли с Митриксом
+            if (Physics.SpecialMode == "moon" && _run.MithrixSpawned && _run.IsBossAlive && p.Y >= 105.0f)
+            {
+                float arenaR = MathF.Sqrt(p.X * p.X + p.Z * p.Z);
+                if (arenaR > 52.5f)
+                {
+                    float ang = MathF.Atan2(p.Z, p.X);
+                    p.X = MathF.Cos(ang) * 52.5f;
+                    p.Z = MathF.Sin(ang) * 52.5f;
+                }
+                if (p.Y < 120.0f)
+                {
+                    p.Y = 120.0f;
+                    _run.PlayerVelY = 0f;
+                    _run.PlayerGrounded = true;
+                    _run.PlayerJumpsLeft = _run.PlayerMaxJumps;
+                }
+            }
+
             if (_run.Parts.Halo != null) _run.Parts.Halo.RotationZ += 95f * dt;
 
-            // Обновление камеры (FPS для V1 или 3-е лицо для остальных)
             Vector3 camLookDir = c.GetAimDirection();
             if (_run.CharKey == "v1")
             {
@@ -703,7 +877,7 @@ namespace RiskOfCSharp2
 
             // Верхняя панель инвентаря
             Raylib.DrawRectangle(24, 16, 860, 86, Rgb(14, 18, 28, 215));
-            Engine.DrawTextLeft("INVENTORY  [HOLD TAB — Подробная статистика | F8: +Золото | F9: +Враги]", 38, 22, 16f, Rgb(175, 195, 225));
+            Engine.DrawTextLeft("INVENTORY  [HOLD TAB — Подробная статистика | F8: +Золото | F9: +Враги/Митрикс]", 38, 22, 16f, Rgb(175, 195, 225));
             if (_run.ItemOrder.Count == 0)
             {
                 Engine.DrawTextLeft("Нет собранных предметов — открывайте сундуки клавишей [E]!", 38, 52, 17f, Rgb(125, 140, 165));
@@ -722,11 +896,36 @@ namespace RiskOfCSharp2
                 }
             }
 
-            // Правая верхняя панель этапа
-            Raylib.DrawRectangle(sw - 440, 16, 416, 86, Rgb(14, 18, 28, 215));
-            Raylib.DrawRectangle(sw - 440, 16, 416, 5, Rgb(80, 225, 100));
-            Engine.DrawTextLeft($"STAGE {_run.Stage}: {_run.StageName}  |  ВРАГОВ: {CombatManager.Enemies.Count}\nF5: Этап | F6: Базар | F7: Луна | F8: +$500 | F9: +Враги", sw - 424, 30, 16f, Color.White);
+            // Правая верхняя панель времени, сложности и этапа
+            var (diffLabel, diffCol) = _run.GetDifficultyInfo();
+            int mins = (int)(_run.ElapsedTime / 60f);
+            int secs = (int)(_run.ElapsedTime % 60f);
+            string detStr = _run.MoonDetonationTimer > 0f ? $"  |  ESCAPE: {_run.MoonDetonationTimer:F1}s!" : "";
+            Raylib.DrawRectangle(sw - 460, 16, 436, 92, Rgb(14, 18, 28, 215));
+            Raylib.DrawRectangle(sw - 460, 16, 436, 5, diffCol);
+            Engine.DrawTextLeft(
+                $"STAGE {_run.Stage}: {_run.StageName}{detStr}\n" +
+                $"TIME: {mins:00}:{secs:00}  |  {diffLabel} (x{_run.DifficultyCoeff:F2})\n" +
+                $"MONSTERS: {CombatManager.Enemies.Count}  |  F5/F6/F7/F8/F9",
+                sw - 444, 26, 16f, Color.White);
 
+            // Полоска здоровья Босса Телепорта / Митрикса по центру сверху
+            if (_run.IsBossAlive && _run.ActiveBoss != null)
+            {
+                var boss = _run.ActiveBoss;
+                string bTitle = boss.EnemyType == "mithrix"
+                    ? $"MITHRIX [PHASE {boss.Phase}/4] :: KING OF NOTHING"
+                    : _run.BossTitle;
+                Color bCol = boss.EnemyType == "mithrix"
+                    ? (boss.Phase == 4 ? Color.Magenta : Color.SkyBlue)
+                    : Color.Red;
+                Engine.DrawTextCentered(bTitle, sw * 0.5f, 128f, 22f, bCol);
+                int bw = 640, bx = (sw - bw) / 2, by = 146;
+                float bRatio = Math.Clamp(boss.Hp / MathF.Max(1f, boss.MaxHp), 0f, 1f);
+                Raylib.DrawRectangle(bx, by, bw, 22, Rgb(45, 15, 15, 230));
+                Raylib.DrawRectangle(bx, by, (int)(bw * bRatio), 22, bCol);
+                Engine.DrawTextCentered($"{(int)MathF.Max(0, boss.Hp)} / {(int)boss.MaxHp}", sw * 0.5f, by + 11f, 16f, Color.White);
+            }
             // Левая нижняя панель здоровья, щита и валюты
             Raylib.DrawRectangle(24, sh - 110, 440, 90, Rgb(14, 18, 28, 220));
             Engine.DrawTextLeft($"${_run.Gold}  |  LUNAR: {_run.LunarCoins}C  |  {SurvivorDatabase.Classes[_run.CharKey].Name}", 40, sh - 98, 20f, Color.Gold);

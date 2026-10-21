@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "targets": {
     "net8.0": {
       "Raylib-cs/6.0.0": {
@@ -133,11 +133,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/home/10160@stud.pgt.su/Музыка/rir2c/RiskOfCSharp2/RiskOfCSharp2.csproj",
+      "projectUniqueName": "/home/10160@stud.pgt.su/Видео/rir2c/RiskOfCSharp2/RiskOfCSharp2.csproj",
       "projectName": "RiskOfCSharp2",
-      "projectPath": "/home/10160@stud.pgt.su/Музыка/rir2c/RiskOfCSharp2/RiskOfCSharp2.csproj",
+      "projectPath": "/home/10160@stud.pgt.su/Видео/rir2c/RiskOfCSharp2/RiskOfCSharp2.csproj",
       "packagesPath": "/home/10160@stud.pgt.su/.nuget/packages/",
-      "outputPath": "/home/10160@stud.pgt.su/Музыка/rir2c/RiskOfCSharp2/obj/",
+      "outputPath": "/home/10160@stud.pgt.su/Видео/rir2c/RiskOfCSharp2/obj/",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "/home/10160@stud.pgt.su/.nuget/NuGet/NuGet.Config"
@@ -150,6 +150,7 @@
       },
       "frameworks": {
         "net8.0": {
+          "framework": "net8.0",
           "targetAlias": "net8.0",
           "projectReferences": {}
         }
@@ -163,10 +164,12 @@
         "enableAudit": "true",
         "auditLevel": "low",
         "auditMode": "direct"
-      }
+      },
+      "SdkAnalysisLevel": "10.0.400"
     },
     "frameworks": {
       "net8.0": {
+        "framework": "net8.0",
         "targetAlias": "net8.0",
         "dependencies": {
           "Raylib-cs": {
@@ -190,7 +193,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/home/10160@stud.pgt.su/.dotnet/sdk/8.0.426/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "/home/10160@stud.pgt.su/.dotnet/sdk/10.0.402/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

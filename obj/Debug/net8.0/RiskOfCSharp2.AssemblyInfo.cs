@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RiskOfCSharp2")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f82625d42505be2b73f5448b4f018c833ad941ac")]
 [assembly: System.Reflection.AssemblyProductAttribute("RiskOfCSharp2")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RiskOfCSharp2")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
