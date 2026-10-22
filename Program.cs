@@ -389,8 +389,10 @@ namespace RiskOfCSharp2
                     if (Raylib.IsKeyPressed(KeyboardKey.Escape))
                     {
                         _paused = !_paused;
-                        if (_paused) Raylib.EnableCursor();
-                        else Raylib.DisableCursor();
+                        if (_paused || (_run != null && SurvivorDatabase.IsMobaCharacter(_run.CharKey)))
+                            Raylib.EnableCursor();
+                        else
+                            Raylib.DisableCursor();
                     }
 
                     if (!_paused)
@@ -998,17 +1000,18 @@ namespace RiskOfCSharp2
             DrawHeader();
             int sw = Raylib.GetScreenWidth();
             var cfg = SurvivorDatabase.Classes[_selectedChar];
-            string[] hotkeys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "[", "]" };
+            string[] hotkeys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "[", "]", "F1", "F2", "F3", "F4" };
 
             for (int i = 0; i < SurvivorDatabase.OrderedKeys.Length; i++)
             {
                 string k = SurvivorDatabase.OrderedKeys[i];
                 var scfg = SurvivorDatabase.Classes[k];
-                int row = i / 7, col = i % 7;
-                Rectangle rect = new(36 + col * 102, 70 + row * 46, 94, 38);
+                int row = i / 9, col = i % 9;
+                Rectangle rect = new(36 + col * 80, 70 + row * 46, 74, 38);
                 bool isSel = k == _selectedChar;
-                if (Engine.DrawButton(rect, $"[{hotkeys[i]}] {scfg.Icon}", Rgb(22, 28, 42, 245), scfg.BodyColor,
-                    isSel ? Color.Yellow : Color.White, 15f, isSel ? Color.White : scfg.BodyColor))
+                string hk = i < hotkeys.Length ? hotkeys[i] : "";
+                if (Engine.DrawButton(rect, $"[{hk}] {scfg.Icon}", Rgb(22, 28, 42, 245), scfg.BodyColor,
+                    isSel ? Color.Yellow : Color.White, 13f, isSel ? Color.White : scfg.BodyColor))
                 {
                     SelectCharacter(k);
                 }
@@ -1083,7 +1086,8 @@ namespace RiskOfCSharp2
             _paused = false;
             _mainPedestal.Enabled = false;
             _menuCrystal.Enabled = false;
-            Raylib.DisableCursor();
+            if (SurvivorDatabase.IsMobaCharacter(charKey)) Raylib.EnableCursor();
+            else Raylib.DisableCursor();
 
             _run = new GameRunContext { CharKey = charKey };
             foreach (var k in GameData.ItemPool.Keys) _run.Items[k] = 0;
@@ -1338,47 +1342,169 @@ namespace RiskOfCSharp2
             var p = _run.PlayerEntity;
             var c = _run.Combat;
             float prevY = p.Y;
+            bool isMoba = SurvivorDatabase.IsMobaCharacter(_run.CharKey);
+            bool isMoving = false;
 
-            Vector2 md = Raylib.GetMouseDelta();
-            p.RotationY += md.X * _mouseSens;
-            float maxPitch = _run.CharKey == "v1" ? 82f : 48f;
-            float minPitch = _run.CharKey == "v1" ? -82f : -42f;
-            _run.CamPitch = Math.Clamp(_run.CamPitch + md.Y * _mouseSens, minPitch, maxPitch);
-
-            float inX = (Raylib.IsKeyDown(KeyboardKey.D) ? 1f : 0f) - (Raylib.IsKeyDown(KeyboardKey.A) ? 1f : 0f);
-            float inZ = (Raylib.IsKeyDown(KeyboardKey.W) ? 1f : 0f) - (Raylib.IsKeyDown(KeyboardKey.S) ? 1f : 0f);
-            bool isMoving = MathF.Abs(inX) > 0.01f || MathF.Abs(inZ) > 0.01f;
-
-            if (isMoving && !c.GrappleActive)
+            if (isMoba)
             {
-                Vector3 moveDir = Vector3.Normalize(p.Forward * inZ + p.Right * inX);
-                p.Position += moveDir * c.MoveSpeed * dt;
+                if (Raylib.IsCursorHidden())
+                    Raylib.EnableCursor();
 
-                if (_run.CharKey == "mindustry")
+                // Проекция луча мыши на плоскость арены (с учётом инверсии оси X в Raylib)
+                Ray rlRay = Raylib.GetMouseRay(Raylib.GetMousePosition(), Engine.Camera);
+                Vector3 rayOrig = new(-rlRay.Position.X, rlRay.Position.Y, rlRay.Position.Z);
+                Vector3 rayDir = new(-rlRay.Direction.X, rlRay.Direction.Y, rlRay.Direction.Z);
+                if (MathF.Abs(rayDir.Y) > 0.001f)
                 {
-                    _run.Parts.Torso.RotationZ = Lerp(_run.Parts.Torso.RotationZ, -inX * 14f, dt * 8f);
-                    _run.Parts.Torso.RotationX = Lerp(_run.Parts.Torso.RotationX, inZ * 10f, dt * 8f);
+                    float tHit = (p.Y - rayOrig.Y) / rayDir.Y;
+                    if (tHit > 0f && tHit < 220f)
+                    {
+                        Vector3 hitP = rayOrig + rayDir * tHit;
+                        float wb = Physics.WorldBound;
+                        c.MobaCursorPos = new Vector3(
+                            Math.Clamp(hitP.X, -wb, wb),
+                            Physics.GetSurfaceHeight(hitP.X, hitP.Z, p.Y),
+                            Math.Clamp(hitP.Z, -wb, wb)
+                        );
+                    }
                 }
-                else
+
+                // ПКМ — клик по врагу для атаки или клик/удержание по земле для движения
+                if (Raylib.IsMouseButtonPressed(MouseButton.Right))
                 {
+                    CombatTarget? clickedEnemy = null;
+                    float bestD = 2.6f;
+                    foreach (var e in CombatManager.Enemies)
+                    {
+                        if (IsValid(e) && !e.IsAlly)
+                        {
+                            float d = Physics.Distance2D(c.MobaCursorPos, e.Position);
+                            if (d <= e.HitRadius + bestD) { bestD = d; clickedEnemy = e; }
+                        }
+                    }
+                    if (clickedEnemy != null)
+                    {
+                        c.MobaAttackTarget = clickedEnemy;
+                        c.MobaMoveTarget = null;
+                        new VisualFX(clickedEnemy.Position + new Vector3(0, 0.25f, 0), Color.Red, 1.6f, 0.20f);
+                    }
+                    else
+                    {
+                        c.MobaAttackTarget = null;
+                        c.MobaMoveTarget = c.MobaCursorPos;
+                        new VisualFX(c.MobaCursorPos + new Vector3(0, 0.15f, 0), Color.Lime, 1.3f, 0.20f);
+                    }
+                }
+                else if (Raylib.IsMouseButtonDown(MouseButton.Right) && c.MobaAttackTarget == null)
+                {
+                    c.MobaMoveTarget = c.MobaCursorPos;
+                }
+
+                Vector3 moveDir = Vector3.Zero;
+                if (IsValid(c.MobaAttackTarget) && !c.MobaAttackTarget!.IsAlly)
+                {
+                    Vector3 toEnemy = new(c.MobaAttackTarget.X - p.X, 0f, c.MobaAttackTarget.Z - p.Z);
+                    float distE = toEnemy.Length();
+                    if (distE > 3.6f)
+                        moveDir = toEnemy / distE;
+                    else
+                    {
+                        p.LookAt2D(c.MobaAttackTarget.Position);
+                        if (c.M1Cd <= 0f) c.UseM1Skill();
+                    }
+                }
+                else if (c.MobaMoveTarget.HasValue)
+                {
+                    Vector3 toPoint = new(c.MobaMoveTarget.Value.X - p.X, 0f, c.MobaMoveTarget.Value.Z - p.Z);
+                    if (toPoint.Length() > 0.45f)
+                        moveDir = Vector3.Normalize(toPoint);
+                    else
+                        c.MobaMoveTarget = null;
+                }
+
+                isMoving = moveDir.LengthSquared() > 0.01f;
+                if (isMoving && !c.GrappleActive)
+                {
+                    p.Position += moveDir * c.MoveSpeed * dt;
+                    p.LookAt2D(p.Position + moveDir);
                     float walkCycle = (float)Raylib.GetTime() * (11.0f + CombatManager.GetItemCount("hoof") * 1.2f);
-                    float swing = MathF.Sin(walkCycle) * (c.ShieldStance ? 22f : 38f);
+                    float swing = MathF.Sin(walkCycle) * 38f;
                     _run.Parts.LeftLeg.RotationX = swing;
                     _run.Parts.RightLeg.RotationX = -swing;
                     _run.Parts.Torso.Y = 1.26f + MathF.Abs(MathF.Cos(walkCycle)) * 0.08f;
                 }
+                else
+                {
+                    _run.Parts.LeftLeg.RotationX = Lerp(_run.Parts.LeftLeg.RotationX, 0f, dt * 10f);
+                    _run.Parts.RightLeg.RotationX = Lerp(_run.Parts.RightLeg.RotationX, 0f, dt * 10f);
+                }
+
+                c.Update(dt, isMoving);
+                if ((Raylib.IsMouseButtonDown(MouseButton.Left) || Raylib.IsKeyDown(KeyboardKey.Q)) && c.M1Cd <= 0f)
+                {
+                    p.LookAt2D(c.MobaCursorPos);
+                    c.UseM1Skill();
+                }
+                if ((Raylib.IsKeyPressed(KeyboardKey.W) || Raylib.IsMouseButtonPressed(MouseButton.Middle)) && c.M2Cd <= 0f)
+                {
+                    p.LookAt2D(c.MobaCursorPos);
+                    c.UseM2Skill();
+                }
+                if (Raylib.IsKeyPressed(KeyboardKey.LeftShift) && c.ShiftCd <= 0f)
+                {
+                    c.MobaMoveTarget = null;
+                    p.LookAt2D(c.MobaCursorPos);
+                    c.UseShiftSkill();
+                }
+                if (Raylib.IsKeyPressed(KeyboardKey.R) && c.RCd <= 0f)
+                {
+                    p.LookAt2D(c.MobaCursorPos);
+                    c.UseRSkill();
+                }
             }
             else
             {
-                _run.Parts.LeftLeg.RotationX = Lerp(_run.Parts.LeftLeg.RotationX, 0f, dt * 10f);
-                _run.Parts.RightLeg.RotationX = Lerp(_run.Parts.RightLeg.RotationX, 0f, dt * 10f);
-            }
+                Vector2 md = Raylib.GetMouseDelta();
+                p.RotationY += md.X * _mouseSens;
+                float maxPitch = _run.CharKey == "v1" ? 82f : 48f;
+                float minPitch = _run.CharKey == "v1" ? -82f : -42f;
+                _run.CamPitch = Math.Clamp(_run.CamPitch + md.Y * _mouseSens, minPitch, maxPitch);
 
-            c.Update(dt, isMoving);
-            if (Raylib.IsMouseButtonDown(MouseButton.Left) && c.M1Cd <= 0f) c.UseM1Skill();
-            if (Raylib.IsMouseButtonDown(MouseButton.Right) && c.M2Cd <= 0f) c.UseM2Skill();
-            if (Raylib.IsKeyPressed(KeyboardKey.LeftShift) && c.ShiftCd <= 0f) c.UseShiftSkill();
-            if (Raylib.IsKeyPressed(KeyboardKey.R) && c.RCd <= 0f) c.UseRSkill();
+                float inX = (Raylib.IsKeyDown(KeyboardKey.D) ? 1f : 0f) - (Raylib.IsKeyDown(KeyboardKey.A) ? 1f : 0f);
+                float inZ = (Raylib.IsKeyDown(KeyboardKey.W) ? 1f : 0f) - (Raylib.IsKeyDown(KeyboardKey.S) ? 1f : 0f);
+                isMoving = MathF.Abs(inX) > 0.01f || MathF.Abs(inZ) > 0.01f;
+
+                if (isMoving && !c.GrappleActive)
+                {
+                    Vector3 moveDir = Vector3.Normalize(p.Forward * inZ + p.Right * inX);
+                    p.Position += moveDir * c.MoveSpeed * dt;
+
+                    if (_run.CharKey == "mindustry")
+                    {
+                        _run.Parts.Torso.RotationZ = Lerp(_run.Parts.Torso.RotationZ, -inX * 14f, dt * 8f);
+                        _run.Parts.Torso.RotationX = Lerp(_run.Parts.Torso.RotationX, inZ * 10f, dt * 8f);
+                    }
+                    else
+                    {
+                        float walkCycle = (float)Raylib.GetTime() * (11.0f + CombatManager.GetItemCount("hoof") * 1.2f);
+                        float swing = MathF.Sin(walkCycle) * (c.ShieldStance ? 22f : 38f);
+                        _run.Parts.LeftLeg.RotationX = swing;
+                        _run.Parts.RightLeg.RotationX = -swing;
+                        _run.Parts.Torso.Y = 1.26f + MathF.Abs(MathF.Cos(walkCycle)) * 0.08f;
+                    }
+                }
+                else
+                {
+                    _run.Parts.LeftLeg.RotationX = Lerp(_run.Parts.LeftLeg.RotationX, 0f, dt * 10f);
+                    _run.Parts.RightLeg.RotationX = Lerp(_run.Parts.RightLeg.RotationX, 0f, dt * 10f);
+                }
+
+                c.Update(dt, isMoving);
+                if (Raylib.IsMouseButtonDown(MouseButton.Left) && c.M1Cd <= 0f) c.UseM1Skill();
+                if (Raylib.IsMouseButtonDown(MouseButton.Right) && c.M2Cd <= 0f) c.UseM2Skill();
+                if (Raylib.IsKeyPressed(KeyboardKey.LeftShift) && c.ShiftCd <= 0f) c.UseShiftSkill();
+                if (Raylib.IsKeyPressed(KeyboardKey.R) && c.RCd <= 0f) c.UseRSkill();
+            }
 
             float floorH = Physics.GetSurfaceHeight(p.X, p.Z, p.Y, prevY);
 
@@ -1508,7 +1634,14 @@ namespace RiskOfCSharp2
 
             Engine.Camera.FovY = _fov;
             Vector3 camLookDir = c.GetAimDirection();
-            if (_run.CharKey == "v1")
+            if (isMoba)
+            {
+                Vector3 camPos = p.Position + new Vector3(0f, 22.0f, -14.5f);
+                Vector3 target = p.Position + new Vector3(0f, 0.8f, 1.5f);
+                Engine.Camera.Position = new Vector3(-camPos.X, camPos.Y, camPos.Z);
+                Engine.Camera.Target = new Vector3(-target.X, target.Y, target.Z);
+            }
+            else if (_run.CharKey == "v1")
             {
                 Vector3 eye = p.Position + new Vector3(0, 1.72f, 0);
                 if (c.FpRoot != null && !c.FpRoot.IsDestroyed)
@@ -1545,7 +1678,10 @@ namespace RiskOfCSharp2
             if (Engine.DrawButton(new Rectangle(px + 40, py + 82, pw - 80, 52), "ПРОДОЛЖИТЬ ИГРУ [ESC]", Rgb(38, 110, 70), Rgb(55, 155, 95), Color.White, 18f))
             {
                 _paused = false;
-                Raylib.DisableCursor();
+                if (_run != null && SurvivorDatabase.IsMobaCharacter(_run.CharKey))
+                    Raylib.EnableCursor();
+                else
+                    Raylib.DisableCursor();
             }
             if (Engine.DrawButton(new Rectangle(px + 40, py + 150, pw - 80, 52), "ВЫЙТИ В ЛОББИ ПЕРСОНАЖЕЙ", Rgb(55, 75, 115), Rgb(80, 105, 155), Color.White, 18f))
             {
@@ -1563,9 +1699,12 @@ namespace RiskOfCSharp2
             int sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();
             var c = _run.Combat;
 
-            // Лаконичный аккуратный прицел в центре
-            Raylib.DrawCircleLines(sw / 2, sh / 2, 4f, Rgb(90, 230, 255, 180));
-            Raylib.DrawPixel(sw / 2, sh / 2, Color.White);
+            // Лаконичный аккуратный прицел в центре (только для персонажей не в MOBA-режиме)
+            if (!SurvivorDatabase.IsMobaCharacter(_run.CharKey))
+            {
+                Raylib.DrawCircleLines(sw / 2, sh / 2, 4f, Rgb(90, 230, 255, 180));
+                Raylib.DrawPixel(sw / 2, sh / 2, Color.White);
+            }
 
             // 1. КОМПАКТНАЯ ЛЕНТА ПРЕДМЕТОВ СЛЕВА СВЕРХУ (RoR2-style)
             if (_run.ItemOrder.Count == 0)
@@ -1643,10 +1782,18 @@ namespace RiskOfCSharp2
             Engine.DrawTextCentered(hpTxt, hx + 150, hy + 40, 15f, Color.White);
 
             // 5. АККУРАТНЫЙ ДОК СПОСОБНОСТЕЙ СПРАВА ВНИЗУ (4 иконки 56x56)
+            bool isMobaHud = SurvivorDatabase.IsMobaCharacter(_run.CharKey);
+            if (isMobaHud)
+            {
+                Vector2 mp = Raylib.GetMousePosition();
+                Raylib.DrawCircleLines((int)mp.X, (int)mp.Y, 10f, Color.Lime);
+                Engine.DrawTextLeft("MOBA-РЕЖИМ: ПКМ — Идти/Атака | ЛКМ/Q — Удар | W/СКМ — Навык 2 | Shift — Рывок | R — Ульта | Space — Прыжок",
+                    sw - 760, sh - 98, 13f, Rgb(120, 245, 200));
+            }
             (string key, string bind, float cd, float maxCd, Color col)[] skBoxes =
             {
-                ("m1", "ЛКМ", c.M1Cd, MathF.Max(0.1f, c.Cfg.Skills["m1"].Cd), Color.Yellow),
-                ("m2", "ПКМ", c.M2Cd, MathF.Max(0.1f, c.Cfg.Skills["m2"].Cd), Color.Orange),
+                ("m1", isMobaHud ? "ЛКМ/Q" : "ЛКМ", c.M1Cd, MathF.Max(0.1f, c.Cfg.Skills["m1"].Cd), Color.Yellow),
+                ("m2", isMobaHud ? "W/СКМ" : "ПКМ", c.M2Cd, MathF.Max(0.1f, c.Cfg.Skills["m2"].Cd), Color.Orange),
                 ("shift", "Shift", c.ShiftCd, MathF.Max(0.1f, c.Cfg.Skills["shift"].Cd), Color.SkyBlue),
                 ("r", "R", c.RCd, MathF.Max(0.1f, c.Cfg.Skills["r"].Cd), Color.Magenta)
             };

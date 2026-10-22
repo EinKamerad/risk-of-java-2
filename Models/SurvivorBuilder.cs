@@ -52,8 +52,12 @@ namespace RiskOfCSharp2.Models
         public static readonly string[] OrderedKeys =
         {
             "commando", "artificer", "huntress", "buzz", "v1", "sol", "gwen",
-            "enforcer", "scout", "m4a1", "medic", "aigis", "reimu", "mindustry"
+            "enforcer", "scout", "m4a1", "medic", "aigis", "reimu", "mindustry",
+            "slark", "tidehunter", "freeman", "dante"
         };
+
+        public static bool IsMobaCharacter(string charKey)
+            => charKey is "gwen" or "slark" or "tidehunter";
 
         public static readonly Dictionary<string, SurvivorConfig> Classes = new()
         {
@@ -137,15 +141,15 @@ namespace RiskOfCSharp2.Models
             },
             ["gwen"] = new()
             {
-                Key = "gwen", Name = "ГВЕН", Icon = "GWN", Subtitle = "Благая Швея [БЛИЖНИЙ БОЙ]",
+                Key = "gwen", Name = "ГВЕН", Icon = "GWN", Subtitle = "Благая Швея [MOBA-РЕЖИМ | ВИД СВЕРХУ]",
                 Hp = 135, Speed = 10.8f, Damage = 18.5f, FireRate = 4.8f, ProjSpeed = 52f, ProjScale = 0.30f, Aoe = 1.8f,
                 BodyColor = Rgb(65, 195, 255), ArmorColor = Rgb(32, 28, 46), VisorColor = Rgb(195, 240, 255),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Чик-чик! (Тысяча порезов)", Cd = 0.21f, Desc = "[ЛКМ - Ближний бой] Сверхбыстрые разрезы ножницами в конусе перед собой с вампиризмом." },
-                    ["m2"] = new() { Name = "Точный разрез!", Cd = 3.5f, Desc = "[ПКМ - Ближний бой] Мощный смыкающий разрез гигантскими ножницами (320% урона + лечение)." },
-                    ["shift"] = new() { Name = "Прыжок и Священный Туман", Cd = 5.2f, Desc = "[Shift] Рывок вперёд и призыв Священного Тумана, лечащего Гвен и бьющего врагов." },
-                    ["r"] = new() { Name = "Вышивание", Cd = 9.0f, Desc = "[R] Дальний залп веером из 5 гигантских призрачных игл насквозь." }
+                    ["m1"] = new() { Name = "Чик-чик! (Тысяча порезов)", Cd = 0.21f, Desc = "[ЛКМ / Q / ПКМ на врага] Быстрые разрезы ножницами по курсору с вампиризмом." },
+                    ["m2"] = new() { Name = "Точный разрез!", Cd = 3.5f, Desc = "[W / СКМ] Мощный смыкающий разрез гигантскими ножницами (320% урона + лечение)." },
+                    ["shift"] = new() { Name = "Прыжок и Священный Туман", Cd = 5.2f, Desc = "[Shift] Рывок к курсору и призыв Священного Тумана, лечащего Гвен и бьющего врагов." },
+                    ["r"] = new() { Name = "Вышивание", Cd = 9.0f, Desc = "[R] Дальний залп веером из 5 гигантских призрачных игл в сторону курсора." }
                 }
             },
             ["enforcer"] = new()
@@ -238,6 +242,58 @@ namespace RiskOfCSharp2.Models
                     ["shift"] = new() { Name = "Форсаж двигателей ядра", Cd = 3.5f, Desc = "[Shift] Реактивный полёт двигателей с авто-ремонтом корпуса (+15% HP)." },
                     ["r"] = new() { Name = "Режим постройки: Турель «Спектр»", Cd = 6.0f, Desc = "[R - Тратит 20% HP] Строит Турель «Спектр» (до 4 шт.), которая наследует предметы!" }
                 }
+            },
+            ["slark"] = new()
+            {
+                Key = "slark", Name = "СЛАРК (DOTA 2)", Icon = "SLK", Subtitle = "Ночной Ужас Тёмного Рифа [MOBA-РЕЖИМ | ВИД СВЕРХУ]",
+                Hp = 125, Speed = 11.6f, Damage = 17.5f, FireRate = 5.0f, ProjSpeed = 55f, ProjScale = 0.28f, Aoe = 1.6f,
+                BodyColor = Rgb(45, 135, 165), ArmorColor = Rgb(28, 42, 62), VisorColor = Rgb(110, 255, 215),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Кража Сущности (Essence Shift)", Cd = 0.20f, Desc = "[ЛКМ / Q / ПКМ] Удары заточкой крадут сущность врагов (+урон за стак и вампиризм)." },
+                    ["m2"] = new() { Name = "Тёмный Пакт (Dark Pact)", Cd = 4.0f, Desc = "[W / СКМ] Взрыв волн тёмной воды вокруг Сларка, снимающий дебаффы и наносящий 320% урона." },
+                    ["shift"] = new() { Name = "Прыжок хищника (Pounce)", Cd = 4.2f, Desc = "[Shift] Стремительный прыжок к курсору, оглушающий и привязывающий врагов на пути." },
+                    ["r"] = new() { Name = "Танец Теней (Shadow Dance)", Cd = 11.0f, Desc = "[R] Облако чёрного дыма на 5.5с: неуязвимость к урону, +45% скорости и мощное лечение!" }
+                }
+            },
+            ["tidehunter"] = new()
+            {
+                Key = "tidehunter", Name = "ТАЙДХАНТЕР (DOTA 2)", Icon = "TID", Subtitle = "Левиафан Бездны [MOBA-РЕЖИМ | ВИД СВЕРХУ]",
+                Hp = 190, Speed = 9.4f, Damage = 26.0f, FireRate = 2.4f, ProjSpeed = 48f, ProjScale = 0.55f, Aoe = 3.8f,
+                BodyColor = Rgb(62, 155, 115), ArmorColor = Rgb(135, 78, 52), VisorColor = Rgb(110, 245, 200),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Удар Якорем (Anchor Smash)", Cd = 0.42f, Desc = "[ЛКМ / Q / ПКМ] Круговой сокрушительный взмах гигантским морским якорем с замедлением." },
+                    ["m2"] = new() { Name = "Океанский Поток (Gush)", Cd = 3.8f, Desc = "[W / СКМ] Струя бездны в сторону курсора: 280% урона, замедление и раскол брони." },
+                    ["shift"] = new() { Name = "Панцирь Кракена (Kraken Shell)", Cd = 4.5f, Desc = "[Shift] Таранный рывок вперёд, дающий +40 щита и сбивающий врагов с ног." },
+                    ["r"] = new() { Name = "Опустошение (Ravage)", Cd = 12.0f, Desc = "[R] Шипы и щупальца бездны подбрасывают и оглушают ВСЕХ врагов в радиусе 18 метров!" }
+                }
+            },
+            ["freeman"] = new()
+            {
+                Key = "freeman", Name = "ГОРДОН ФРИМАН", Icon = "hl2", Subtitle = "Физик-теоретик Чёрной Мезы (Half-Life)",
+                Hp = 140, Speed = 10.6f, Damage = 16.5f, FireRate = 5.6f, ProjSpeed = 74f, ProjScale = 0.24f, Aoe = 1.4f,
+                BodyColor = Rgb(235, 125, 30), ArmorColor = Rgb(48, 54, 62), VisorColor = Rgb(255, 185, 45),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Монтировка и Импульсная винтовка", Cd = 0.18f, Desc = "[ЛКМ] Плазменный огонь на дистанции + сокрушительный удар монтировкой вблизи!" },
+                    ["m2"] = new() { Name = "Грави-пушка (Манипулятор поля)", Cd = 3.6f, Desc = "[ПКМ] Гравитационный импульс отбрасывает врагов впереди и запускает взрывную сферу." },
+                    ["shift"] = new() { Name = "Модуль длинных прыжков HEV", Cd = 3.8f, Desc = "[Shift] Длинный реактивный прыжок костюма HEV Mark IV и зарядка +25 щита." },
+                    ["r"] = new() { Name = "Глюонная пушка (Квантовый луч)", Cd = 10.0f, Desc = "[R] Разрушительный квантовый луч и цепь аннигиляционных взрывов по линии прицела." }
+                }
+            },
+            ["dante"] = new()
+            {
+                Key = "dante", Name = "ДАНТЕ (LIMBUS)", Icon = "DNT", Subtitle = "Исполнительный Менеджер №10 (Limbus Company)",
+                Hp = 125, Speed = 10.5f, Damage = 18.0f, FireRate = 4.6f, ProjSpeed = 66f, ProjScale = 0.28f, Aoe = 2.0f,
+                BodyColor = Rgb(185, 32, 42), ArmorColor = Rgb(28, 26, 34), VisorColor = Rgb(255, 205, 55),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Приказ: Цепи Грешников", Cd = 0.22f, Desc = "[ЛКМ] Выпускает пылающие золотые цепи, прошивающие врагов насквозь." },
+                    ["m2"] = new() { Name = "Резонанс Золотой Ветви", Cd = 4.0f, Desc = "[ПКМ] Взрыв золотого света и удар спектральных клинков с исцелением." },
+                    ["shift"] = new() { Name = "Сдвиг Стрелок", Cd = 4.0f, Desc = "[Shift] Временной рывок вперёд (+25 щита и сокращение перезарядки навыков на 2 сек)." },
+                    ["r"] = new() { Name = "Поворот Часов Вспять", Cd = 11.5f, Desc = "[R] Перематывает время: полное исцеление Данте и союзников + 6 столпов Судного Часа!" }
+                }
             }
         };
 
@@ -265,6 +321,10 @@ namespace RiskOfCSharp2.Models
                 case "aigis": BuildAigis(root, cfg, parts); break;
                 case "reimu": BuildReimu(root, cfg, parts); break;
                 case "mindustry": BuildMindustry(root, cfg, parts); break;
+                case "slark": BuildSlark(root, cfg, parts); break;
+                case "tidehunter": BuildTidehunter(root, cfg, parts); break;
+                case "freeman": BuildFreeman(root, cfg, parts); break;
+                case "dante": BuildDante(root, cfg, parts); break;
                 default: BuildCommando(root, cfg, parts); break;
             }
 
@@ -1432,6 +1492,230 @@ namespace RiskOfCSharp2.Models
             }
             parts.LeftArm = mLeftSh;
             parts.RightArm = mRightSh;
+        }
+
+        // ==========================================
+        // 15. SLARK (Dota 2)
+        // ==========================================
+        private static void BuildSlark(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        {
+            var lHip = new Entity(parent: root, position: new(-0.22f, 0.78f, 0));
+            var rHip = new Entity(parent: root, position: new(0.22f, 0.78f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.38f, 0.22f), position: new(0, -0.18f, 0), color: cfg.BodyColor);
+                new Entity(parent: hip, model: "cube", scale: new(0.22f, 0.14f, 0.24f), position: new(0, -0.34f, 0), color: cfg.ArmorColor);
+                new Entity(parent: hip, model: "cube", scale: new(0.18f, 0.36f, 0.20f), position: new(0, -0.52f, 0.04f), color: cfg.BodyColor);
+                new Entity(parent: hip, model: "diamond", scale: new(0.26f, 0.14f, 0.42f), position: new(0, -0.72f, 0.12f), color: Rgb(35, 110, 140));
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.18f, 0), rotation: new(16f, 0, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.62f, 0.64f, 0.44f), color: cfg.BodyColor);
+            new Entity(parent: torso, model: "cube", scale: new(0.50f, 0.54f, 0.18f), position: new(0, -0.02f, 0.18f), color: Rgb(140, 215, 210));
+            new Entity(parent: torso, model: "diamond", scale: new(0.72f, 0.34f, 0.52f), position: new(0, 0.24f, 0), color: cfg.ArmorColor);
+            // Спинной плавник-гребень Сларка
+            for (int i = 0; i < 4; i++)
+                new Entity(parent: torso, model: "diamond", scale: new(0.12f, 0.42f, 0.24f), position: new(0, 0.28f - i * 0.18f, -0.28f), rotation: new(-32, 0, 0), color: cfg.VisorColor, unlit: true);
+
+            var head = new Entity(parent: torso, position: new(0, 0.52f, 0.12f), rotation: new(-14f, 0, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.54f, 0.48f, 0.62f), color: cfg.BodyColor);
+            // Капюшон узника Тёмного Рифа
+            new Entity(parent: head, model: "diamond", scale: new(0.66f, 0.52f, 0.68f), position: new(0, 0.10f, -0.04f), color: cfg.ArmorColor);
+            new Entity(parent: head, model: "sphere", scaleUniform: 0.13f, position: new(-0.15f, 0.04f, 0.26f), color: cfg.VisorColor, unlit: true);
+            new Entity(parent: head, model: "sphere", scaleUniform: 0.13f, position: new(0.15f, 0.04f, 0.26f), color: cfg.VisorColor, unlit: true);
+            foreach (int s in new[] { -1, 1 })
+                new Entity(parent: head, model: "diamond", scale: new(0.16f, 0.30f, 0.22f), position: new(s * 0.30f, 0.06f, -0.02f), rotation: new(0, 0, s * -28f), color: cfg.VisorColor, unlit: true);
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.44f, 0.20f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.44f, 0.20f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "diamond", scale: new(0.36f, 0.30f, 0.36f), position: new(0, 0.06f, 0), color: cfg.ArmorColor);
+                new Entity(parent: sh, model: "cube", scale: new(0.16f, 0.30f, 0.16f), position: new(0, -0.16f, 0.04f), color: cfg.BodyColor);
+                new Entity(parent: sh, model: "cube", scale: new(0.18f, 0.18f, 0.36f), position: new(0, -0.28f, 0.22f), color: cfg.ArmorColor);
+            }
+            // Заточка Тёмного Рифа в правой руке
+            var dagger = new Entity(parent: rShoulder, position: new(0, -0.28f, 0.44f), rotation: new(12f, 0, 0));
+            new Entity(parent: dagger, model: "cube", scale: new(0.10f, 0.12f, 0.28f), color: Rgb(65, 50, 42));
+            new Entity(parent: dagger, model: "diamond", scale: new(0.14f, 0.24f, 0.92f), position: new(0, 0, 0.52f), color: cfg.VisorColor, unlit: true);
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 16. TIDEHUNTER (Dota 2)
+        // ==========================================
+        private static void BuildTidehunter(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        {
+            var lHip = new Entity(parent: root, position: new(-0.32f, 0.84f, 0));
+            var rHip = new Entity(parent: root, position: new(0.32f, 0.84f, 0));
+            foreach (var hip in new[] { lHip, rHip })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.34f, 0.44f, 0.36f), position: new(0, -0.22f, 0), color: cfg.BodyColor);
+                new Entity(parent: hip, model: "cube", scale: new(0.32f, 0.40f, 0.34f), position: new(0, -0.58f, 0), color: cfg.BodyColor);
+                new Entity(parent: hip, model: "cube", scale: new(0.38f, 0.18f, 0.48f), position: new(0, -0.78f, 0.08f), color: Rgb(48, 120, 90));
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.32f, 0));
+            new Entity(parent: torso, model: "sphere", scale: new(1.22f, 1.08f, 0.96f), color: cfg.BodyColor);
+            new Entity(parent: torso, model: "sphere", scale: new(0.95f, 0.88f, 0.42f), position: new(0, -0.04f, 0.34f), color: Rgb(175, 215, 165));
+            // Шипастый Панцирь Кракена на спине
+            new Entity(parent: torso, model: "sphere", scale: new(1.18f, 1.05f, 0.65f), position: new(0, 0.06f, -0.28f), color: Rgb(42, 98, 78));
+            foreach (float sy in new[] { -0.22f, 0.08f, 0.36f })
+                new Entity(parent: torso, model: "diamond", scale: new(0.24f, 0.38f, 0.38f), position: new(0, sy, -0.58f), rotation: new(-35, 0, 0), color: cfg.VisorColor, unlit: true);
+
+            var head = new Entity(parent: torso, position: new(0, 0.62f, 0.22f));
+            new Entity(parent: head, model: "sphere", scale: new(0.76f, 0.58f, 0.72f), color: cfg.BodyColor);
+            new Entity(parent: head, model: "cube", scale: new(0.58f, 0.20f, 0.48f), position: new(0, -0.18f, 0.18f), color: Rgb(165, 205, 155));
+            new Entity(parent: head, model: "diamond", scale: new(0.18f, 0.38f, 0.18f), position: new(0, 0.28f, 0.22f), rotation: new(25, 0, 0), color: cfg.VisorColor, unlit: true);
+            foreach (float ex in new[] { -0.24f, 0.24f })
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.15f, position: new(ex, 0.08f, 0.30f), color: Color.Yellow, unlit: true);
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.66f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.66f, 0.24f, 0));
+            foreach (var sh in new[] { lShoulder, rShoulder })
+            {
+                new Entity(parent: sh, model: "sphere", scaleUniform: 0.38f, color: cfg.BodyColor);
+                new Entity(parent: sh, model: "cube", scale: new(0.28f, 0.42f, 0.28f), position: new(0, -0.24f, 0.06f), color: cfg.BodyColor);
+                new Entity(parent: sh, model: "cube", scale: new(0.30f, 0.28f, 0.42f), position: new(0, -0.38f, 0.26f), color: Rgb(48, 120, 90));
+            }
+
+            // Огромный морской якорь в правой руке
+            var anchor = new Entity(parent: rShoulder, position: new(0, -0.34f, 0.46f), rotation: new(18f, 0, 0));
+            new Entity(parent: anchor, model: "cube", scale: new(0.16f, 0.16f, 1.85f), position: new(0, 0, 0.65f), color: cfg.ArmorColor);
+            new Entity(parent: anchor, model: "diamond", scale: new(1.35f, 0.28f, 0.48f), position: new(0, 0, 1.48f), color: Rgb(72, 82, 95));
+            foreach (int s in new[] { -1, 1 })
+                new Entity(parent: anchor, model: "diamond", scale: new(0.32f, 0.28f, 0.52f), position: new(s * 0.58f, 0, 1.35f), rotation: new(0, s * -28f, 0), color: cfg.VisorColor, unlit: true);
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 17. GORDON FREEMAN (Half-Life)
+        // ==========================================
+        private static void BuildFreeman(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        {
+            var lHip = new Entity(parent: root, position: new(-0.22f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.22f, 0.86f, 0));
+            foreach (var hip in new[] { lHip, rHip })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.24f, 0.44f, 0.26f), position: new(0, -0.20f, 0), color: cfg.ArmorColor);
+                new Entity(parent: hip, model: "cube", scale: new(0.26f, 0.22f, 0.28f), position: new(0, -0.42f, 0.04f), color: cfg.BodyColor);
+                new Entity(parent: hip, model: "cube", scale: new(0.22f, 0.42f, 0.24f), position: new(0, -0.62f, 0), color: cfg.BodyColor);
+                new Entity(parent: hip, model: "cube", scale: new(0.26f, 0.18f, 0.42f), position: new(0, -0.80f, 0.06f), color: cfg.ArmorColor);
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.62f, 0.20f, 0.42f), position: new(0, -0.32f, 0), color: cfg.ArmorColor);
+            new Entity(parent: torso, model: "cube", scale: new(0.70f, 0.62f, 0.44f), position: new(0, 0.06f, 0), color: cfg.BodyColor);
+            new Entity(parent: torso, model: "cube", scale: new(0.56f, 0.46f, 0.22f), position: new(0, 0.10f, 0.15f), color: cfg.ArmorColor);
+            // Знак Лямбды (λ) на груди костюма HEV Mark IV
+            new Entity(parent: torso, model: "diamond", scale: new(0.26f, 0.26f, 0.08f), position: new(0, 0.14f, 0.26f), color: cfg.VisorColor, unlit: true);
+            // Модуль длинных прыжков на спине
+            new Entity(parent: torso, model: "cube", scale: new(0.48f, 0.52f, 0.24f), position: new(0, 0.10f, -0.28f), color: cfg.ArmorColor);
+            new Entity(parent: torso, model: "sphere", scaleUniform: 0.18f, position: new(0, 0.12f, -0.40f), color: cfg.VisorColor, unlit: true);
+
+            var head = new Entity(parent: torso, position: new(0, 0.58f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.48f, 0.52f, 0.48f), color: Rgb(245, 205, 178));
+            new Entity(parent: head, model: "cube", scale: new(0.52f, 0.20f, 0.52f), position: new(0, 0.20f, -0.02f), color: Rgb(72, 46, 32));
+            // Эспаньолка (бородка) Фримана
+            new Entity(parent: head, model: "cube", scale: new(0.22f, 0.14f, 0.14f), position: new(0, -0.16f, 0.20f), color: Rgb(72, 46, 32));
+            // Очки в чёрной оправе
+            new Entity(parent: head, model: "cube", scale: new(0.46f, 0.05f, 0.10f), position: new(0, 0.05f, 0.22f), color: Color.Black);
+            foreach (float gx in new[] { -0.12f, 0.12f })
+                new Entity(parent: head, model: "cube", scale: new(0.16f, 0.12f, 0.06f), position: new(gx, 0.04f, 0.24f), color: Rgb(190, 235, 255), unlit: true);
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.48f, 0.25f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.48f, 0.25f, 0));
+            foreach (var sh in new[] { lShoulder, rShoulder })
+            {
+                new Entity(parent: sh, model: "diamond", scale: new(0.42f, 0.36f, 0.42f), position: new(0, 0.06f, 0), color: cfg.BodyColor);
+                new Entity(parent: sh, model: "cube", scale: new(0.18f, 0.28f, 0.18f), position: new(0, -0.16f, 0.02f), color: cfg.ArmorColor);
+                new Entity(parent: sh, model: "cube", scale: new(0.18f, 0.18f, 0.36f), position: new(0, -0.30f, 0.22f), color: cfg.BodyColor);
+            }
+
+            // Левая рука: Красная монтировка (Crowbar)
+            var crowbar = new Entity(parent: lShoulder, position: new(0, -0.28f, 0.42f), rotation: new(25f, 0, 0));
+            new Entity(parent: crowbar, model: "cube", scale: new(0.08f, 0.82f, 0.08f), position: new(0, 0.28f, 0), color: Rgb(220, 38, 38));
+            new Entity(parent: crowbar, model: "cube", scale: new(0.08f, 0.12f, 0.24f), position: new(0, 0.68f, 0.08f), color: Color.LightGray);
+
+            // Правая рука: Грави-пушка (Zero-Point Energy Field Manipulator)
+            var gravGun = new Entity(parent: rShoulder, position: new(0, -0.28f, 0.44f));
+            new Entity(parent: gravGun, model: "cube", scale: new(0.22f, 0.24f, 0.85f), position: new(0, 0.04f, 0.28f), color: Rgb(55, 62, 72));
+            new Entity(parent: gravGun, model: "sphere", scaleUniform: 0.26f, position: new(0, 0.06f, 0.58f), color: cfg.VisorColor, unlit: true);
+            foreach (float cx in new[] { -0.12f, 0.12f })
+                new Entity(parent: gravGun, model: "diamond", scale: new(0.08f, 0.16f, 0.32f), position: new(cx, 0.04f, 0.72f), color: cfg.BodyColor);
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 18. DANTE (Limbus Company)
+        // ==========================================
+        private static void BuildDante(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        {
+            var lHip = new Entity(parent: root, position: new(-0.19f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.19f, 0.86f, 0));
+            foreach (var hip in new[] { lHip, rHip })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.44f, 0.22f), position: new(0, -0.20f, 0), color: cfg.ArmorColor);
+                new Entity(parent: hip, model: "cube", scale: new(0.18f, 0.42f, 0.20f), position: new(0, -0.62f, 0), color: cfg.ArmorColor);
+                new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.16f, 0.38f), position: new(0, -0.80f, 0.06f), color: Rgb(18, 18, 24));
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            // Алый плащ Менеджера Limbus Company поверх чёрного жилета
+            new Entity(parent: torso, model: "diamond", scale: new(0.88f, 0.78f, 0.62f), position: new(0, -0.38f, -0.06f), color: cfg.BodyColor);
+            new Entity(parent: torso, model: "cube", scale: new(0.58f, 0.60f, 0.38f), position: new(0, 0.06f, 0), color: cfg.BodyColor);
+            new Entity(parent: torso, model: "cube", scale: new(0.36f, 0.56f, 0.18f), position: new(0, 0.06f, 0.14f), color: cfg.ArmorColor);
+            new Entity(parent: torso, model: "diamond", scale: new(0.14f, 0.38f, 0.08f), position: new(0, 0.12f, 0.24f), color: cfg.VisorColor, unlit: true);
+
+            // Голова-Часы Данте в языках пламени
+            var head = new Entity(parent: torso, position: new(0, 0.64f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.62f, 0.62f, 0.26f), color: Rgb(35, 28, 32));
+            new Entity(parent: head, model: "diamond", scale: new(0.72f, 0.72f, 0.18f), color: cfg.VisorColor, unlit: true);
+            new Entity(parent: head, model: "sphere", scale: new(0.48f, 0.48f, 0.28f), position: new(0, 0, 0.04f), color: Rgb(22, 18, 24));
+            // Золотые стрелки на циферблате
+            new Entity(parent: head, model: "cube", scale: new(0.05f, 0.22f, 0.06f), position: new(0, 0.08f, 0.16f), color: cfg.VisorColor, unlit: true);
+            new Entity(parent: head, model: "cube", scale: new(0.18f, 0.05f, 0.06f), position: new(0.06f, 0, 0.16f), color: cfg.VisorColor, unlit: true);
+            // Огненная корона над часами
+            new Entity(parent: head, model: "diamond", scale: new(0.48f, 0.55f, 0.24f), position: new(0, 0.42f, 0), color: Rgb(255, 95, 25), unlit: true);
+            new Entity(parent: head, model: "diamond", scale: new(0.28f, 0.68f, 0.18f), position: new(0, 0.52f, 0), color: Color.Yellow, unlit: true);
+
+            var halo = new Entity(parent: torso, position: new(0, 0.64f, -0.22f));
+            new Entity(parent: halo, model: "diamond", scale: new(1.18f, 1.18f, 0.08f), color: cfg.VisorColor, unlit: true);
+            parts.Halo = halo;
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.46f, 0.25f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.46f, 0.25f, 0));
+            foreach (var sh in new[] { lShoulder, rShoulder })
+            {
+                new Entity(parent: sh, model: "cube", scale: new(0.22f, 0.24f, 0.22f), position: new(0, 0.06f, 0), color: cfg.BodyColor);
+                new Entity(parent: sh, model: "cube", scale: new(0.14f, 0.06f, 0.24f), position: new(0, 0.16f, 0), color: cfg.VisorColor, unlit: true);
+                new Entity(parent: sh, model: "cube", scale: new(0.16f, 0.28f, 0.16f), position: new(0, -0.16f, 0.02f), color: cfg.BodyColor);
+                new Entity(parent: sh, model: "cube", scale: new(0.16f, 0.16f, 0.36f), position: new(0, -0.30f, 0.22f), color: cfg.ArmorColor);
+            }
+            // Ветвь Золотой Ветви (Golden Bough) в правой руке
+            var bough = new Entity(parent: rShoulder, position: new(0, -0.28f, 0.44f));
+            new Entity(parent: bough, model: "diamond", scale: new(0.18f, 0.18f, 0.85f), position: new(0, 0.04f, 0.28f), color: cfg.VisorColor, unlit: true);
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
         }
     }
 }
