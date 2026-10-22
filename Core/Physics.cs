@@ -7,10 +7,10 @@ namespace RiskOfCSharp2.Core
 {
     public struct SkyPlatform
     {
-        public float X, Z, Radius, TopY;
-        public SkyPlatform(float x, float z, float radius, float topY)
+        public float X, Z, Radius, TopY, Thickness;
+        public SkyPlatform(float x, float z, float radius, float topY, float thickness = 2.0f)
         {
-            X = x; Z = z; Radius = radius; TopY = topY;
+            X = x; Z = z; Radius = radius; TopY = topY; Thickness = thickness;
         }
     }
 
@@ -58,7 +58,6 @@ namespace RiskOfCSharp2.Core
                 }
             }
 
-            // Железная страховка пола Небесного Колизея на Луне (Y = 120.0, R = 56.5)
             if (SpecialMode == "moon" && checkY >= 108.0f)
             {
                 if (MathF.Sqrt(x * x + z * z) <= 56.5f)
@@ -83,10 +82,7 @@ namespace RiskOfCSharp2.Core
                 float minD = radius + obs.Radius;
                 if (dist < minD)
                 {
-                    if (dist < 0.001f)
-                    {
-                        rx += minD;
-                    }
+                    if (dist < 0.001f) rx += minD;
                     else
                     {
                         float push = (minD - dist) / dist;
@@ -95,6 +91,27 @@ namespace RiskOfCSharp2.Core
                     }
                 }
             }
+
+            // Боковое выталкивание от толстых парящих платформ и бастионов
+            for (int i = 0; i < SkyPlatforms.Count; i++)
+            {
+                var plat = SkyPlatforms[i];
+                float bottomY = plat.TopY - plat.Thickness;
+                if (entityY >= plat.TopY - 0.45f || entityY + 1.8f < bottomY)
+                    continue;
+
+                float dx = rx - plat.X;
+                float dz = rz - plat.Z;
+                float dist = MathF.Sqrt(dx * dx + dz * dz);
+                float minD = radius + plat.Radius;
+                if (dist < minD && dist > 0.001f)
+                {
+                    float push = (minD - dist) / dist;
+                    rx += dx * push;
+                    rz += dz * push;
+                }
+            }
+
             return new Vector3(rx, pos.Y, rz);
         }
 
@@ -110,7 +127,37 @@ namespace RiskOfCSharp2.Core
                         return true;
                 }
             }
+
+            // Блокируем снаряды и лучи сквозь парящие платформы и бастионы столпов
+            for (int i = 0; i < SkyPlatforms.Count; i++)
+            {
+                var plat = SkyPlatforms[i];
+                float bottomY = plat.TopY - MathF.Max(1.6f, plat.Thickness);
+                if (pos.Y >= bottomY && pos.Y <= plat.TopY + 0.15f)
+                {
+                    float dx = pos.X - plat.X, dz = pos.Z - plat.Z;
+                    if (MathF.Sqrt(dx * dx + dz * dz) <= plat.Radius + radius)
+                        return true;
+                }
+            }
+
             return false;
+        }
+
+        public static bool HasLineOfSight(Vector3 from, Vector3 to)
+        {
+            Vector3 diff = to - from;
+            float dist = diff.Length();
+            if (dist < 1.0f) return true;
+            Vector3 dir = diff / dist;
+            int steps = Math.Clamp((int)(dist / 1.2f), 2, 40);
+            for (int i = 1; i < steps; i++)
+            {
+                Vector3 sample = from + dir * (dist * (i / (float)steps));
+                if (IsInsideSolidObstacle(sample, 0.15f))
+                    return false;
+            }
+            return true;
         }
     }
 }

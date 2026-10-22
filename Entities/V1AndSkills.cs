@@ -78,7 +78,7 @@ namespace RiskOfCSharp2.Entities
                     bestE, weakpoint, baseDmg * (1.25f + 0.35f * chainCount),
                     beamCol, aoe: isRail ? 5.5f : 2.2f, lifesteal: 6.0f, canProc: true);
 
-                p.V1AddStyle(isRail ? $"+ ULTRARICOSHOT x{chainCount}" : $"+ RICOSHOT x{chainCount}",
+                p.V1AddStyle(isRail ? $"+ УЛЬТРАРИКОШЕТ x{chainCount}" : $"+ РИКОШЕТ x{chainCount}",
                     beamCol, (isRail ? 150f : 85f) * chainCount);
             }
             Destroy(this);
@@ -144,7 +144,7 @@ namespace RiskOfCSharp2.Entities
                     foreach (var e in CombatManager.Enemies.ToArray())
                         if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, Position) <= 6.5f)
                             CombatManager.ApplyPlayerHitEffects(e, Position, p.BaseDamage * 2.4f, Color.SkyBlue, aoe: 0f, lifesteal: 2.0f);
-                    p.V1AddStyle("+ CONDUCTOR", Color.SkyBlue, 80f);
+                    p.V1AddStyle("+ ПРОВОДНИК", Color.SkyBlue, 80f);
                 }
                 Destroy(this);
             }
@@ -448,15 +448,15 @@ namespace RiskOfCSharp2.Entities
 
         public (string Rank, Color Col, float Mult) V1GetStyleRankInfo()
         {
-            if (V1StylePoints >= 920) return ("ULTRAKILL", Rgb(255, 215, 40), 1.50f);
-            if (V1StylePoints >= 780) return ("SSSHITSTORM", Rgb(255, 70, 90), 1.40f);
-            if (V1StylePoints >= 640) return ("SSADISTIC", Rgb(255, 95, 50), 1.32f);
-            if (V1StylePoints >= 500) return ("SUPREME", Rgb(245, 55, 55), 1.25f);
-            if (V1StylePoints >= 360) return ("ANARCHIC", Color.Orange, 1.18f);
-            if (V1StylePoints >= 230) return ("BRUTAL", Color.Yellow, 1.12f);
-            if (V1StylePoints >= 110) return ("CHAOTIC", Color.Lime, 1.06f);
-            if (V1StylePoints > 5) return ("DESTRUCTIVE", Color.SkyBlue, 1.02f);
-            return ("NO STYLE", Color.Gray, 1.0f);
+            if (V1StylePoints >= 920) return ("УЛЬТРАКИЛЛ", Rgb(255, 215, 40), 1.50f);
+            if (V1StylePoints >= 780) return ("SSS-ШТОРМ", Rgb(255, 70, 90), 1.40f);
+            if (V1StylePoints >= 640) return ("SS-САДИЗМ", Rgb(255, 95, 50), 1.32f);
+            if (V1StylePoints >= 500) return ("S-ПРЕВОСХОДНО", Rgb(245, 55, 55), 1.25f);
+            if (V1StylePoints >= 360) return ("A-АНАРХИЯ", Color.Orange, 1.18f);
+            if (V1StylePoints >= 230) return ("B-ЖЕСТОКО", Color.Yellow, 1.12f);
+            if (V1StylePoints >= 110) return ("C-ХАОТИЧНО", Color.Lime, 1.06f);
+            if (V1StylePoints > 5) return ("D-РАЗРУШИТЕЛЬНО", Color.SkyBlue, 1.02f);
+            return ("БЕЗ СТИЛЯ", Color.Gray, 1.0f);
         }
 
         public void V1DetonateCore(Projectile coreProj, bool isNuke = false)
@@ -473,7 +473,7 @@ namespace RiskOfCSharp2.Entities
                 if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, cPos) <= rad)
                     CombatManager.ApplyPlayerHitEffects(e, cPos, BaseDamage * dmgMult, col, aoe: 0f, lifesteal: 5.0f);
             }
-            if (isNuke) V1AddStyle("+ CORE NUKE!", Color.Red, 175f);
+            if (isNuke) V1AddStyle("+ ЯДЕРНЫЙ ВЗРЫВ!", Color.Red, 175f);
         }
 
         public int PerformMeleeAttack(
@@ -618,7 +618,7 @@ namespace RiskOfCSharp2.Entities
                     if (V1RailCharge < 100f)
                     {
                         M1Cd = 0.2f;
-                        Run.ShowBanner($"RAILCANNON RECHARGING ({(int)V1RailCharge}%)", Color.SkyBlue, 1.0f);
+                        Run.ShowBanner($"РЕЛЬСОТРОН ПЕРЕЗАРЯЖАЕТСЯ ({(int)V1RailCharge}%)", Color.SkyBlue, 1.0f);
                         return;
                     }
                     V1RailCharge = 0f;
@@ -627,7 +627,7 @@ namespace RiskOfCSharp2.Entities
                     if (V1CheckHitscanCoinOrCore(eyePos, aimDir, BaseDamage * 4.5f, true)) return;
                     new LightningBeam(muzzlePos, eyePos + aimDir * 65f, Color.SkyBlue, 0.42f);
                     new Projectile(muzzlePos, aimDir, 140f, BaseDamage * 4.2f, 0.65f, Color.SkyBlue, isPlayer: true, aoe: 4.5f, pierce: true, lifesteal: 12.0f);
-                    V1AddStyle("+ RAILCANNON SURGE", Color.SkyBlue, 95f);
+                    V1AddStyle("+ ЗАЛП РЕЛЬСОТРОНА", Color.SkyBlue, 95f);
                 }
                 else if (V1Weapon == 5)
                 {
@@ -746,7 +746,7 @@ namespace RiskOfCSharp2.Entities
                 }
                 else if (V1Weapon == 4)
                 {
-                    if (V1RailCharge < 100f) { Run.ShowBanner($"RAILCANNON RECHARGING ({(int)V1RailCharge}%)", Color.Lime, 1.0f); return; }
+                    if (V1RailCharge < 100f) { Run.ShowBanner($"РЕЛЬСОТРОН ПЕРЕЗАРЯЖАЕТСЯ ({(int)V1RailCharge}%)", Color.Lime, 1.0f); return; }
                     V1RailCharge = 0f;
                     M2Cd = 0.5f;
                     CombatTarget? bestE = null;
@@ -764,7 +764,7 @@ namespace RiskOfCSharp2.Entities
                     {
                         new LightningBeam(spawnPos, bestE.Position + new Vector3(0, bestE.HitHeight, 0), Color.Lime, 0.35f);
                         Run.StageEntities.Add(new V1ScrewdriverDrill(bestE));
-                        V1AddStyle("+ SCREWDRIVER", Color.Lime, 90f);
+                        V1AddStyle("+ БУР-ОТВЁРТКА", Color.Lime, 90f);
                     }
                     else
                     {
@@ -775,9 +775,9 @@ namespace RiskOfCSharp2.Entities
                 {
                     M2Cd = 0.25f;
                     V1RocketsFrozen = !V1RocketsFrozen;
-                    Run.ShowBanner(V1RocketsFrozen ? "FREEZEFRAME ACTIVE :: РАКЕТЫ ЗАМОРОЖЕНЫ!" : "FREEZEFRAME RELEASED :: ЗАЛП ПОШЁЛ!",
+                    Run.ShowBanner(V1RocketsFrozen ? "СТОП-КАДР АКТИВЕН :: РАКЕТЫ ЗАМОРОЖЕНЫ!" : "СТОП-КАДР СНЯТ :: ЗАЛП ПОШЁЛ!",
                         V1RocketsFrozen ? Color.SkyBlue : Color.Orange, 1.5f);
-                    if (!V1RocketsFrozen) V1AddStyle("+ FREEZEFRAME VOLLEY", Color.SkyBlue, 75f);
+                    if (!V1RocketsFrozen) V1AddStyle("+ ЗАЛП СТОП-КАДРА", Color.SkyBlue, 75f);
                 }
                 return;
             }
@@ -929,7 +929,7 @@ namespace RiskOfCSharp2.Entities
                 Run.PlayerVelY = 14.5f; Run.PlayerGrounded = false;
                 Run.ApplyDash(Run.PlayerForward * 24.0f * nrgMult, 0.28f);
                 OrgiaTimer = 5.5f;
-                Run.ShowBanner("ORGIA MODE OVERDRIVE :: АТАКА +50% | СКОРОСТЬ +45% | УРОН +35%!", Color.Gold, 2.2f);
+                Run.ShowBanner("РЕЖИМ ОРГИИ :: АТАКА +50% | СКОРОСТЬ +45% | УРОН +35%!", Color.Gold, 2.2f);
             }
             else if (CharKey == "reimu")
             {
@@ -1009,7 +1009,7 @@ namespace RiskOfCSharp2.Entities
                 foreach (var e in CombatManager.Enemies.ToArray())
                     if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 11.0f)
                         e.TakeDamage(BaseDamage * 3.4f);
-                Run.ShowBanner("DRAGON INSTALL :: LET IT OUT!", Rgb(255, 120, 30), 2.5f);
+                Run.ShowBanner("ДРАКОНИЙ ИНСТАЛЛ :: ПЛАМЯ ПОРЧИ ПРОБУЖДЕНО!", Rgb(255, 120, 30), 2.5f);
             }
             else if (CharKey == "gwen")
             {
@@ -1025,14 +1025,14 @@ namespace RiskOfCSharp2.Entities
                 Vector3 tPos = myPos + Run.PlayerForward * 10.0f;
                 float fy = Physics.GetSurfaceHeight(tPos.X, tPos.Z, myPos.Y);
                 Run.StageEntities.Add(new TearGasZone(new Vector3(tPos.X, fy, tPos.Z), BaseDamage * 0.85f));
-                Run.ShowBanner("TEAR GAS DEPLOYED :: CROWD CONTROL!", Rgb(140, 255, 100), 2.0f);
+                Run.ShowBanner("СЛЕЗОТОЧИВЫЙ ГАЗ :: КОНТРОЛЬ ТОЛПЫ!", Rgb(140, 255, 100), 2.0f);
             }
             else if (CharKey == "scout")
             {
                 Vector3 tPos = myPos + Run.PlayerForward * 11.0f;
                 float fy = Physics.GetSurfaceHeight(tPos.X, tPos.Z, myPos.Y);
                 Run.StageEntities.Add(new IFGZone(new Vector3(tPos.X, fy, tPos.Z), BaseDamage * 0.90f));
-                Run.ShowBanner("ROCK AND STONE! :: IFG FIELD & FLARE DEPLOYED!", Color.Yellow, 2.2f);
+                Run.ShowBanner("СКАЛА И КАМЕНЬ! :: ПОЛЕ IFG АКТИВИРОВАНО!", Color.Yellow, 2.2f);
             }
             else if (CharKey == "m4a1")
             {
@@ -1049,7 +1049,7 @@ namespace RiskOfCSharp2.Entities
                     }
                 }
                 foreach (var c in DummyClones) { c.Hp = c.MaxHp; c.CommandBurstShot(); }
-                Run.ShowBanner($"DUMMY LINK ACTIVE :: ОТРЯД M4A1 ({DummyClones.Count}/4 КЛОНОВ)!", Rgb(95, 255, 135), 2.6f);
+                Run.ShowBanner($"СИСТЕМА DUMMY LINK :: ОТРЯД M4A1 ({DummyClones.Count}/4 КЛОНОВ)!", Rgb(95, 255, 135), 2.6f);
             }
             else if (CharKey == "medic")
             {
@@ -1069,13 +1069,13 @@ namespace RiskOfCSharp2.Entities
                 {
                     bestEnemy.ConvertToAlly();
                     new LightningBeam(eyePos, bestEnemy.Position + new Vector3(0, bestEnemy.HitHeight, 0), Color.Lime, 0.45f);
-                    Run.ShowBanner($"MIND CONTROL :: {bestEnemy.EnemyType.ToUpper()} ПЕРЕШЁЛ НА ВАШУ СТОРОНУ!", Color.Lime, 3.2f);
+                    Run.ShowBanner("КОНТРОЛЬ РАЗУМА :: ПРОТИВНИК ПЕРЕШЁЛ НА ВАШУ СТОРОНУ!", Color.Lime, 3.2f);
                     return;
                 }
                 UberTimer = 6.5f;
                 Run.HealPlayer(Run.PlayerMaxHp * 0.50f);
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + 50.0f);
-                Run.ShowBanner("ÜBERCHARGE READY :: НЕУЯЗВИМОСТЬ И УСИЛЕНИЕ (6.5 СЕК)!", Rgb(255, 75, 90), 3.0f);
+                Run.ShowBanner("УБЕР-ЗАРЯД АКТИВЕН :: НЕУЯЗВИМОСТЬ И УСИЛЕНИЕ (6.5 СЕК)!", Rgb(255, 75, 90), 3.0f);
             }
             else if (CharKey == "reimu")
             {
@@ -1086,7 +1086,7 @@ namespace RiskOfCSharp2.Entities
                     Vector3 d = Vector3.Normalize(new Vector3(MathF.Cos(ang), 0.25f, MathF.Sin(ang)));
                     new Projectile(myPos + new Vector3(0, 1.8f, 0), d, 50f, BaseDamage * 1.9f, 0.58f, rainbow[i % rainbow.Length], isPlayer: true, aoe: 4.0f, homing: true);
                 }
-                Run.ShowBanner("SPELL CARD :: FANTASY SEAL!", Rgb(255, 85, 100), 2.5f);
+                Run.ShowBanner("СПЕЛЛ-КАРТА :: ПЕЧАТЬ ФАНТАЗИИ!", Rgb(255, 85, 100), 2.5f);
             }
             else if (CharKey == "mindustry")
             {
@@ -1105,7 +1105,7 @@ namespace RiskOfCSharp2.Entities
                 var turret = new MindustryTurret(new Vector3(buildPos.X, fy, buildPos.Z), Run.PlayerMaxHp, MindustryTurrets.Count);
                 MindustryTurrets.Add(turret);
                 Run.StageEntities.Add(turret);
-                Run.ShowBanner($"BUILD MODE :: ПОСТРОЕНА ТУРЕЛЬ SPECTRE [{MindustryTurrets.Count}/4]!", Rgb(255, 215, 65), 2.6f);
+                Run.ShowBanner($"РЕЖИМ ПОСТРОЙКИ :: ТУРЕЛЬ «СПЕКТР» [{MindustryTurrets.Count}/4]!", Rgb(255, 215, 65), 2.6f);
             }
         }
 
@@ -1123,7 +1123,7 @@ namespace RiskOfCSharp2.Entities
                 V1ShotgunBoostWindow = 0f;
                 new VisualFX(eyePos + aimDir * 1.2f, Color.Gold, 2.2f, 0.2f);
                 new Projectile(eyePos + aimDir * 1.0f, aimDir, 96f, BaseDamage * 2.85f, 0.46f, Color.Gold, isPlayer: true, aoe: 5.2f, lifesteal: 4.5f);
-                V1AddStyle("+ PROJECTILE BOOST", Color.Gold, 95f);
+                V1AddStyle("+ УСКОРЕНИЕ СНАРЯДА", Color.Gold, 95f);
                 return;
             }
 
@@ -1133,7 +1133,7 @@ namespace RiskOfCSharp2.Entities
                 if (IsValid(coin) && Vector3.Distance(eyePos, coin.Position) <= 5.5f)
                 {
                     coin.TriggerRicoshot(BaseDamage * 2.6f, false, 2);
-                    V1AddStyle("+ FISTFUL OF DOLLAR", Color.Gold, 110f);
+                    V1AddStyle("+ ГОРСТЬ МОНЕТ", Color.Gold, 110f);
                     return;
                 }
             }
@@ -1148,8 +1148,8 @@ namespace RiskOfCSharp2.Entities
                     new Projectile(eyePos + aimDir * 1.1f, aimDir, 110f, BaseDamage * 3.8f, 0.58f, Color.Yellow, isPlayer: true, aoe: 6.5f, lifesteal: 15.0f);
                     Run.HealPlayer(Run.PlayerMaxHp);
                     V1Stamina = 3.0f;
-                    V1AddStyle("+ PARRY", Color.Yellow, 130f);
-                    Run.ShowBanner("+ PARRY! (ПОЛНОЕ ИСЦЕЛЕНИЕ & СТАМИНА)", Color.Yellow, 1.5f);
+                    V1AddStyle("+ ПАРИРОВАНИЕ", Color.Yellow, 130f);
+                    Run.ShowBanner("+ ПАРИРОВАНИЕ! (ПОЛНОЕ ИСЦЕЛЕНИЕ И ВЫНОСЛИВОСТЬ)", Color.Yellow, 1.5f);
                     return;
                 }
             }
@@ -1164,7 +1164,7 @@ namespace RiskOfCSharp2.Entities
             V1AnimateLeftPunch(Color.Red);
             new VisualFX(Run.PlayerPos + new Vector3(0, 1.4f, 0) + Run.PlayerForward * 2.2f, Color.Red, 5.8f, 0.32f);
             int hits = PerformMeleeAttack(6.5f, 4.8f, 2.5f, Color.Red, lifesteal: 8.0f, stunDur: 1.2f, knockback: 6.5f, aoe: 4.0f);
-            if (hits > 0) V1AddStyle("+ KNUCKLEBLAST", Color.Red, 75f);
+            if (hits > 0) V1AddStyle("+ ВЗРЫВНОЙ КУЛАК", Color.Red, 75f);
         }
 
         public void V1UseWhiplash()
@@ -1195,14 +1195,14 @@ namespace RiskOfCSharp2.Entities
                     V1WhiplashTargetEnt = bestE;
                     V1WhiplashMode = "pull_enemy";
                     V1WhiplashTimer = 0.45f;
-                    V1AddStyle("+ GET OVER HERE!", Color.Lime, 60f);
+                    V1AddStyle("+ ИДИ СЮДА!", Color.Lime, 60f);
                 }
                 else
                 {
                     V1WhiplashTargetEnt = bestE;
                     V1WhiplashMode = "pull_self_to_enemy";
                     V1WhiplashTimer = 0.65f;
-                    V1AddStyle("+ WHIPLASH", Color.Lime, 45f);
+                    V1AddStyle("+ КРЮК-ХЛЫСТ", Color.Lime, 45f);
                 }
             }
             else
@@ -1430,7 +1430,7 @@ namespace RiskOfCSharp2.Entities
                     FpArmForearm.Color = V1ActiveArm == "feedbacker" ? Rgb(45, 115, 235) : Rgb(210, 40, 45);
                     FpArmFist.Color = armCol;
                 }
-                Run.ShowBanner($"ACTIVE ARM: {(V1ActiveArm == "feedbacker" ? "FEEDBACKER [BLUE]" : "KNUCKLEBLASTER [RED]")}", armCol, 1.2f);
+                Run.ShowBanner($"АКТИВНАЯ РУКА: {(V1ActiveArm == "feedbacker" ? "ФИДБЕКЕР [СИНЯЯ]" : "НАКЛБЛАСТЕР [КРАСНАЯ]")}", armCol, 1.2f);
             }
 
             if (V1WhiplashTimer > 0f)
@@ -1469,14 +1469,14 @@ namespace RiskOfCSharp2.Entities
             {
                 SaferSpacesTimer = MathF.Max(2.5f, 12.0f * MathF.Pow(0.85f, safer - 1));
                 new VisualFX(Run.PlayerPos + new Vector3(0, 1.3f, 0), Rgb(205, 85, 255), 2.6f, 0.28f);
-                Run.ShowBanner("УРОН ПОГЛОЩЁН БЕЗДНОЙ! (Safer Spaces)", Rgb(205, 85, 255), 1.0f);
+                Run.ShowBanner("УРОН ПОГЛОЩЁН БЕЗДНОЙ! (Сфера Бездны)", Rgb(205, 85, 255), 1.0f);
                 return;
             }
 
             if (_rng.NextDouble() < BlockChance)
             {
                 new VisualFX(Run.PlayerPos + new Vector3(0, 1.4f, 0), Color.SkyBlue, 2.2f, 0.25f);
-                Run.ShowBanner("ЗАБЛОКИРОВАНО! (Tougher Times)", Color.SkyBlue, 0.9f);
+                Run.ShowBanner("УРОН ЗАБЛОКИРОВАН! (Плюшевый Мишка)", Color.SkyBlue, 0.9f);
                 return;
             }
 
@@ -1535,7 +1535,7 @@ namespace RiskOfCSharp2.Entities
                     Run.PlayerHp = Run.PlayerMaxHp;
                     Shield = 35.0f;
                     SkillLockTimer = 12.0f;
-                    Run.ShowBanner("DUMMY LINK TRANSFER :: ВЫ ПЕРЕСЕЛИЛИСЬ В КЛОНА!", Rgb(95, 255, 135), 4.5f);
+                    Run.ShowBanner("ПЕРЕНОС СОЗНАНИЯ :: ВЫ ПЕРЕСЕЛИЛИСЬ В КЛОНА!", Rgb(95, 255, 135), 4.5f);
                     return;
                 }
                 Run.PlayerHp = Run.PlayerMaxHp;

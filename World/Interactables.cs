@@ -23,6 +23,7 @@ namespace RiskOfCSharp2.World
         int LunarCoins { get; set; }
         bool BlueOrbSpawned { get; set; }
         bool IsBossAlive { get; }
+        float MoonDetonationTimer { get; }
         Dictionary<string, int> Items { get; }
         List<string> ItemOrder { get; }
         List<Entity> StageEntities { get; }
@@ -38,6 +39,14 @@ namespace RiskOfCSharp2.World
         void EnterMoonStage();
         void OnMoonPillarCharged();
         void StartMithrixEncounter();
+        void OnMithrixDefeated(Vector3 deathPos);
+        void OnRunVictory();
+        void UnlockAchievement(string achKey);
+        Vector3 GetNearestPlayerPos(Vector3 fromPos, out bool isLocalPlayer);
+        bool IsNearRemotePlayer(Vector3 pos, float radius);
+        void NotifyEnemyDamaged(int netId, float amount, float currentHp, int phase);
+        void NotifyEnemyKilled(int netId);
+        void NotifyTeleporterState(string action, bool alignedToMoon);
     }
 
     public static class WorldContext
@@ -518,11 +527,15 @@ namespace RiskOfCSharp2.World
             {
                 _labelEnt.Enabled = dist < 12.5f;
                 if (dist < 5.8f && Raylib.IsKeyPressed(KeyboardKey.F))
+                {
                     SetAlignment(!AlignedToMoon);
+                    g.NotifyTeleporterState("align", AlignedToMoon);
+                }
                 if (dist < 5.0f && Raylib.IsKeyPressed(KeyboardKey.E))
                 {
                     State = "charging";
                     _zoneRing.Enabled = true;
+                    g.NotifyTeleporterState("activate", AlignedToMoon);
                     g.OnTeleporterActivated();
                 }
             }
@@ -531,8 +544,7 @@ namespace RiskOfCSharp2.World
                 _labelEnt.Enabled = true;
                 if (dist <= ZoneRadius)
                 {
-                    // Ускоренная зарядка для комфортного теста (в Фазе 5 подключится живой Босс)
-                    Charge = MathF.Min(100f, Charge + 16.0f * dt);
+                    Charge = MathF.Min(100f, Charge + 5.5f * dt);
                     _zoneRing.Color = Rgb(255, 80, 80, 55);
                 }
                 else
@@ -873,6 +885,16 @@ namespace RiskOfCSharp2.World
             var g = WorldContext.Game;
             if (g == null || IsDestroyed) return;
 
+            if (g.MoonDetonationTimer > 0f)
+            {
+                Active = false;
+                _launching = false;
+                _beam.Enabled = false;
+                _labelEnt.Enabled = false;
+                _ring.Color = Color.Gray;
+                return;
+            }
+
             _ring.RotationY += 95f * dt;
             if (_launching)
             {
@@ -898,6 +920,83 @@ namespace RiskOfCSharp2.World
                 _launchTimer = 0.85f;
                 new VisualFX(g.PlayerPos + new Vector3(0, 1.5f, 0), Color.SkyBlue, 7.5f, 0.4f);
                 g.ShowBanner("ПОДЪЁМ В НЕБЕСНЫЙ КОЛИЗЕЙ МИТРИКСА...", Color.SkyBlue, 2.5f);
+            }
+        }
+    }
+
+    public class LunarEscapePad : Entity
+    {
+        private readonly Vector3 _targetPos;
+        private float _cooldown = 0f;
+        private readonly Entity _ring;
+
+        public LunarEscapePad(Vector3 pos, Vector3 targetPos) : base(position: pos)
+        {
+            _targetPos = targetPos;
+            _ring = new Entity(parent: this, model: "diamond", scale: new(5.5f, 0.35f, 5.5f), position: new(0, 0.4f, 0), color: Color.Lime, unlit: true);
+            new Entity(parent: this, model: "cube", scale: new(2.2f, 28.0f, 2.2f), position: new(0, 14.0f, 0), color: Rgb(80, 255, 140, 100), unlit: true);
+            new Entity(parent: this, position: new(0, 5.2f, 0), color: Color.Lime)
+            {
+                BillboardText = "[ВСТАНЬТЕ В ЗЕЛЁНЫЙ ЛУЧ] Эвакуационный спуск к Кораблю!"
+            };
+        }
+
+        public override void OnUpdate(float dt)
+        {
+            var g = WorldContext.Game;
+            if (g == null || IsDestroyed) return;
+            _ring.RotationY += 120f * dt;
+            _cooldown = MathF.Max(0f, _cooldown - dt);
+
+            if (_cooldown <= 0f && g.PlayerPos.Y >= Physics.ColosseumY - 10.0f)
+            {
+                if (Physics.Distance2D(Position, g.PlayerPos) < 3.8f && MathF.Abs(g.PlayerPos.Y - Y) < 6.0f)
+                {
+                    _cooldown = 3.0f;
+                    new VisualFX( g.PlayerPos, Color.Lime, 6.0f, 0.35f);
+                    Vector3 landPos = _targetPos + new Vector3(0, 2.0f, 14.0f);
+                    g.PlayerPos = landPos;
+                    g.PlayerVelY = 0f;
+                    g.PlayerGrounded = true;
+                    new VisualFX(landPos, Color.Lime, 6.0f, 0.4f);
+                    g.ShowBanner("СПУСК ЗАВЕРШЁН! УДЕРЖИВАЙТЕ ЗОНУ СПАСАТЕЛЬНОГО КОРАБЛЯ ВПЕРЕДИ!", Color.Lime, 4.0f);
+                }
+            }
+        }
+    }
+
+    public class EscapeShip : Entity
+    {
+        public float Charge = 0f;
+        public readonly float Radius = 15.0f;
+        private readonly Entity _labelEnt;
+
+        public EscapeShip(Vector3 pos) : base(position: pos)
+        {
+            var hull = new Entity(parent: this, position: new(0, 2.0f, 0));
+            new Entity(parent: hull, model: "cube", scale: new(5.5f, 2.6f, 9.0f), color: Rgb(215, 225, 240));
+            new Entity(parent: hull, model: "diamond", scale: new(5.0f, 2.1f, 4.2f), position: new(0, 0, 5.0f), color: Rgb(235, 130, 35));
+            new Entity(parent: hull, model: "cube", scale: new(3.8f, 1.1f, 3.0f), position: new(0, 0.7f, 3.0f), color: Color.SkyBlue, unlit: true);
+            new Entity(parent: hull, model: "cube", scale: new(9.5f, 0.35f, 3.4f), position: new(0, -0.4f, 0), color: Rgb(65, 75, 92));
+
+            new Entity(parent: this, model: "cube", scale: new(0.45f, 90.0f, 0.45f), position: new(0, 45.0f, 0), color: Rgb(80, 255, 120, 95), unlit: true);
+            new Entity(parent: this, model: "sphere", scale: new(Radius * 2f, 0.10f, Radius * 2f), position: new(0, 0.10f, 0), color: Rgb(80, 255, 120, 75), unlit: true);
+            _labelEnt = new Entity(parent: this, position: new(0, 6.5f, 0), color: Color.Lime)
+            {
+                BillboardText = "ЭВАКУАЦИЯ: УДЕРЖИВАЙТЕ ЗОНУ КОРАБЛЯ СПАСЕНИЯ!"
+            };
+        }
+
+        public override void OnUpdate(float dt)
+        {
+            var g = WorldContext.Game;
+            if (g == null || IsDestroyed) return;
+            if (Vector3.Distance(Position, g.PlayerPos) <= Radius)
+            {
+                Charge = MathF.Min(100f, Charge + 14.0f * dt);
+                _labelEnt.BillboardText = $"ЗАПУСК ДВИГАТЕЛЕЙ СПАСЕНИЯ: {(int)Charge}%";
+                if (Charge >= 100f)
+                    g.OnRunVictory();
             }
         }
     }
