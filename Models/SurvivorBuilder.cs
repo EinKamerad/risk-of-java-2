@@ -49,6 +49,609 @@ namespace RiskOfCSharp2.Models
         public readonly List<Entity> UltFormNodes = new();
         public bool UltFormActive = false;
 
+        // Базовые координаты и углы сборки конкретной модели (Bind Pose)
+        public Vector3 BaseTorsoPos, BaseTorsoRot;
+        public Vector3 BaseLeftArmPos, BaseLeftArmRot, BaseRightArmPos, BaseRightArmRot;
+        public Vector3 BaseLeftLegPos, BaseLeftLegRot, BaseRightLegPos, BaseRightLegRot;
+        private bool _bindPoseCaptured = false;
+
+        // Состояние процедурной и боевой анимации
+        public string ActiveAnim = "";
+        public float AnimTimer = 0f;
+        public float AnimDuration = 0.25f;
+        public int AnimStep = 0;
+        public float WalkPhase = 0f;
+
+        public void CaptureBindPose()
+        {
+            if (Torso != null) { BaseTorsoPos = Torso.Position; BaseTorsoRot = Torso.Rotation; }
+            if (LeftArm != null) { BaseLeftArmPos = LeftArm.Position; BaseLeftArmRot = LeftArm.Rotation; }
+            if (RightArm != null) { BaseRightArmPos = RightArm.Position; BaseRightArmRot = RightArm.Rotation; }
+            if (LeftLeg != null) { BaseLeftLegPos = LeftLeg.Position; BaseLeftLegRot = LeftLeg.Rotation; }
+            if (RightLeg != null) { BaseRightLegPos = RightLeg.Position; BaseRightLegRot = RightLeg.Rotation; }
+            _bindPoseCaptured = true;
+        }
+
+        public void TriggerSkillAnim(string slot, float customDuration = 0f)
+        {
+            AnimStep++;
+            ActiveAnim = slot;
+            AnimDuration = customDuration > 0f ? customDuration : slot switch
+            {
+                "m1" => 0.24f,
+                "m2" => 0.42f,
+                "shift" => 0.36f,
+                "r" => 0.65f,
+                _ => 0.25f
+            };
+            AnimTimer = AnimDuration;
+        }
+
+        public void UpdateAnimations(
+            string charKey, float dt, bool isMoving, bool isGrounded,
+            float velY, float moveSpeedRatio, float strafeInput, float forwardInput,
+            bool shieldStance = false, bool isFlying = false, bool orgiaMode = false)
+        {
+            if (!_bindPoseCaptured) CaptureBindPose();
+            float t = (float)Raylib.GetTime();
+
+            if (AnimTimer > 0f)
+                AnimTimer = MathF.Max(0f, AnimTimer - dt);
+
+            // Вращение нимбов/ореолов (у Данте — с эффектом часового механизма)
+            if (Halo != null)
+            {
+                if (charKey == "dante")
+                    Halo.RotationZ += (35f + MathF.Pow(MathF.Max(0f, MathF.Sin(t * 6.5f)), 6f) * 260f) * dt;
+                else
+                    Halo.RotationZ += 95f * dt;
+            }
+
+            // Корабль Ядра «Гамма» (Mindustry) — анимация крена, тангажа и сопел двигателей
+            if (charKey == "mindustry")
+            {
+                float hoverBob = MathF.Sin(t * 3.8f) * 0.08f;
+                Torso.Position = new Vector3(BaseTorsoPos.X, BaseTorsoPos.Y + hoverBob, BaseTorsoPos.Z);
+                Torso.RotationZ = Lerp(Torso.RotationZ, -strafeInput * 16f, dt * 8f);
+                Torso.RotationX = Lerp(Torso.RotationX, forwardInput * 12f, dt * 8f);
+                float enginePulse = isMoving ? MathF.Sin(t * 24f) * 8f : MathF.Sin(t * 6f) * 3f;
+                LeftLeg.RotationX = Lerp(LeftLeg.RotationX, enginePulse, dt * 10f);
+                RightLeg.RotationX = Lerp(RightLeg.RotationX, -enginePulse, dt * 10f);
+                if (AnimTimer > 0f && ActiveAnim == "m1")
+                {
+                    float kick = MathF.Sin((1f - AnimTimer / AnimDuration) * MathF.PI) * -0.14f;
+                    LeftArm.Z = BaseLeftArmPos.Z + (AnimStep % 2 == 0 ? kick : 0f);
+                    RightArm.Z = BaseRightArmPos.Z + (AnimStep % 2 != 0 ? kick : 0f);
+                }
+                else
+                {
+                    LeftArm.Z = Lerp(LeftArm.Z, BaseLeftArmPos.Z, dt * 12f);
+                    RightArm.Z = Lerp(RightArm.Z, BaseRightArmPos.Z, dt * 12f);
+                }
+                return;
+            }
+
+            Vector3 targetTorsoPos = BaseTorsoPos;
+            Vector3 targetTorsoRot = BaseTorsoRot;
+            Vector3 targetLArmRot = BaseLeftArmRot;
+            Vector3 targetRArmRot = BaseRightArmRot;
+            Vector3 targetLLegRot = BaseLeftLegRot;
+            Vector3 targetRLegRot = BaseRightLegRot;
+
+            // 1. БАЗОВЫЕ СТОЙКИ ПОКОЯ (IDLE) И ДЫХАНИЕ ПО КЛАССАМ
+            float breath = MathF.Sin(t * 2.8f) * 0.025f;
+            targetTorsoPos.Y += breath;
+
+            switch (charKey)
+            {
+                case "commando":
+                    targetLArmRot.Y = MathF.Sin(t * 1.7f) * 5f;
+                    targetRArmRot.Y = -MathF.Sin(t * 1.7f) * 5f;
+                    targetLArmRot.X = -6f + MathF.Cos(t * 2.2f) * 3f;
+                    targetRArmRot.X = -6f + MathF.Sin(t * 2.2f) * 3f;
+                    break;
+
+                case "artificer":
+                    targetTorsoPos.Y = BaseTorsoPos.Y + 0.14f + MathF.Sin(t * 2.6f) * 0.08f;
+                    targetLLegRot.X = 14f + MathF.Sin(t * 2.2f) * 5f;
+                    targetRLegRot.X = 20f - MathF.Sin(t * 2.2f) * 5f;
+                    targetLArmRot.X = -16f + MathF.Sin(t * 3.0f) * 9f;
+                    targetRArmRot.X = -16f + MathF.Cos(t * 3.0f) * 9f;
+                    targetLArmRot.Z = 10f + MathF.Cos(t * 2.4f) * 4f;
+                    targetRArmRot.Z = -10f - MathF.Sin(t * 2.4f) * 4f;
+                    break;
+
+                case "huntress":
+                    targetTorsoRot.Y = -14f;
+                    targetLArmRot.X = -18f + MathF.Sin(t * 2.4f) * 4f;
+                    targetLArmRot.Y = 12f;
+                    targetRArmRot.X = -10f;
+                    break;
+
+                case "buzz":
+                    targetTorsoRot.X = -4f;
+                    targetLArmRot.Z = 8f;
+                    targetRArmRot.Z = -8f;
+                    break;
+
+                case "sol":
+                    float fightBounce = MathF.Abs(MathF.Sin(t * 5.2f));
+                    targetTorsoPos.Y = BaseTorsoPos.Y + fightBounce * 0.065f;
+                    if (UltFormActive)
+                    {
+                        targetTorsoRot.X = 18f;
+                        targetLArmRot = new Vector3(-22f + MathF.Sin(t * 5f) * 8f, -10f, 18f);
+                        targetRArmRot = new Vector3(-22f - MathF.Sin(t * 5f) * 8f, 10f, -18f);
+                    }
+                    else
+                    {
+                        targetTorsoRot.Y = -12f;
+                        targetLArmRot.X = -12f + fightBounce * 8f;
+                        targetRArmRot.X = -18f;
+                    }
+                    break;
+
+                case "gwen":
+                    targetTorsoRot.Z = MathF.Sin(t * 2.6f) * 3.5f;
+                    targetRArmRot = new Vector3(-14f + MathF.Sin(t * 3.2f) * 5f, -16f, -8f);
+                    targetLArmRot = new Vector3(-8f, 10f, 10f);
+                    break;
+
+                case "enforcer":
+                    if (shieldStance)
+                    {
+                        targetTorsoRot.Y = 16f;
+                        targetTorsoRot.X = 6f;
+                        targetLArmRot = new Vector3(-14f, 26f, 0f);
+                        targetRArmRot = new Vector3(-22f, -10f, 0f);
+                    }
+                    else
+                    {
+                        targetLArmRot.X = -6f;
+                        targetRArmRot.X = -10f;
+                    }
+                    break;
+
+                case "scout":
+                case "m4a1":
+                case "freeman":
+                case "medic":
+                    targetLArmRot = new Vector3(-14f, 22f, 0f);
+                    targetRArmRot = new Vector3(-10f, -6f, 0f);
+                    break;
+
+                case "aigis":
+                    if (orgiaMode)
+                    {
+                        targetTorsoPos.Y = BaseTorsoPos.Y + 0.18f + MathF.Sin(t * 4.5f) * 0.06f;
+                        targetTorsoRot.X = 18f;
+                        targetLLegRot.X = 22f;
+                        targetRLegRot.X = 28f;
+                    }
+                    break;
+
+                case "reimu":
+                    targetLArmRot.Z = 12f + MathF.Sin(t * 2.5f) * 5f;
+                    targetRArmRot.Z = -12f - MathF.Sin(t * 2.5f) * 5f;
+                    targetRArmRot.X = -12f + MathF.Cos(t * 2.5f) * 5f;
+                    break;
+
+                case "slark":
+                    targetTorsoPos.Y = BaseTorsoPos.Y - 0.05f + MathF.Sin(t * 4.2f) * 0.04f;
+                    targetTorsoRot.X = BaseTorsoRot.X + 4f;
+                    targetLArmRot = new Vector3(-18f, 14f, 12f);
+                    targetRArmRot = new Vector3(16f, -18f, -12f);
+                    break;
+
+                case "tidehunter":
+                    targetTorsoPos.Y = BaseTorsoPos.Y + MathF.Sin(t * 2.1f) * 0.05f;
+                    targetTorsoRot.Z = MathF.Sin(t * 1.6f) * 3.5f;
+                    targetRArmRot.X = -16f;
+                    break;
+
+                case "dante":
+                    targetLArmRot = new Vector3(14f, 0f, -8f);
+                    targetRArmRot = new Vector3(-20f + MathF.Sin(t * 2.4f) * 5f, -10f, 0f);
+                    break;
+
+                case "cheburashka":
+                    targetTorsoPos.Y = BaseTorsoPos.Y + MathF.Abs(MathF.Sin(t * 3.2f)) * 0.04f;
+                    targetTorsoRot.Z = MathF.Sin(t * 3.2f) * 4.5f;
+                    targetRArmRot.X = -18f + MathF.Sin(t * 3.2f) * 6f;
+                    targetLArmRot.X = -8f - MathF.Sin(t * 3.2f) * 6f;
+                    break;
+            }
+
+            // 2. ДВИЖЕНИЕ (БЕГ / ШАГ / СТРЕЙФЫ) И ПОЗЫ В ВОЗДУХЕ
+            if (!isGrounded)
+            {
+                if (charKey == "reimu" && isFlying)
+                {
+                    targetTorsoRot.X = 26f;
+                    targetTorsoRot.Z = -strafeInput * 18f;
+                    targetLLegRot.X = 24f + MathF.Sin(t * 6f) * 6f;
+                    targetRLegRot.X = 30f - MathF.Sin(t * 6f) * 6f;
+                    targetLArmRot = new Vector3(-12f, 0f, 24f);
+                    targetRArmRot = new Vector3(-18f, 0f, -24f);
+                }
+                else if (charKey == "cheburashka" && velY < -3.0f)
+                {
+                    // Поза «белки-летяги» перед сокрушительным приземлением Чебурашки!
+                    targetTorsoRot.X = 28f;
+                    targetLLegRot.X = 32f;
+                    targetRLegRot.X = 32f;
+                    targetLArmRot = new Vector3(-45f, 0f, 35f);
+                    targetRArmRot = new Vector3(-45f, 0f, -35f);
+                }
+                else
+                {
+                    float airPitch = Math.Clamp(-velY * 1.1f, -16f, 22f);
+                    targetTorsoRot.X += airPitch;
+                    targetTorsoRot.Z = -strafeInput * 10f;
+                    targetLLegRot.X = -28f;
+                    targetRLegRot.X = 22f;
+                    targetLArmRot.X -= 18f;
+                    targetRArmRot.X -= 14f;
+                    targetLArmRot.Z += 12f;
+                    targetRArmRot.Z -= 12f;
+                }
+            }
+            else if (isMoving)
+            {
+                float freq = charKey switch
+                {
+                    "cheburashka" => 14.5f,
+                    "tidehunter" => 8.2f,
+                    "enforcer" => shieldStance ? 7.5f : 9.8f,
+                    "slark" => 13.5f,
+                    _ => 11.2f
+                };
+                WalkPhase += dt * (freq + Math.Clamp(moveSpeedRatio - 1f, -0.3f, 1.2f) * 3.5f);
+
+                float strideAmp = charKey switch
+                {
+                    "artificer" => 10f,
+                    "enforcer" => shieldStance ? 20f : 34f,
+                    "cheburashka" => 32f,
+                    "tidehunter" => 30f,
+                    "slark" => 44f,
+                    _ => 38f
+                };
+
+                float swing = MathF.Sin(WalkPhase) * strideAmp;
+                float bounce = MathF.Abs(MathF.Cos(WalkPhase));
+
+                if (charKey == "artificer")
+                {
+                    // Изобретатель плавно скользит в воздухе при движении
+                    targetTorsoPos.Y = BaseTorsoPos.Y + 0.16f + MathF.Sin(t * 4f) * 0.06f;
+                    targetTorsoRot.X = 16f * (forwardInput >= 0f ? 1f : -0.6f);
+                    targetTorsoRot.Z = -strafeInput * 12f;
+                    targetLLegRot.X = 22f + swing * 0.4f;
+                    targetRLegRot.X = 26f - swing * 0.4f;
+                    targetLArmRot.X = 18f;
+                    targetRArmRot.X = 18f;
+                }
+                else
+                {
+                    targetLLegRot.X = swing;
+                    targetRLegRot.X = -swing;
+                    float bounceHeight = charKey == "tidehunter" ? 0.11f : (charKey == "cheburashka" ? 0.06f : 0.08f);
+                    targetTorsoPos.Y = BaseTorsoPos.Y + bounce * bounceHeight;
+
+                    // Наклон вперёд при беге, крен при стрейфе и скручивание корпуса
+                    float fwdLean = charKey switch
+                    {
+                        "slark" => 26f,
+                        "sol" => UltFormActive ? 24f : 14f,
+                        "huntress" => 14f,
+                        "enforcer" => shieldStance ? 6f : 10f,
+                        _ => 10f
+                    };
+                    targetTorsoRot.X = BaseTorsoRot.X + (forwardInput >= -0.1f ? fwdLean : -8f);
+                    targetTorsoRot.Z = -strafeInput * 8f;
+
+                    if (charKey == "cheburashka")
+                        targetTorsoRot.Z += MathF.Sin(WalkPhase) * 11f; // Забавная походка вразвалочку
+                    else if (charKey == "tidehunter")
+                        targetTorsoRot.Z += MathF.Sin(WalkPhase) * 7.5f;
+                    else if (!shieldStance)
+                        targetTorsoRot.Y += MathF.Sin(WalkPhase) * 6.5f;
+
+                    // Работа рук при беге (с учётом оружия в руках)
+                    if (charKey is "scout" or "m4a1" or "freeman" or "medic")
+                    {
+                        targetLArmRot.X = -18f + bounce * 6f;
+                        targetRArmRot.X = -14f + bounce * 6f;
+                    }
+                    else if (charKey == "enforcer" && shieldStance)
+                    {
+                        targetLArmRot = new Vector3(-14f, 26f, 0f);
+                        targetRArmRot = new Vector3(-20f + bounce * 4f, -10f, 0f);
+                    }
+                    else if (charKey == "huntress")
+                    {
+                        targetLArmRot.X = -20f + bounce * 5f;
+                        targetRArmRot.X = -swing * 0.45f;
+                    }
+                    else
+                    {
+                        targetLArmRot.X += -swing * 0.55f;
+                        targetRArmRot.X += swing * 0.55f;
+                    }
+                }
+            }
+
+            // 3. БОЕВЫЕ АНИМАЦИИ НАВЫКОВ (ПЕРЕКРЫВАЮТ БАЗОВУЮ ПОЗУ ПРИ АТАКЕ)
+            if (AnimTimer > 0f && !string.IsNullOrEmpty(ActiveAnim))
+            {
+                float p = Math.Clamp(1f - (AnimTimer / MathF.Max(0.01f, AnimDuration)), 0f, 1f);
+                float pulse = MathF.Sin(p * MathF.PI); // 0 -> 1 -> 0
+                float side = (AnimStep % 2 == 0) ? 1f : -1f;
+
+                if (ActiveAnim == "m1")
+                {
+                    switch (charKey)
+                    {
+                        case "commando":
+                        case "reimu":
+                            if (AnimStep % 2 == 0)
+                            {
+                                targetLArmRot.X = -38f * pulse;
+                                targetTorsoRot.Y = 8f * pulse;
+                            }
+                            else
+                            {
+                                targetRArmRot.X = -38f * pulse;
+                                targetTorsoRot.Y = -8f * pulse;
+                            }
+                            break;
+
+                        case "artificer":
+                            if (AnimStep % 2 == 0)
+                            {
+                                targetLArmRot.X = -52f * pulse;
+                                targetTorsoRot.Y = 14f * pulse;
+                            }
+                            else
+                            {
+                                targetRArmRot.X = -52f * pulse;
+                                targetTorsoRot.Y = -14f * pulse;
+                            }
+                            break;
+
+                        case "huntress":
+                            targetTorsoRot.Y = -18f;
+                            targetLArmRot = new Vector3(-30f, 16f, 0f);
+                            targetRArmRot = new Vector3(-28f - 24f * pulse, -12f * pulse, 0f);
+                            break;
+
+                        case "buzz":
+                            targetRArmRot = new Vector3(-48f * pulse, 24f * pulse, -10f);
+                            targetTorsoRot.Y = -12f * pulse;
+                            break;
+
+                        case "sol":
+                            // Вонзающий удар Junkyard Dog в землю для GunFlame!
+                            targetTorsoRot.X += 24f * pulse;
+                            targetTorsoRot.Y = -28f + 52f * p;
+                            targetRArmRot.X = -85f + 125f * p;
+                            targetRArmRot.Y = -18f * pulse;
+                            break;
+
+                        case "gwen":
+                            // Быстрые перекрёстные взмахи ножницами Чик-Чик!
+                            targetTorsoRot.Y = side * 26f * pulse;
+                            targetTorsoRot.X += 12f * pulse;
+                            targetRArmRot.X = -55f + 70f * p;
+                            targetRArmRot.Y = side * 34f * pulse;
+                            targetLArmRot.X = -25f * pulse;
+                            break;
+
+                        case "enforcer":
+                        case "scout":
+                        case "m4a1":
+                        case "aigis":
+                        case "freeman":
+                        case "medic":
+                            targetRArmRot.X -= 26f * pulse;
+                            if (!shieldStance) targetLArmRot.X -= 18f * pulse;
+                            targetTorsoRot.X -= 7f * pulse;
+                            break;
+
+                        case "slark":
+                            targetTorsoRot.X += 20f * pulse;
+                            targetTorsoRot.Y = side * 28f * pulse;
+                            targetRArmRot.X = -65f + 85f * p;
+                            targetRArmRot.Y = -24f * pulse;
+                            break;
+
+                        case "tidehunter":
+                            // Круговой взмах гигантским якорем на 360 градусов (Anchor Smash)!
+                            targetTorsoRot.Y += p * 360f;
+                            targetRArmRot.X = -35f;
+                            targetRArmRot.Z = -28f * pulse;
+                            break;
+
+                        case "dante":
+                            targetTorsoRot.Y = side * 18f * pulse;
+                            targetRArmRot.X = -62f * pulse;
+                            targetRArmRot.Y = side * 30f * pulse;
+                            break;
+
+                        case "cheburashka":
+                            targetTorsoRot.X += 18f * pulse;
+                            targetLArmRot.X = -52f * pulse;
+                            targetRArmRot.X = -52f * pulse;
+                            targetLArmRot.Y = 30f * pulse;
+                            targetRArmRot.Y = -30f * pulse;
+                            break;
+                    }
+                }
+                else if (ActiveAnim == "m2")
+                {
+                    switch (charKey)
+                    {
+                        case "sol":
+                            // Bandit Revolver: удар ногой с разворота в прыжке!
+                            targetTorsoRot.Y += p * 360f;
+                            targetTorsoRot.X = -18f * pulse;
+                            targetRLegRot.X = -85f * pulse;
+                            targetLLegRot.X = 25f * pulse;
+                            break;
+
+                        case "gwen":
+                            // Смыкание гигантских ножниц обеими руками
+                            targetTorsoRot.X += 18f * pulse;
+                            targetLArmRot = new Vector3(-55f * pulse, 36f * pulse, 0f);
+                            targetRArmRot = new Vector3(-55f * pulse, -36f * pulse, 0f);
+                            break;
+
+                        case "enforcer":
+                            // Мощный таранный удар щитом левой рукой
+                            targetTorsoRot.Y = 32f * pulse;
+                            targetTorsoRot.X += 18f * pulse;
+                            targetLArmRot = new Vector3(-42f * pulse, 38f * pulse, 0f);
+                            break;
+
+                        case "huntress":
+                            targetTorsoRot.Y = -40f + 80f * p;
+                            targetRArmRot.X = -75f + 95f * p;
+                            break;
+
+                        case "slark":
+                            // Dark Pact: группировка и резкий выброс рук с тёмной волной
+                            float pact = p < 0.4f ? -1f : 1f;
+                            targetTorsoRot.X += -pact * 22f * pulse;
+                            targetLArmRot.X = -45f * pulse;
+                            targetRArmRot.X = -45f * pulse;
+                            targetLArmRot.Z = 32f * pulse;
+                            targetRArmRot.Z = -32f * pulse;
+                            break;
+
+                        case "cheburashka":
+                            // Бросок взрывного апельсина из-за головы
+                            targetRArmRot.X = -115f + 145f * p;
+                            targetTorsoRot.X += 16f * pulse;
+                            break;
+
+                        default:
+                            targetLArmRot.X = -42f * pulse;
+                            targetRArmRot.X = -46f * pulse;
+                            targetTorsoRot.X -= 12f * pulse;
+                            break;
+                    }
+                }
+                else if (ActiveAnim == "shift")
+                {
+                    switch (charKey)
+                    {
+                        case "commando":
+                        case "m4a1":
+                        case "slark":
+                        case "cheburashka":
+                            // Сальто / тактический кувырок на 360 градусов вперёд!
+                            targetTorsoRot.X += p * 360f;
+                            targetLLegRot.X = -45f * pulse;
+                            targetRLegRot.X = -45f * pulse;
+                            break;
+
+                        case "gwen":
+                        case "reimu":
+                            // Изящный пируэт на 360 градусов
+                            targetTorsoRot.Y += p * 360f;
+                            targetLArmRot.Z = 32f * pulse;
+                            targetRArmRot.Z = -32f * pulse;
+                            break;
+
+                        case "buzz":
+                            // «Бесконечность — не предел!»: горизонтальный полёт с вытянутым вперёд кулаком!
+                            targetTorsoRot.X = 52f * pulse;
+                            targetRArmRot.X = -95f * pulse;
+                            targetLArmRot.X = 30f * pulse;
+                            targetLLegRot.X = 28f * pulse;
+                            targetRLegRot.X = 28f * pulse;
+                            break;
+
+                        case "sol":
+                            // Bandit Bringer: взлёт с апперкотом и пикирующий огненный кулак вниз
+                            targetTorsoRot.X = p < 0.45f ? -18f : 36f;
+                            targetRArmRot.X = p < 0.45f ? -145f : 42f;
+                            break;
+
+                        default:
+                            targetTorsoRot.X += 32f * pulse;
+                            targetLArmRot.X = 28f * pulse;
+                            targetRArmRot.X = 28f * pulse;
+                            break;
+                    }
+                }
+                else if (ActiveAnim == "r")
+                {
+                    switch (charKey)
+                    {
+                        case "sol":
+                            // Рёв пробуждения Dragon Install
+                            targetTorsoRot.X = -26f * pulse;
+                            targetLArmRot = new Vector3(-75f * pulse, 0f, 35f * pulse);
+                            targetRArmRot = new Vector3(-75f * pulse, 0f, -35f * pulse);
+                            break;
+
+                        case "tidehunter":
+                            // Ravage: сокрушительный удар якорем и кулаками о землю
+                            targetTorsoRot.X = p < 0.4f ? -28f : 36f;
+                            targetLArmRot.X = p < 0.4f ? -130f : 38f;
+                            targetRArmRot.X = p < 0.4f ? -130f : 38f;
+                            break;
+
+                        case "huntress":
+                        case "artificer":
+                        case "aigis":
+                        case "reimu":
+                        case "dante":
+                            targetTorsoRot.Y += p * 360f;
+                            targetLArmRot.X = -110f * pulse;
+                            targetRArmRot.X = -110f * pulse;
+                            break;
+
+                        case "cheburashka":
+                            // Эпичная JoJo-поза призыва стенда Крокодила Гены!
+                            targetTorsoRot.Y = -22f * pulse;
+                            targetRArmRot.X = -70f * pulse;
+                            targetLArmRot.Z = 25f * pulse;
+                            break;
+
+                        default:
+                            targetLArmRot.X = -55f * pulse;
+                            targetRArmRot.X = -55f * pulse;
+                            targetTorsoRot.X -= 10f * pulse;
+                            break;
+                    }
+                }
+            }
+
+            // Анимация Стенда Крокодила Гены (привязан к ShieldAura у Чебурашки)
+            if (charKey == "cheburashka" && ShieldAura != null && ShieldAura.Enabled)
+            {
+                float standPulse = (AnimTimer > 0f && ActiveAnim is "m1" or "m2")
+                    ? MathF.Sin((1f - AnimTimer / MathF.Max(0.01f, AnimDuration)) * MathF.PI)
+                    : 0f;
+                ShieldAura.X = 0.85f + MathF.Sin(t * 3.5f) * 0.12f;
+                ShieldAura.Z = -0.65f + standPulse * 1.15f;
+                ShieldAura.RotationY = standPulse > 0.01f ? MathF.Sin(t * 32f) * 18f : MathF.Sin(t * 2.5f) * 6f;
+                ShieldAura.RotationX = standPulse * 16f;
+            }
+
+            // Плавная интерполяция всех частей тела к целевой позе
+            float blend = MathF.Min(1f, dt * (AnimTimer > 0f ? 20f : 12f));
+            Torso.Position = Lerp(Torso.Position, targetTorsoPos, blend);
+            Torso.Rotation = Lerp(Torso.Rotation, targetTorsoRot, blend);
+            LeftArm.Rotation = Lerp(LeftArm.Rotation, targetLArmRot, blend);
+            RightArm.Rotation = Lerp(RightArm.Rotation, targetRArmRot, blend);
+            LeftLeg.Rotation = Lerp(LeftLeg.Rotation, targetLLegRot, blend);
+            RightLeg.Rotation = Lerp(RightLeg.Rotation, targetRLegRot, blend);
+        }
+
         public void SetUltForm(bool active)
         {
             if (UltFormActive == active || UltFormNodes.Count == 0) return;
@@ -355,6 +958,7 @@ namespace RiskOfCSharp2.Models
                 default: BuildCommando(root, cfg, parts); break;
             }
 
+            parts.CaptureBindPose();
             return parts;
         }
 

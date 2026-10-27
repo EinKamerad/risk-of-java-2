@@ -2268,6 +2268,7 @@ namespace RiskOfCSharp2.Entities
             if (nearest != null)
             {
                 LookAt2D(nearest.Position);
+                _parts.TriggerSkillAnim(isJupiter ? "m2" : "m1");
                 Vector3 sp = Position + new Vector3(0, 1.5f, 0) + Forward * 0.85f;
                 Vector3 aim = Vector3.Normalize((nearest.Position + new Vector3(0, nearest.HitHeight, 0)) - sp);
                 if (isJupiter)
@@ -2405,6 +2406,7 @@ namespace RiskOfCSharp2.Entities
                     _shiftCd = 4.5f;
                     Position += dir * 6.5f;
                     c.Shield = MathF.Min(g.PlayerMaxHp, c.Shield + 10f);
+                    _parts.TriggerSkillAnim("shift", 0.35f);
                     new VisualFX(Position + new Vector3(0, 1f, 0), Rgb(95, 255, 135), 2.2f, 0.22f);
                 }
                 else
@@ -2412,16 +2414,9 @@ namespace RiskOfCSharp2.Entities
                     Position += dir * (c.MoveSpeed * 1.08f) * dt;
                 }
                 LookAt2D(desiredPos);
-                float swing = MathF.Sin((float)Raylib.GetTime() * 12f + SlotIdx) * 34f;
-                _parts.LeftLeg.RotationX = swing;
-                _parts.RightLeg.RotationX = -swing;
-            }
-            else
-            {
-                _parts.LeftLeg.RotationX = Lerp(_parts.LeftLeg.RotationX, 0f, dt * 10f);
-                _parts.RightLeg.RotationX = Lerp(_parts.RightLeg.RotationX, 0f, dt * 10f);
             }
 
+            _parts.UpdateAnimations("m4a1", dt, toDesired.Length() > 0.75f, true, 0f, 1.08f, 0f, 1f);
             float wb = Physics.WorldBound - 2f;
             X = Math.Clamp(X, -wb, wb);
             Z = Math.Clamp(Z, -wb, wb);

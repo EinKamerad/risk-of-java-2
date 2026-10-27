@@ -70,6 +70,7 @@ namespace RiskOfCSharp2.Entities
             if (IsDestroyed) return;
             Position = Lerp(Position, TargetPos, MathF.Min(1.0f, dt * 14.0f));
             RotationY = Lerp(RotationY, TargetRotY, MathF.Min(1.0f, dt * 14.0f));
+            _parts.UpdateAnimations(CharKey, dt, IsMoving, isGrounded: true, velY: 0f, moveSpeedRatio: 1.0f, strafeInput: 0f, forwardInput: IsMoving ? 1f : 0f);
 
             if (IsMoving && CharKey != "mindustry")
             {

@@ -1164,8 +1164,11 @@ namespace RiskOfCSharp2
                 _previewActor.RotationX = Lerp(_previewActor.RotationX, 0f, dt * 5f);
             }
 
-            if (_previewSurvivorParts?.Halo != null)
-                _previewSurvivorParts.Halo.RotationZ += 95f * dt;
+            if (_previewSurvivorParts != null)
+            {
+                string previewKey = _screen == "logbook" ? _logSelectedKey : _selectedChar;
+                _previewSurvivorParts.UpdateAnimations(previewKey, dt, isMoving: false, isGrounded: true, velY: 0f, moveSpeedRatio: 1f, strafeInput: 0f, forwardInput: 0f);
+            }
             if (_previewEnemyParts != null)
             {
                 if (_previewEnemyParts.Crown != null) _previewEnemyParts.Crown.RotationY += 85f * dt;
@@ -1795,6 +1798,8 @@ namespace RiskOfCSharp2
             float prevY = p.Y;
             bool isMoba = SurvivorDatabase.IsMobaCharacter(_run.CharKey);
             bool isMoving = false;
+            float animStrafe = 0f;
+            float animFwd = 0f;
 
             if (isMoba)
             {
@@ -1876,16 +1881,7 @@ namespace RiskOfCSharp2
                 {
                     p.Position += moveDir * c.MoveSpeed * dt;
                     p.LookAt2D(p.Position + moveDir);
-                    float walkCycle = (float)Raylib.GetTime() * (11.0f + CombatManager.GetItemCount("hoof") * 1.2f);
-                    float swing = MathF.Sin(walkCycle) * 38f;
-                    _run.Parts.LeftLeg.RotationX = swing;
-                    _run.Parts.RightLeg.RotationX = -swing;
-                    _run.Parts.Torso.Y = 1.26f + MathF.Abs(MathF.Cos(walkCycle)) * 0.08f;
-                }
-                else
-                {
-                    _run.Parts.LeftLeg.RotationX = Lerp(_run.Parts.LeftLeg.RotationX, 0f, dt * 10f);
-                    _run.Parts.RightLeg.RotationX = Lerp(_run.Parts.RightLeg.RotationX, 0f, dt * 10f);
+                    animFwd = 1f;
                 }
 
                 c.Update(dt, isMoving);
@@ -1923,6 +1919,8 @@ namespace RiskOfCSharp2
 
                 float inX = (Raylib.IsKeyDown(KeyboardKey.D) ? 1f : 0f) - (Raylib.IsKeyDown(KeyboardKey.A) ? 1f : 0f);
                 float inZ = (Raylib.IsKeyDown(KeyboardKey.W) ? 1f : 0f) - (Raylib.IsKeyDown(KeyboardKey.S) ? 1f : 0f);
+                animStrafe = inX;
+                animFwd = inZ;
                 isMoving = (MathF.Abs(inX) > 0.01f || MathF.Abs(inZ) > 0.01f) && c.MedicTauntTimer <= 0f;
 
                 if (isMoving && !c.GrappleActive)
@@ -1931,25 +1929,6 @@ namespace RiskOfCSharp2
                         ? Vector3.Normalize(new Vector3(inX, 0f, inZ))
                         : Vector3.Normalize(p.Forward * inZ + p.Right * inX);
                     p.Position += moveDir * c.MoveSpeed * dt;
-
-                    if (_run.CharKey == "mindustry")
-                    {
-                        _run.Parts.Torso.RotationZ = Lerp(_run.Parts.Torso.RotationZ, -inX * 14f, dt * 8f);
-                        _run.Parts.Torso.RotationX = Lerp(_run.Parts.Torso.RotationX, inZ * 10f, dt * 8f);
-                    }
-                    else
-                    {
-                        float walkCycle = (float)Raylib.GetTime() * (11.0f + CombatManager.GetItemCount("hoof") * 1.2f);
-                        float swing = MathF.Sin(walkCycle) * (c.ShieldStance ? 22f : 38f);
-                        _run.Parts.LeftLeg.RotationX = swing;
-                        _run.Parts.RightLeg.RotationX = -swing;
-                        _run.Parts.Torso.Y = 1.26f + MathF.Abs(MathF.Cos(walkCycle)) * 0.08f;
-                    }
-                }
-                else
-                {
-                    _run.Parts.LeftLeg.RotationX = Lerp(_run.Parts.LeftLeg.RotationX, 0f, dt * 10f);
-                    _run.Parts.RightLeg.RotationX = Lerp(_run.Parts.RightLeg.RotationX, 0f, dt * 10f);
                 }
 
                 c.Update(dt, isMoving);
@@ -1979,7 +1958,6 @@ namespace RiskOfCSharp2
                 if (Raylib.IsCursorHidden()) Raylib.EnableCursor();
                 c.MindustryOverdriveTimer = MathF.Max(0f, c.MindustryOverdriveTimer - dt);
 
-                // Проекция курсора мыши на плоскость арены для стрельбы и строительства сверху вниз
                 Ray rlRay = Raylib.GetMouseRay(Raylib.GetMousePosition(), Engine.Camera);
                 Vector3 rayOrig = new(-rlRay.Position.X, rlRay.Position.Y, rlRay.Position.Z);
                 Vector3 rayDir = new(-rlRay.Direction.X, rlRay.Direction.Y, rlRay.Direction.Z);
@@ -2010,7 +1988,6 @@ namespace RiskOfCSharp2
                         if (Raylib.IsKeyPressed(buildKeys[bi])) c.MindustrySelectedBuild = bi;
                 }
 
-                // Высота парения: в строительном режиме парит высоко (+16.5м над поверхностью, но ниже Колизея Митрикса 120м), в боевом — низко (+0.85м)
                 float targetHoverY = c.MindustryBuildMode
                     ? (p.Y >= 105f ? Physics.ColosseumY + 14.5f : MathF.Min(floorH + 16.5f, Physics.ColosseumY - 18.0f))
                     : floorH + 0.85f;
@@ -2024,9 +2001,7 @@ namespace RiskOfCSharp2
                 {
                     p.Position += _run.DashVector * dt;
                     _run.DashTimer -= dt;
-                    _run.Parts.Torso.RotationX = 28f;
                 }
-                else _run.Parts.Torso.RotationX = Lerp(_run.Parts.Torso.RotationX, 0f, dt * 10f);
 
                 if (Raylib.IsKeyPressed(KeyboardKey.Space) && _run.PlayerJumpsLeft > 0)
                 {
@@ -2039,7 +2014,6 @@ namespace RiskOfCSharp2
                     new VisualFX(p.Position, Color.SkyBlue, 1.8f, 0.22f);
                 }
 
-                // Свободный полёт Рейму при зажатии Пробела в воздухе (ограничен по времени и сбивается уроном)
                 if (_run.CharKey == "reimu" && !_run.PlayerGrounded && !c.ReimuFlightBroken && c.ReimuFlightFuel > 0f && Raylib.IsKeyDown(KeyboardKey.Space) && _run.PlayerVelY <= 4.0f)
                 {
                     c.ReimuIsFlying = true;
@@ -2066,6 +2040,15 @@ namespace RiskOfCSharp2
                 }
             }
 
+            if (c.MedicTauntTimer <= 0f)
+            {
+                float spdRatio = c.MoveSpeed / MathF.Max(1f, c.Cfg.Speed);
+                _run.Parts.UpdateAnimations(
+                    _run.CharKey, dt, isMoving, _run.PlayerGrounded,
+                    _run.PlayerVelY, spdRatio, animStrafe, animFwd,
+                    c.ShieldStance, c.ReimuIsFlying, c.OrgiaTimer > 0f);
+            }
+
             Vector3 resolved = Physics.ResolveHorizontalCollision(p.Position, 0.72f, p.Y);
             float b = Physics.WorldBound;
             p.X = Math.Clamp(resolved.X, -b, b);
@@ -2088,8 +2071,6 @@ namespace RiskOfCSharp2
                     _run.PlayerJumpsLeft = _run.PlayerMaxJumps;
                 }
             }
-
-            if (_run.Parts.Halo != null) _run.Parts.Halo.RotationZ += 95f * dt;
 
             if (_net.Connected)
             {

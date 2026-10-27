@@ -1155,6 +1155,7 @@ namespace RiskOfCSharp2.Entities
 
         public void FirePrimaryProjectile(float damageMult = 1.0f, Color? colOverride = null)
         {
+            Run.Parts.TriggerSkillAnim("m1", Math.Clamp(0.85f / MathF.Max(1f, FireRate), 0.14f, 0.30f));
             Vector3 aimDir = GetAimDirection();
             Vector3 spawnPos = Run.PlayerPos + new Vector3(0, 1.55f, 0) + Run.PlayerForward * 0.95f;
 
@@ -1357,6 +1358,7 @@ namespace RiskOfCSharp2.Entities
 
             if (CharKey == "sol")
             {
+                Run.Parts.TriggerSkillAnim("m2", 0.38f);
                 if (SolBanditWindow > 0f)
                 {
                     // Второй удар: REVOLVER!
@@ -1447,6 +1449,7 @@ namespace RiskOfCSharp2.Entities
             }
 
             M2Cd = Cfg.Skills["m2"].Cd * cdMult;
+            Run.Parts.TriggerSkillAnim("m2", 0.42f);
 
             if (CharKey == "commando")
                 new Projectile(spawnPos, aimDir, 68f, BaseDamage * 3.0f, 0.48f, Color.SkyBlue, isPlayer: true, pierce: true);
@@ -1572,6 +1575,7 @@ namespace RiskOfCSharp2.Entities
             ShiftCd = MathF.Max(0.25f, Cfg.Skills["shift"].Cd * alienCdr * burnCdr);
             Vector3 myPos = Run.PlayerPos;
             float nrgMult = 1.0f + 0.18f * CombatManager.GetItemCount("energy_drink") + 0.35f * CombatManager.GetItemCount("afterburner");
+            Run.Parts.TriggerSkillAnim("shift", 0.38f);
 
             if (CharKey == "enforcer")
             {
@@ -1787,6 +1791,7 @@ namespace RiskOfCSharp2.Entities
             float alienCdr = MathF.Pow(0.80f, CombatManager.GetItemCount("alien_head"));
             float cellCdr = MathF.Pow(0.75f, CombatManager.GetItemCount("lysate_cell"));
             RCd = MathF.Max(0.5f, Cfg.Skills["r"].Cd * alienCdr * cellCdr);
+            Run.Parts.TriggerSkillAnim("r", 0.65f);
             Vector3 myPos = Run.PlayerPos;
             Vector3 aimDir = GetAimDirection();
 
@@ -2377,6 +2382,7 @@ namespace RiskOfCSharp2.Entities
                 {
                     GwenFlurryTimer = 0.055f;
                     GwenFlurryShots--;
+                    Run.Parts.TriggerSkillAnim("m1", 0.12f);
                     PerformMeleeAttack(5.2f, 3.4f, 0.58f, Rgb(135, 240, 255), lifesteal: 1.5f, scissorCross: true, aoe: 1.6f);
                 }
             }
@@ -2386,6 +2392,7 @@ namespace RiskOfCSharp2.Entities
                 GwenUltTimer -= dt;
                 if (GwenUltTimer <= 0f)
                 {
+                    Run.Parts.TriggerSkillAnim("r", 0.35f);
                     if (GwenUltStage == 1)
                     {
                         FireGwenNeedleWave(2, 2.3f);
@@ -2445,7 +2452,6 @@ namespace RiskOfCSharp2.Entities
                     Vector3 aim = GetAimDirection();
                     new LightningBeam(eyePos, eyePos + aim * 55f, Color.Yellow, 0.25f + 0.35f * ratio);
                     new Projectile(eyePos, aim, 125f, BaseDamage * (2.2f + 4.8f * ratio), 0.45f + 0.35f * ratio, Color.Gold, isPlayer: true, aoe: 3.5f + 4.5f * ratio, pierce: true);
-                    // Отдача Тау-пушки отбрасывает Гордона назад/вверх (Tau Jump!)
                     Vector3 recoil = -aim * (12.0f + 24.0f * ratio);
                     Run.PlayerVelY = MathF.Max(Run.PlayerVelY, recoil.Y + 6.0f * ratio);
                     Run.PlayerGrounded = false;
@@ -2495,8 +2501,18 @@ namespace RiskOfCSharp2.Entities
             else if (IsFirstPersonCharacter(CharKey) && FpWeaponHolder != null && !FpWeaponHolder.IsDestroyed)
             {
                 float t = (float)Raylib.GetTime();
-                float bob = (isMoving && Run.PlayerGrounded) ? MathF.Sin(t * 13.0f) * 0.016f : 0f;
-                FpWeaponHolder.Y = Lerp(FpWeaponHolder.Y, -0.27f + bob, dt * 12.0f);
+                float inX = (Raylib.IsKeyDown(KeyboardKey.D) ? 1f : 0f) - (Raylib.IsKeyDown(KeyboardKey.A) ? 1f : 0f);
+                float bobY = (isMoving && Run.PlayerGrounded) ? MathF.Sin(t * 13.0f) * 0.020f : MathF.Sin(t * 2.5f) * 0.005f;
+                float bobX = (isMoving && Run.PlayerGrounded) ? MathF.Cos(t * 6.5f) * 0.016f : 0f;
+                float airOffset = !Run.PlayerGrounded ? Math.Clamp(-Run.PlayerVelY * 0.004f, -0.05f, 0.05f) : 0f;
+                FpWeaponHolder.X = Lerp(FpWeaponHolder.X, 0.36f + bobX, dt * 12.0f);
+                FpWeaponHolder.Y = Lerp(FpWeaponHolder.Y, -0.27f + bobY + airOffset, dt * 12.0f);
+                FpWeaponHolder.RotationZ = Lerp(FpWeaponHolder.RotationZ, -inX * 5.5f, dt * 10.0f);
+                if (FpLeftArm != null && !FpLeftArm.IsDestroyed)
+                {
+                    FpLeftArm.Y = Lerp(FpLeftArm.Y, -0.34f - bobY * 0.8f + airOffset, dt * 12.0f);
+                    FpLeftArm.RotationZ = Lerp(FpLeftArm.RotationZ, -inX * 4.0f, dt * 10.0f);
+                }
             }
         }
 
