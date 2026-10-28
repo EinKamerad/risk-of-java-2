@@ -183,6 +183,16 @@ namespace RiskOfCSharp2.Entities
         public float ArmorBreakTimer = 0f;
         public float AttackTimer;
         public float SpecialTimer;
+        public float SecondaryTimer = 1.6f;
+
+        // Поля вертикальной физики (прыжки на платформы) и тактической навигации ИИ
+        public float VelY = 0f;
+        public bool IsGrounded = true;
+        public float JumpCooldown = 0f;
+        public Vector3 JumpHorizVel = Vector3.Zero;
+        private float _steerSide = 1f;
+        private float _strafeDir = 1f;
+        private float _strafeSwitchTimer = 2.2f;
 
         // Адаптивная защита боссов от мгновенного стирания и система замахов/телеграфов
         public float RecentDamageTaken = 0f;
@@ -228,8 +238,12 @@ namespace RiskOfCSharp2.Entities
             IsBoss = Array.IndexOf(GameData.BossTypes, enemyType) >= 0 || enemyType == "mithrix";
             Coeff = coeff;
             _seedOffset = (NetId * 1.37f) % 10.0f;
+            _steerSide = (NetId % 2 == 0) ? 1f : -1f;
+            _strafeDir = (NetId % 2 == 0) ? 1f : -1f;
+            _strafeSwitchTimer = 1.8f + (float)_rng.NextDouble() * 2.0f;
             AttackTimer = 0.8f + (float)_rng.NextDouble() * 0.8f;
             SpecialTimer = 3.5f + (float)_rng.NextDouble() * 2.0f;
+            SecondaryTimer = 1.4f + (float)_rng.NextDouble() * 1.4f;
 
             Parts = EnemyAndBossBuilder.BuildEnemyMesh(this, enemyType);
 
@@ -706,19 +720,170 @@ namespace RiskOfCSharp2.Entities
                     return;
             }
 
+            float prevY = Y;
+            JumpCooldown = MathF.Max(0f, JumpCooldown - dt);
+            SecondaryTimer = MathF.Max(0f, SecondaryTimer - dt);
+            _strafeSwitchTimer -= dt;
+            if (_strafeSwitchTimer <= 0f)
+            {
+                _strafeSwitchTimer = 2.0f + (float)_rng.NextDouble() * 2.2f;
+                if (_rng.NextDouble() < 0.65) _strafeDir = -_strafeDir;
+            }
+
             float dist = Physics.Distance2D(Position, pPos);
             float heightDiff = MathF.Abs(pPos.Y - Y);
+            float signedHeightDiff = pPos.Y - Y;
             float localDist = Physics.Distance2D(Position, g.PlayerPos);
             float localHeightDiff = MathF.Abs(g.PlayerPos.Y - Y);
-            if (WindupType == 0 || EnemyType is "golem" or "solus_control")
-                LookAt2D(pPos);
-            float floorY = Physics.GetSurfaceHeight(X, Z, Y);
+            float floorY = Physics.GetSurfaceHeight(X, Z, Y, prevY);
             bool projIsPlayer = IsAlly;
+
             if (!IsAlly && HallowedMistZone.IsHiddenFromOutside(pPos, Position))
             {
                 AttackTimer = MathF.Max(AttackTimer, 0.45f);
                 SpecialTimer = MathF.Max(SpecialTimer, 0.45f);
             }
+
+            void TriggerJump(float heightGain, Vector3 horizBoost, float cd = 1.05f)
+            {
+                float neededH = Math.Clamp(heightGain + 1.05f, 2.2f, 11.5f);
+                VelY = MathF.Sqrt(2.0f * 26.0f * neededH);
+                IsGrounded = false;
+                JumpCooldown = cd;
+                JumpHorizVel = new Vector3(horizBoost.X, 0f, horizBoost.Z);
+            }
+
+            void ApplyVerticalPhysics(float colRadius)
+            {
+                if (!IsGrounded || Y > floorY + 0.08f || VelY > 0.01f)
+                {
+                    VelY -= 26.0f * dt;
+                    Y += VelY * dt;
+                    if (JumpHorizVel.LengthSquared() > 0.01f)
+                    {
+                        Position += JumpHorizVel * dt;
+                        JumpHorizVel = Lerp(JumpHorizVel, Vector3.Zero, dt * 3.5f);
+                    }
+                    floorY = Physics.GetSurfaceHeight(X, Z, Y, prevY);
+                    if (VelY <= 0f && Y <= floorY + 0.05f)
+                    {
+                        Y = floorY;
+                        VelY = 0f;
+                        IsGrounded = true;
+                        JumpHorizVel = Vector3.Zero;
+                    }
+                }
+                else
+                {
+                    Y = floorY;
+                    VelY = 0f;
+                    IsGrounded = true;
+                }
+
+                // Во время взлёта ослабляем боковое выталкивание у верхушки платформы, чтобы запрыгнуть на край
+                float effCheckY = (!IsGrounded && VelY > 0f) ? Y + 0.95f : Y;
+                Vector3 res = Physics.ResolveHorizontalCollision(Position, colRadius, effCheckY);
+                float wb = Physics.WorldBound - 1.5f;
+                Position = new Vector3(Math.Clamp(res.X, -wb, wb), Y, Math.Clamp(res.Z, -wb, wb));
+            }
+
+            Vector3 GetFlockSeparation(float sepRadius = 2.2f)
+            {
+                Vector3 sep = Vector3.Zero;
+                foreach (var other in CombatManager.Enemies)
+                {
+                    if (other == this || !IsValid(other) || other.IsAlly != IsAlly) continue;
+                    float dx = X - other.X, dz = Z - other.Z;
+                    float d2 = dx * dx + dz * dz;
+                    float minSep = sepRadius + other.HitRadius * 0.45f;
+                    if (d2 > 0.0001f && d2 < minSep * minSep)
+                    {
+                        float d = MathF.Sqrt(d2);
+                        sep += new Vector3(dx / d, 0f, dz / d) * ((minSep - d) / minSep);
+                    }
+                }
+                return sep;
+            }
+
+            void MoveSmartGround(Vector3 goalPos, float moveSpd, float colRadius, float strafeFactor = 0f, float maxJumpH = 6.2f, bool lookAtGoal = true)
+            {
+                Vector3 navGoal = goalPos;
+                // Если цель находится выше на платформе — ищем ближайшую ступень или край платформы для прыжка
+                if (maxJumpH > 0.5f && (goalPos.Y - Y) > 1.05f)
+                {
+                    if (Physics.TryFindClimbTarget(Position, goalPos, maxJumpH, out Vector3 climbPos, out float ledgeY, out bool jumpNow))
+                    {
+                        navGoal = climbPos;
+                        if (jumpNow && IsGrounded && JumpCooldown <= 0f)
+                        {
+                            Vector3 toP = new(climbPos.X - X, 0f, climbPos.Z - Z);
+                            Vector3 jDir = toP.LengthSquared() > 0.01f ? Vector3.Normalize(toP) : Forward;
+                            TriggerJump(ledgeY - Y, jDir * MathF.Max(moveSpd * 1.15f, 6.8f));
+                        }
+                    }
+                }
+
+                Vector3 toNav = new(navGoal.X - X, 0f, navGoal.Z - Z);
+                Vector3 desiredDir = toNav.LengthSquared() > 0.001f ? Vector3.Normalize(toNav) : Forward;
+
+                if (MathF.Abs(strafeFactor) > 0.01f && IsGrounded)
+                {
+                    Vector3 perp = new(-desiredDir.Z * _strafeDir, 0f, desiredDir.X * _strafeDir);
+                    desiredDir = Vector3.Normalize(desiredDir + perp * strafeFactor);
+                }
+
+                Vector3 steerDir = Physics.ComputeSmartSteerDirection(Position, desiredDir, colRadius, Y, ref _steerSide);
+                Vector3 sep = GetFlockSeparation(colRadius * 2.1f);
+                Vector3 finalDir = steerDir + sep * 0.55f;
+                if (finalDir.LengthSquared() > 0.001f)
+                    finalDir = Vector3.Normalize(finalDir);
+
+                // Если впереди невысокое препятствие/уступ — перепрыгиваем его
+                if (maxJumpH > 0.5f && IsGrounded && JumpCooldown <= 0f &&
+                    Physics.IsPathBlocked2D(Position, finalDir, colRadius + 1.15f, colRadius * 0.8f, Y, 0.45f) &&
+                    !Physics.IsPathBlocked2D(Position, finalDir, colRadius + 1.45f, colRadius * 0.8f, Y + maxJumpH * 0.75f, 0.45f))
+                {
+                    TriggerJump(2.6f, finalDir * (moveSpd * 0.9f), 1.2f);
+                }
+
+                Position += finalDir * moveSpd * dt;
+                ApplyVerticalPhysics(colRadius);
+
+                if (lookAtGoal)
+                    LookAt2D(WindupType == 0 ? goalPos : Position + finalDir * 4f);
+            }
+
+            void MoveSmartFlying(Vector3 goalPos, float optDist, float heightOffset, float moveSpd, float orbitStrength = 0.65f)
+            {
+                Vector3 toGoal2D = new(goalPos.X - X, 0f, goalPos.Z - Z);
+                float d2D = toGoal2D.Length();
+                Vector3 dirToGoal = d2D > 0.01f ? toGoal2D / d2D : Forward;
+
+                float radialDrive = 0f;
+                if (d2D > optDist + 2.0f) radialDrive = 1.0f;
+                else if (d2D < optDist - 2.5f) radialDrive = -0.85f; // Кайт назад при сближении игрока
+
+                Vector3 orbitPerp = new(-dirToGoal.Z * _strafeDir, 0f, dirToGoal.X * _strafeDir);
+                Vector3 horizMove = dirToGoal * radialDrive + orbitPerp * orbitStrength + GetFlockSeparation(2.6f) * 0.6f;
+                if (horizMove.LengthSquared() > 0.001f)
+                    horizMove = Vector3.Normalize(horizMove);
+
+                Vector3 steered = Physics.ComputeSmartSteerDirection(Position, horizMove, HitRadius * 0.7f, Y, ref _steerSide);
+                Position += steered * moveSpd * dt;
+
+                // Если прямая видимость перекрыта платформой — взлетаем выше края платформы
+                bool hasLos = Physics.HasLineOfSight(Position + new Vector3(0, HitHeight * 0.8f, 0), goalPos + new Vector3(0, 1.2f, 0));
+                float desiredY = MathF.Max(floorY + 1.2f, goalPos.Y + heightOffset + (hasLos ? 0f : 3.8f) + MathF.Sin(t * 2.5f) * 0.45f);
+                Y = Lerp(Y, desiredY, dt * 3.2f);
+
+                float wb = Physics.WorldBound - 2.0f;
+                X = Math.Clamp(X, -wb, wb);
+                Z = Math.Clamp(Z, -wb, wb);
+                LookAt2D(goalPos);
+            }
+
+            if (WindupType == 0 || EnemyType is "golem" or "solus_control")
+                LookAt2D(pPos);
 
             void ApplyEnemyMeleeDamage(float dmgVal)
             {
@@ -736,10 +901,9 @@ namespace RiskOfCSharp2.Entities
             if (IsAlly && allyEnemyTarget == null)
             {
                 if (dist > 6.5f)
-                {
-                    Position += Forward * effSpeed * dt;
-                    Y = floorY;
-                }
+                    MoveSmartGround(pPos, effSpeed, 0.75f, strafeFactor: 0.15f, maxJumpH: 6.0f);
+                else
+                    ApplyVerticalPhysics(0.75f);
                 return;
             }
 
@@ -752,11 +916,29 @@ namespace RiskOfCSharp2.Entities
                 }
                 if (Parts.LeftArm != null) Parts.LeftArm.RotationX = Lerp(Parts.LeftArm.RotationX, 0f, dt * 8f);
                 if (Parts.RightArm != null) Parts.RightArm.RotationX = Lerp(Parts.RightArm.RotationX, 0f, dt * 8f);
-                if (dist > 1.7f || heightDiff > 2.6f)
+
+                // На средней дистанции (6.5–22м) Лемуриец плюётся огненным шаром с небольшим упреждением
+                if (SecondaryTimer <= 0f && dist is >= 6.5f and <= 22.0f &&
+                    Physics.HasLineOfSight(Position + new Vector3(0, 1.4f, 0), pPos + new Vector3(0, 1.1f, 0)))
                 {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 0.7f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
+                    SecondaryTimer = 3.2f + (float)_rng.NextDouble() * 1.2f;
+                    if (Parts.LeftArm != null) Parts.LeftArm.RotationX = -55f;
+                    if (Parts.RightArm != null) Parts.RightArm.RotationX = -55f;
+                    Vector3 sp = Position + new Vector3(0, 1.45f, 0) + Forward * 0.7f;
+                    Vector3 aim = (pPos + new Vector3(0, 1.0f, 0)) - sp;
+                    new Projectile(sp, aim, 26f, Damage * 0.85f, 0.34f, IsAlly ? Color.Lime : Rgb(255, 110, 30), isPlayer: projIsPlayer, canProc: false);
+                }
+
+                // Стайный заход с фланга и прыжок-выпад вблизи
+                if (dist is >= 3.5f and <= 6.2f && IsGrounded && JumpCooldown <= 0f && MathF.Abs(signedHeightDiff) <= 3.5f)
+                {
+                    TriggerJump(MathF.Max(1.4f, signedHeightDiff + 1.2f), Forward * (effSpeed * 1.45f), 2.4f);
+                }
+
+                if (dist > 1.75f || heightDiff > 2.2f)
+                {
+                    float flankStrafe = dist is > 3.5f and < 14.0f ? 0.42f : 0.12f;
+                    MoveSmartGround(pPos, effSpeed, 0.7f, strafeFactor: flankStrafe, maxJumpH: 6.5f);
                     float swing = MathF.Sin(t * 11f) * 36f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = swing;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -swing;
@@ -770,6 +952,7 @@ namespace RiskOfCSharp2.Entities
                 }
                 else
                 {
+                    ApplyVerticalPhysics(0.7f);
                     AttackTimer -= dt;
                     if (AttackTimer <= 0.30f && AttackTimer > 0f)
                     {
@@ -778,7 +961,7 @@ namespace RiskOfCSharp2.Entities
                     }
                     if (AttackTimer <= 0f)
                     {
-                        AttackTimer = 1.1f;
+                        AttackTimer = 1.05f;
                         if (Parts.LeftArm != null) Parts.LeftArm.RotationX = 35f;
                         if (Parts.RightArm != null) Parts.RightArm.RotationX = 35f;
                         ApplyEnemyMeleeDamage(Damage);
@@ -788,11 +971,17 @@ namespace RiskOfCSharp2.Entities
             }
             else if (EnemyType == "beetle")
             {
-                if (dist > 1.65f || heightDiff > 2.4f)
+                // Жук бежит зигзагом и совершает прыжок-наскок с дистанции 3.5–7.5м
+                if (dist is >= 3.5f and <= 7.5f && IsGrounded && JumpCooldown <= 0f && signedHeightDiff >= -1.0f && signedHeightDiff <= 4.5f)
                 {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 0.65f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
+                    TriggerJump(MathF.Max(1.6f, signedHeightDiff + 1.2f), Forward * (effSpeed * 1.65f), 2.1f);
+                    if (Parts.Torso != null) Parts.Torso.RotationX = -20f;
+                }
+
+                if (dist > 1.65f || heightDiff > 2.1f)
+                {
+                    float zigzag = MathF.Sin(t * 6.5f) * 0.58f;
+                    MoveSmartGround(pPos, effSpeed * (!IsGrounded ? 1.2f : 1.0f), 0.65f, strafeFactor: zigzag, maxJumpH: 6.0f);
                     float scurry = MathF.Sin(t * 16f) * 30f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = scurry;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -scurry;
@@ -805,12 +994,13 @@ namespace RiskOfCSharp2.Entities
                 }
                 else
                 {
+                    ApplyVerticalPhysics(0.65f);
                     AttackTimer -= dt;
                     if (Parts.Torso != null && AttackTimer <= 0.28f && AttackTimer > 0f)
                         Parts.Torso.RotationX = -22f;
                     if (AttackTimer <= 0f)
                     {
-                        AttackTimer = 0.95f;
+                        AttackTimer = 0.90f;
                         if (Parts.Torso != null) Parts.Torso.RotationX = 24f;
                         ApplyEnemyMeleeDamage(Damage);
                         new VisualFX(pPos + new Vector3(0, 0.8f, 0), Color.Orange, 1.5f, 0.2f);
@@ -822,14 +1012,16 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.Tail != null) Parts.Tail.RotationY = MathF.Sin(t * 8f) * 22f;
                 if (WindupType == 1)
                 {
+                    ApplyVerticalPhysics(0.95f);
                     WindupTimer -= dt;
+                    LookAt2D(Lerp(Position + Forward * 5f, pPos, dt * 4.5f));
                     if (Parts.Crown != null) Parts.Crown.RotationX = 35f;
                     if (Parts.Torso != null) Parts.Torso.Y = 1.05f + MathF.Sin(t * 28f) * 0.06f;
                     if (WindupTimer <= 0f)
                     {
                         ClearWindup();
                         WindupType = 2; // Состояние стремительного тарана
-                        WindupTimer = 0.55f;
+                        WindupTimer = 0.62f;
                         UpdateHpBillboard();
                     }
                     return;
@@ -837,9 +1029,19 @@ namespace RiskOfCSharp2.Entities
                 if (WindupType == 2)
                 {
                     WindupTimer -= dt;
-                    Position += Forward * (effSpeed * 2.55f) * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 0.95f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
+                    // Если Бизон на полном ходу врезается в колонну — ударная волна и короткое оглушение
+                    if (Physics.IsPathBlocked2D(Position, Forward, 1.35f, 0.85f, Y, 0.6f))
+                    {
+                        new VisualFX(Position + Forward * 1.0f + new Vector3(0, 1.0f, 0), Color.Orange, 3.8f, 0.28f);
+                        ClearWindup();
+                        StunTimer = 0.9f;
+                        AttackTimer = 2.4f;
+                        UpdateHpBillboard();
+                        return;
+                    }
+
+                    Position += Forward * (effSpeed * 2.65f) * dt;
+                    ApplyVerticalPhysics(0.95f);
                     float chargeLegs = MathF.Sin(t * 22f) * 44f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = chargeLegs;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -chargeLegs;
@@ -863,18 +1065,19 @@ namespace RiskOfCSharp2.Entities
                 }
 
                 if (Parts.Crown != null) Parts.Crown.RotationX = Lerp(Parts.Crown.RotationX, 0f, dt * 8f);
-                if (dist > 2.2f)
+                if (dist > 2.2f || heightDiff > 2.2f)
                 {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 0.9f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
+                    MoveSmartGround(pPos, effSpeed, 0.9f, strafeFactor: 0.15f, maxJumpH: 6.0f);
                     float galop = MathF.Sin(t * 10f) * 28f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = galop;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -galop;
                     if (Parts.Torso != null) Parts.Torso.RotationX = MathF.Cos(t * 10f) * 5.5f;
                 }
+                else ApplyVerticalPhysics(0.9f);
+
                 AttackTimer -= dt;
-                if (AttackTimer <= 0f && dist <= 18.0f && heightDiff <= 3.0f)
+                if (AttackTimer <= 0f && dist <= 19.0f && heightDiff <= 2.8f && IsGrounded &&
+                    Physics.HasLineOfSight(Position + new Vector3(0, 1.2f, 0), pPos + new Vector3(0, 1.2f, 0)))
                 {
                     WindupType = 1;
                     WindupTimer = 0.65f;
@@ -889,7 +1092,9 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.Ring1 != null) Parts.Ring1.RotationY += (WindupType > 0 ? 360f : 110f) * dt;
                 if (Parts.Ring2 != null) Parts.Ring2.RotationX += (WindupType > 0 ? 280f : 75f) * dt;
                 if (Parts.Core != null) Parts.Core.Y = 2.4f + MathF.Sin(t * 3.8f) * 0.25f;
-                Y = Lerp(Y, MathF.Max(floorY, pPos.Y), dt * 2.2f);
+
+                // Кружит по орбите на средней дистанции, набирая высоту над платформами
+                MoveSmartFlying(pPos, optDist: 16.0f, heightOffset: 2.2f, moveSpd: WindupType > 0 ? effSpeed * 0.45f : effSpeed, orbitStrength: 0.78f);
 
                 if (WindupType == 1)
                 {
@@ -898,20 +1103,19 @@ namespace RiskOfCSharp2.Entities
                     {
                         ClearWindup();
                         UpdateHpBillboard();
-                        AttackTimer = 2.7f;
+                        AttackTimer = 2.6f;
                         Vector3 sp = Position + new Vector3(0, 2.4f, 0);
                         Vector3 baseAim = (pPos + new Vector3(0, 1.1f, 0)) - sp;
                         foreach (float deg in new[] { -10f, 0f, 10f })
                         {
                             float rad = deg * (MathF.PI / 180f);
                             Vector3 d = new(baseAim.X * MathF.Cos(rad) - baseAim.Z * MathF.Sin(rad), baseAim.Y, baseAim.X * MathF.Sin(rad) + baseAim.Z * MathF.Cos(rad));
-                            new Projectile(sp, d, 30f, Damage * 0.85f, 0.55f, Rgb(235, 175, 65), isPlayer: projIsPlayer, canProc: false);
+                            new Projectile(sp, d, 31f, Damage * 0.85f, 0.55f, Rgb(235, 175, 65), isPlayer: projIsPlayer, canProc: false);
                         }
                     }
                     return;
                 }
 
-                if (dist > 15.0f) Position += Forward * effSpeed * dt;
                 AttackTimer -= dt;
                 if (AttackTimer <= 0f && dist < 38.0f && Physics.HasLineOfSight(Position + new Vector3(0, 2.4f, 0), pPos + new Vector3(0, 1.2f, 0)))
                 {
@@ -931,6 +1135,7 @@ namespace RiskOfCSharp2.Entities
                 }
                 if (WindupType == 1)
                 {
+                    ApplyVerticalPhysics(1.0f);
                     WindupTimer -= dt;
                     if (Parts.LeftArm != null) Parts.LeftArm.RotationX = Lerp(Parts.LeftArm.RotationX, -135f, dt * 10f);
                     if (Parts.RightArm != null) Parts.RightArm.RotationX = Lerp(Parts.RightArm.RotationX, -135f, dt * 10f);
@@ -940,7 +1145,7 @@ namespace RiskOfCSharp2.Entities
                     {
                         ClearWindup();
                         UpdateHpBillboard();
-                        AttackTimer = 2.4f;
+                        AttackTimer = 2.3f;
                         if (Parts.LeftArm != null) Parts.LeftArm.RotationX = 35f;
                         if (Parts.RightArm != null) Parts.RightArm.RotationX = 35f;
                         Vector3 slamPos = Position + Forward * 2.0f;
@@ -954,21 +1159,24 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.LeftArm != null) Parts.LeftArm.RotationX = Lerp(Parts.LeftArm.RotationX, 0f, dt * 6f);
                 if (Parts.RightArm != null) Parts.RightArm.RotationX = Lerp(Parts.RightArm.RotationX, 0f, dt * 6f);
 
+                // Если игрок забрался на высокую платформу или отошёл — Прародитель телепортируется прямо на его платформу!
                 SpecialTimer -= dt;
-                if (SpecialTimer <= 0f && dist > 9.0f && dist < 30.0f)
+                if (SpecialTimer <= 0f && ((dist > 8.5f && dist < 34.0f) || heightDiff > 2.4f))
                 {
-                    SpecialTimer = 5.5f;
+                    SpecialTimer = 4.8f;
                     new VisualFX(Position + new Vector3(0, 2.0f, 0), Color.Gold, 4.0f, 0.28f);
-                    Vector3 tpPos = Physics.ResolveHorizontalCollision(pPos - Forward * 3.2f, 1.1f, pPos.Y);
-                    Position = new Vector3(tpPos.X, Physics.GetSurfaceHeight(tpPos.X, tpPos.Z, pPos.Y), tpPos.Z);
+                    float targetFloor = Physics.GetSurfaceHeight(pPos.X, pPos.Z, pPos.Y + 1.5f);
+                    Vector3 tpPos = Physics.ResolveHorizontalCollision(pPos - Forward * 2.8f, 1.1f, targetFloor);
+                    Position = new Vector3(tpPos.X, Physics.GetSurfaceHeight(tpPos.X, tpPos.Z, targetFloor + 1.0f), tpPos.Z);
+                    VelY = 0f;
+                    IsGrounded = true;
+                    LookAt2D(pPos);
                     new VisualFX(Position + new Vector3(0, 2.0f, 0), Color.Gold, 4.5f, 0.30f);
                 }
 
-                if (dist > 3.6f)
+                if (dist > 3.6f || heightDiff > 2.4f)
                 {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 1.0f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
+                    MoveSmartGround(pPos, effSpeed, 1.0f, strafeFactor: 0.15f, maxJumpH: 6.8f);
                     float stride = MathF.Sin(t * 7f) * 28f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = stride;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -stride;
@@ -977,6 +1185,7 @@ namespace RiskOfCSharp2.Entities
                 }
                 else
                 {
+                    ApplyVerticalPhysics(1.0f);
                     AttackTimer -= dt;
                     if (AttackTimer <= 0f)
                     {
@@ -995,6 +1204,7 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.Tail != null) Parts.Tail.RotationY = MathF.Sin(t * 5f) * 20f;
                 if (WindupType == 1)
                 {
+                    ApplyVerticalPhysics(1.1f);
                     WindupTimer -= dt;
                     if (Parts.Torso != null) Parts.Torso.RotationX = -12f;
                     if (Parts.Crown != null) Parts.Crown.RotationX = -32f;
@@ -1002,7 +1212,7 @@ namespace RiskOfCSharp2.Entities
                     {
                         ClearWindup();
                         UpdateHpBillboard();
-                        AttackTimer = 2.6f;
+                        AttackTimer = 2.5f;
                         if (Parts.Torso != null) Parts.Torso.RotationX = 24f;
                         if (Parts.Crown != null) Parts.Crown.RotationX = 10f;
                         Vector3 mouthPos = Position + new Vector3(0, 2.6f, 0) + Forward * 1.1f;
@@ -1020,17 +1230,25 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.Torso != null) Parts.Torso.RotationX = Lerp(Parts.Torso.RotationX, 16f, dt * 6f);
                 if (Parts.Crown != null) Parts.Crown.RotationX = Lerp(Parts.Crown.RotationX, -16f, dt * 6f);
 
-                if (dist > 8.5f)
+                // Вблизи Древний Лемуриец бьёт лапой о землю с огненной волной
+                if (SecondaryTimer <= 0f && dist <= 4.6f && heightDiff <= 2.8f && IsGrounded)
                 {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 1.1f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
+                    SecondaryTimer = 3.6f;
+                    new VisualFX(Position + Forward * 1.4f + new Vector3(0, 0.6f, 0), Color.Orange, 6.2f, 0.32f);
+                    ApplyEnemyMeleeDamage(Damage * 1.25f);
+                }
+
+                if (dist > 8.0f || heightDiff > 2.5f)
+                {
+                    MoveSmartGround(pPos, effSpeed, 1.1f, strafeFactor: 0.28f, maxJumpH: 6.5f);
                     float stomp = MathF.Sin(t * 6.5f) * 28f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = stomp;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -stomp;
                 }
+                else ApplyVerticalPhysics(1.1f);
+
                 AttackTimer -= dt;
-                if (AttackTimer <= 0f && dist < 26.0f)
+                if (AttackTimer <= 0f && dist < 28.0f && Physics.HasLineOfSight(Position + new Vector3(0, 2.6f, 0), pPos + new Vector3(0, 1.2f, 0)))
                 {
                     WindupType = 1;
                     WindupTimer = 0.72f;
@@ -1043,10 +1261,12 @@ namespace RiskOfCSharp2.Entities
             {
                 if (Parts.Core != null) Parts.Core.Y = 2.2f + MathF.Sin(t * 5.0f) * 0.3f;
                 if (Parts.Tentacles != null) Parts.Tentacles.RotationY += 90f * dt;
-                if (dist > 2.2f || heightDiff > 3.2f)
+                if (dist > 2.2f || heightDiff > 2.8f)
                 {
-                    Position += Forward * effSpeed * dt;
-                    Y = Lerp(Y, MathF.Max(floorY, pPos.Y - 0.5f), dt * 2.5f);
+                    // Идёт волнообразной спиралью сверху, а вблизи резко пикирует к цели
+                    float diveMult = dist < 7.5f ? 1.45f : 1.0f;
+                    float weave = dist < 6.0f ? 0.2f : 0.7f * MathF.Sin(t * 4.2f);
+                    MoveSmartFlying(pPos, optDist: 0.5f, heightOffset: dist < 6.0f ? -0.4f : 1.8f, moveSpd: effSpeed * diveMult, orbitStrength: weave);
                 }
                 else
                 {
@@ -1065,22 +1285,25 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.Ring1 != null) Parts.Ring1.RotationX += 120f * dt;
                 if (Parts.Ring2 != null) Parts.Ring2.RotationY += 145f * dt;
                 if (Parts.Core != null) Parts.Core.Y = 2.3f + MathF.Sin(t * 4f) * 0.28f;
-                if (dist > 16.0f) Position += Forward * effSpeed * dt;
-                Y = Lerp(Y, MathF.Max(floorY, pPos.Y), dt * 2.0f);
+
+                // Поддерживает дистанцию 14м (отступает, если игрок подходит ближе, и стрейфит вокруг)
+                MoveSmartFlying(pPos, optDist: 14.5f, heightOffset: 1.4f, moveSpd: effSpeed, orbitStrength: 0.72f);
+
                 AttackTimer -= dt;
                 Vector3 sp = Position + new Vector3(0, 2.3f, 0);
                 Vector3 aimPoint = pPos + new Vector3(0, 1.2f, 0);
                 if (AttackTimer <= 0f && dist < 36.0f && Physics.HasLineOfSight(sp, aimPoint))
                 {
-                    AttackTimer = 2.4f;
-                    new Projectile(sp, aimPoint - sp, 25f, Damage, 0.35f, IsAlly ? Color.Lime : Color.Orange, isPlayer: projIsPlayer, canProc: false);
+                    AttackTimer = 2.3f;
+                    new Projectile(sp, aimPoint - sp, 26f, Damage, 0.35f, IsAlly ? Color.Lime : Color.Orange, isPlayer: projIsPlayer, canProc: false);
                 }
             }
             else if (EnemyType == "greater_wisp")
             {
                 if (Parts.Ring1 != null) Parts.Ring1.RotationY += (WindupType > 0 ? 320f : 110f) * dt;
                 if (Parts.Core != null) Parts.Core.Y = 2.7f + MathF.Sin(t * 3.2f) * 0.3f;
-                Y = Lerp(Y, MathF.Max(floorY, pPos.Y), dt * 2.0f);
+
+                MoveSmartFlying(pPos, optDist: 17.5f, heightOffset: 2.0f, moveSpd: WindupType > 0 ? effSpeed * 0.4f : effSpeed, orbitStrength: 0.68f);
 
                 if (WindupType == 1)
                 {
@@ -1089,18 +1312,17 @@ namespace RiskOfCSharp2.Entities
                     {
                         ClearWindup();
                         UpdateHpBillboard();
-                        AttackTimer = 2.8f;
+                        AttackTimer = 2.7f;
                         Vector3 aimPoint = pPos + new Vector3(0, 1.2f, 0);
                         foreach (float sx in new[] { -1.1f, 1.1f })
                         {
                             Vector3 sp = Position + new Vector3(0, 2.7f, 0) + Right * sx;
-                            new Projectile(sp, aimPoint - sp, 28f, Damage, 0.52f, Color.Lime, isPlayer: projIsPlayer, aoe: 2.0f, canProc: false);
+                            new Projectile(sp, aimPoint - sp, 29f, Damage, 0.52f, Color.Lime, isPlayer: projIsPlayer, aoe: 2.0f, canProc: false);
                         }
                     }
                     return;
                 }
 
-                if (dist > 18.0f) Position += Forward * effSpeed * dt;
                 AttackTimer -= dt;
                 if (AttackTimer <= 0f && dist < 40.0f && Physics.HasLineOfSight(Position + new Vector3(0, 2.7f, 0), pPos + new Vector3(0, 1.2f, 0)))
                 {
@@ -1118,6 +1340,7 @@ namespace RiskOfCSharp2.Entities
 
                 if (WindupType == 1)
                 {
+                    ApplyVerticalPhysics(0.95f);
                     WindupTimer -= dt;
                     LockedAimPos = Lerp(LockedAimPos, aimPoint, dt * 5.5f);
                     if (Parts.LeftArm != null) Parts.LeftArm.RotationX = -55f;
@@ -1134,7 +1357,7 @@ namespace RiskOfCSharp2.Entities
                         Vector3 finalAim = LockedAimPos;
                         ClearWindup();
                         UpdateHpBillboard();
-                        AttackTimer = 3.1f;
+                        AttackTimer = 3.0f;
                         if (Parts.LeftArm != null) Parts.LeftArm.RotationX = 0f;
                         if (Parts.RightArm != null) Parts.RightArm.RotationX = 0f;
                         Color col = IsAlly ? Color.Lime : Color.Red;
@@ -1144,15 +1367,25 @@ namespace RiskOfCSharp2.Entities
                     return;
                 }
 
-                if (dist > 12.0f)
+                // Защита от закруживания вблизи: удар ладонями по земле
+                if (SecondaryTimer <= 0f && dist <= 3.8f && heightDiff <= 2.6f)
                 {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 0.95f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
+                    SecondaryTimer = 3.2f;
+                    if (Parts.LeftArm != null) Parts.LeftArm.RotationX = 35f;
+                    if (Parts.RightArm != null) Parts.RightArm.RotationX = 35f;
+                    new VisualFX(Position + Forward * 1.3f + new Vector3(0, 0.9f, 0), Color.Red, 4.8f, 0.28f);
+                    ApplyEnemyMeleeDamage(Damage * 1.15f);
+                }
+
+                if (dist > 10.5f || heightDiff > 2.4f || !Physics.HasLineOfSight(eyePos, aimPoint))
+                {
+                    MoveSmartGround(pPos, effSpeed, 0.95f, strafeFactor: 0.12f, maxJumpH: 6.2f);
                     float stomp = MathF.Sin(t * 5.5f) * 26f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = stomp;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -stomp;
                 }
+                else ApplyVerticalPhysics(0.95f);
+
                 AttackTimer -= dt;
                 if (AttackTimer <= 0f && dist < 34.0f && Physics.HasLineOfSight(eyePos, aimPoint))
                 {
@@ -1169,20 +1402,27 @@ namespace RiskOfCSharp2.Entities
             {
                 if (Parts.LeftArm != null) Parts.LeftArm.RotationX = Lerp(Parts.LeftArm.RotationX, 0f, dt * 8f);
                 if (Parts.RightArm != null) Parts.RightArm.RotationX = Lerp(Parts.RightArm.RotationX, 0f, dt * 8f);
+
+                // Бес телепортируется прямо на платформу к игроку (за спину или во фланг!)
                 SpecialTimer -= dt;
-                if (SpecialTimer <= 0f && dist > 6.0f && dist < 24.0f && heightDiff < 3.0f)
+                if (SpecialTimer <= 0f && ((dist > 5.0f && dist < 26.0f) || heightDiff > 2.2f))
                 {
-                    SpecialTimer = 4.2f;
+                    SpecialTimer = 3.8f;
                     new VisualFX(Position + new Vector3(0, 1.2f, 0), Rgb(245, 35, 70), 2.5f, 0.25f);
-                    Vector3 jumpPos = Physics.ResolveHorizontalCollision(Position + Forward * MathF.Min(dist - 1.5f, 9.0f), 0.7f, floorY);
-                    Position = new Vector3(jumpPos.X, floorY, jumpPos.Z);
+                    Vector3 behindOffset = targetIsLocal ? -g.PlayerForward * 2.1f : -Forward * 2.1f;
+                    Vector3 rawDest = pPos + behindOffset;
+                    float destFloor = Physics.GetSurfaceHeight(rawDest.X, rawDest.Z, pPos.Y + 1.5f);
+                    Vector3 jumpPos = Physics.ResolveHorizontalCollision(rawDest, 0.7f, destFloor);
+                    Position = new Vector3(jumpPos.X, Physics.GetSurfaceHeight(jumpPos.X, jumpPos.Z, destFloor + 0.8f), jumpPos.Z);
+                    VelY = 0f;
+                    IsGrounded = true;
+                    LookAt2D(pPos);
                     new VisualFX(Position + new Vector3(0, 1.2f, 0), Rgb(245, 35, 70), 2.5f, 0.25f);
                 }
-                if (dist > 1.8f || heightDiff > 2.6f)
+
+                if (dist > 1.8f || heightDiff > 2.2f)
                 {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 0.7f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
+                    MoveSmartGround(pPos, effSpeed, 0.7f, strafeFactor: 0.62f, maxJumpH: 6.5f);
                     float swing = MathF.Sin(t * 13f) * 38f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = swing;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -swing;
@@ -1192,6 +1432,7 @@ namespace RiskOfCSharp2.Entities
                 }
                 else
                 {
+                    ApplyVerticalPhysics(0.7f);
                     AttackTimer -= dt;
                     if (AttackTimer <= 0.25f && AttackTimer > 0f)
                     {
@@ -1200,7 +1441,7 @@ namespace RiskOfCSharp2.Entities
                     }
                     if (AttackTimer <= 0f)
                     {
-                        AttackTimer = 1.0f;
+                        AttackTimer = 0.92f;
                         if (Parts.LeftArm != null) Parts.LeftArm.RotationX = 42f;
                         if (Parts.RightArm != null) Parts.RightArm.RotationX = 42f;
                         ApplyEnemyMeleeDamage(Damage);
@@ -1217,6 +1458,52 @@ namespace RiskOfCSharp2.Entities
         private void UpdateBossAI(IPlayerContext g, Vector3 pPos, float dist, float effSpeed, float t, float floorY, bool projIsPlayer)
         {
             float dt = TimeDelta();
+            float prevY = Y;
+
+            void MoveBossSmartGround(float colRadius, float stopDist, float maxClimbH = 7.5f)
+            {
+                if (dist > stopDist || MathF.Abs(pPos.Y - Y) > 2.8f)
+                {
+                    Vector3 goal = pPos;
+                    if ((pPos.Y - Y) > 1.2f && Physics.TryFindClimbTarget(Position, pPos, maxClimbH, out Vector3 cPos, out float ledgeY, out bool jumpNow))
+                    {
+                        goal = cPos;
+                        if (jumpNow && IsGrounded && JumpCooldown <= 0f)
+                        {
+                            VelY = MathF.Sqrt(2.0f * 26.0f * Math.Clamp(ledgeY - Y + 1.2f, 3.0f, 11.0f));
+                            IsGrounded = false;
+                            JumpCooldown = 1.4f;
+                        }
+                    }
+                    Vector3 toG = new(goal.X - X, 0f, goal.Z - Z);
+                    Vector3 dir = toG.LengthSquared() > 0.01f ? Vector3.Normalize(toG) : Forward;
+                    Vector3 steered = Physics.ComputeSmartSteerDirection(Position, dir, colRadius, Y, ref _steerSide);
+                    Position += steered * effSpeed * dt;
+                }
+
+                if (!IsGrounded || Y > floorY + 0.08f || VelY > 0.01f)
+                {
+                    VelY -= 26.0f * dt;
+                    Y += VelY * dt;
+                    floorY = Physics.GetSurfaceHeight(X, Z, Y, prevY);
+                    if (VelY <= 0f && Y <= floorY + 0.05f)
+                    {
+                        Y = floorY;
+                        VelY = 0f;
+                        IsGrounded = true;
+                    }
+                }
+                else
+                {
+                    Y = floorY;
+                    VelY = 0f;
+                    IsGrounded = true;
+                }
+
+                Vector3 res = Physics.ResolveHorizontalCollision(Position, colRadius, (!IsGrounded && VelY > 0f) ? Y + 1.1f : Y);
+                float wb = Physics.WorldBound - 2.0f;
+                Position = new Vector3(Math.Clamp(res.X, -wb, wb), Y, Math.Clamp(res.Z, -wb, wb));
+            }
 
             if (EnemyType == "boss")
             {
@@ -1297,11 +1584,9 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.RightArm != null) Parts.RightArm.RotationX = Lerp(Parts.RightArm.RotationX, 0f, dt * 6f);
                 if (Parts.Torso != null) Parts.Torso.RotationX = Lerp(Parts.Torso.RotationX, 0f, dt * 6f);
 
+                MoveBossSmartGround(1.4f, 8.5f);
                 if (dist > 8.5f)
                 {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 1.4f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
                     float stomp = MathF.Sin(t * 4.5f) * 24f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = stomp;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -stomp;
@@ -1337,7 +1622,16 @@ namespace RiskOfCSharp2.Entities
             {
                 if (Parts.Bell != null) Parts.Bell.Y = 4.2f + MathF.Sin(t * 2.8f) * 0.45f;
                 if (Parts.Tentacles != null) Parts.Tentacles.RotationY += (WindupType > 0 || VagrantChargingNova ? 280f : 65f) * dt;
-                if (dist > 12.0f && !VagrantChargingNova && WindupType == 0) { Position += Forward * effSpeed * dt; Y = floorY; }
+                if (!VagrantChargingNova && WindupType == 0)
+                {
+                    Vector3 toP = new(pPos.X - X, 0f, pPos.Z - Z);
+                    Vector3 dir = toP.LengthSquared() > 0.01f ? Vector3.Normalize(toP) : Forward;
+                    Vector3 orbit = new(-dir.Z * _strafeDir, 0f, dir.X * _strafeDir);
+                    Vector3 moveVec = (dist > 14.0f ? dir : (dist < 8.5f ? -dir * 0.5f : Vector3.Zero)) + orbit * 0.55f;
+                    if (moveVec.LengthSquared() > 0.01f)
+                        Position += Physics.ComputeSmartSteerDirection(Position, Vector3.Normalize(moveVec), 1.8f, Y, ref _steerSide) * effSpeed * dt;
+                    Y = Lerp(Y, MathF.Max(floorY, pPos.Y), dt * 2.5f);
+                }
 
                 // Замах 1: Сжатие купола перед веером энергетических сфер
                 if (WindupType == 1)
@@ -1480,6 +1774,8 @@ namespace RiskOfCSharp2.Entities
                         if (Parts.RightArm != null) Parts.RightArm.RotationZ = 0f;
                         new VisualFX(Position + new Vector3(0, 2.5f, 0), Rgb(245, 30, 65), 6.0f, 0.35f);
                         Position = landPos;
+                        VelY = 0f;
+                        IsGrounded = true;
                         new VisualFX(Position + new Vector3(0, 1.5f, 0), Rgb(245, 30, 65), 11.0f, 0.42f);
                         if (!IsAlly && Physics.Distance2D(g.PlayerPos, Position) <= 6.5f && MathF.Abs(g.PlayerPos.Y - Y) <= 3.5f)
                             CombatManager.DamagePlayer(Damage * 1.40f, this);
@@ -1496,11 +1792,9 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.RightArm != null) Parts.RightArm.RotationX = Lerp(Parts.RightArm.RotationX, 0f, dt * 6f);
                 if (Parts.Torso != null) Parts.Torso.RotationY = Lerp(Parts.Torso.RotationY, 0f, dt * 6f);
 
+                MoveBossSmartGround(1.3f, 5.5f);
                 if (dist > 5.5f)
                 {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 1.3f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
                     float stomp = MathF.Sin(t * 6.0f) * 28f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = stomp;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -stomp;
@@ -1516,13 +1810,13 @@ namespace RiskOfCSharp2.Entities
                     return;
                 }
                 SpecialTimer -= dt;
-                if (SpecialTimer <= 0f && dist > 6.5f && !IsAlly)
+                if (SpecialTimer <= 0f && (dist > 6.5f || MathF.Abs(pPos.Y - Y) > 2.5f) && !IsAlly)
                 {
                     WindupType = 2;
                     WindupTimer = 1.10f;
                     float b = Physics.WorldBound - 4.0f;
                     float dx = Math.Clamp(pPos.X, -b, b), dz = Math.Clamp(pPos.Z, -b, b);
-                    LockedAimPos = new Vector3(dx, Physics.GetSurfaceHeight(dx, dz, pPos.Y), dz);
+                    LockedAimPos = new Vector3(dx, Physics.GetSurfaceHeight(dx, dz, pPos.Y + 1.5f), dz);
                     WindupTag = "ПРЫЖОК БЕЗДНЫ!";
                     WindupIndicator = new Entity(model: "diamond", position: LockedAimPos + new Vector3(0, 0.15f, 0),
                         scale: new(12.5f, 0.24f, 12.5f), color: Rgb(245, 30, 65, 170), unlit: true);
@@ -1559,6 +1853,8 @@ namespace RiskOfCSharp2.Entities
                         UpdateHpBillboard();
                         SpecialTimer = 6.2f;
                         Position = eruptPos;
+                        VelY = 0f;
+                        IsGrounded = true;
                         if (Parts.Torso != null) Parts.Torso.Y = 3.8f;
                         new VisualFX(eruptPos + new Vector3(0, 2.0f, 0), Color.Orange, 14.0f, 0.50f);
                         new LunarShockwaveRing(eruptPos, Damage * 1.15f, 30.0f, 19.0f);
@@ -1578,12 +1874,7 @@ namespace RiskOfCSharp2.Entities
                 }
 
                 if (Parts.Torso != null) Parts.Torso.Y = Lerp(Parts.Torso.Y, 3.2f, dt * 5f);
-                if (dist > 7.5f)
-                {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 1.5f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
-                }
+                MoveBossSmartGround(1.5f, 7.5f, 9.0f);
 
                 SpecialTimer -= dt;
                 if (SpecialTimer <= 0f && !IsAlly)
@@ -1592,7 +1883,7 @@ namespace RiskOfCSharp2.Entities
                     WindupTimer = 1.25f;
                     float b = Physics.WorldBound - 4.0f;
                     float dx = Math.Clamp(pPos.X, -b, b), dz = Math.Clamp(pPos.Z, -b, b);
-                    LockedAimPos = new Vector3(dx, Physics.GetSurfaceHeight(dx, dz, pPos.Y), dz);
+                    LockedAimPos = new Vector3(dx, Physics.GetSurfaceHeight(dx, dz, pPos.Y + 1.5f), dz);
                     WindupTag = "ПРОРЫВ МАГМЫ ИЗ-ПОД ЗЕМЛИ!";
                     WindupIndicator = new Entity(model: "diamond", position: LockedAimPos + new Vector3(0, 0.16f, 0),
                         scale: new(14.0f, 0.25f, 14.0f), color: Rgb(255, 110, 20, 180), unlit: true);
@@ -1681,11 +1972,9 @@ namespace RiskOfCSharp2.Entities
                     Parts.Torso.RotationX = Lerp(Parts.Torso.RotationX, 0f, dt * 6f);
                     Parts.Torso.Y = Lerp(Parts.Torso.Y, 3.35f, dt * 6f);
                 }
+                MoveBossSmartGround(1.4f, 10.5f);
                 if (dist > 10.5f)
                 {
-                    Position += Forward * effSpeed * dt;
-                    Vector3 res = Physics.ResolveHorizontalCollision(Position, 1.4f, floorY);
-                    Position = new Vector3(res.X, floorY, res.Z);
                     float stride = MathF.Sin(t * 5.0f) * 24f;
                     if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = stride;
                     if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -stride;
@@ -1717,7 +2006,7 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.Ring1 != null) Parts.Ring1.RotationY += (WindupType > 0 ? 360f : 95f) * dt;
                 if (Parts.Ring2 != null) Parts.Ring2.RotationX += (WindupType > 0 ? 320f : 110f) * dt;
                 if (Parts.Core != null) Parts.Core.Y = 3.8f + MathF.Sin(t * 3.2f) * 0.35f;
-                Y = Lerp(Y, floorY, dt * 3f);
+                Y = Lerp(Y, MathF.Max(floorY, pPos.Y), dt * 3f);
                 Vector3 eyePos = Position + new Vector3(0, 3.8f, 0);
 
                 if (WindupType == 1)
@@ -1775,7 +2064,14 @@ namespace RiskOfCSharp2.Entities
                     return;
                 }
 
-                if (dist > 13.0f) Position += Forward * effSpeed * dt;
+                if (dist > 11.0f)
+                {
+                    Vector3 toP = new(pPos.X - X, 0f, pPos.Z - Z);
+                    Vector3 dir = toP.LengthSquared() > 0.01f ? Vector3.Normalize(toP) : Forward;
+                    Vector3 orbit = new(-dir.Z * _strafeDir, 0f, dir.X * _strafeDir);
+                    Vector3 moveDir = Vector3.Normalize(dir + orbit * 0.55f);
+                    Position += Physics.ComputeSmartSteerDirection(Position, moveDir, 1.8f, Y, ref _steerSide) * effSpeed * dt;
+                }
 
                 SpecialTimer -= dt;
                 if (SpecialTimer <= 0f && !IsAlly)
@@ -1808,11 +2104,21 @@ namespace RiskOfCSharp2.Entities
                 if (Parts.Ring1 != null) Parts.Ring1.RotationZ += 120f * dt;
                 if (Parts.Ring2 != null) Parts.Ring2.RotationX += 140f * dt;
                 if (Parts.Core != null) Parts.Core.Y = 2.5f + MathF.Sin(t * 4.5f) * 0.25f;
-                if (dist > 14.0f) { Position += Forward * effSpeed * dt; Y = floorY; }
+
+                // Стрейфит по дуге, держит высоту уровня игрока +1.8м и облетает препятствия
+                Vector3 toP = new(pPos.X - X, 0f, pPos.Z - Z);
+                Vector3 dir = toP.LengthSquared() > 0.01f ? Vector3.Normalize(toP) : Forward;
+                float radial = dist > 15.0f ? 1.0f : (dist < 9.5f ? -0.75f : 0f);
+                Vector3 orbit = new(-dir.Z * _strafeDir, 0f, dir.X * _strafeDir);
+                Vector3 moveVec = dir * radial + orbit * 0.75f;
+                if (moveVec.LengthSquared() > 0.01f)
+                    Position += Physics.ComputeSmartSteerDirection(Position, Vector3.Normalize(moveVec), 1.2f, Y, ref _steerSide) * effSpeed * dt;
+                Y = Lerp(Y, MathF.Max(floorY + 0.5f, pPos.Y + 1.5f), dt * 3.0f);
+
                 AttackTimer -= dt;
-                if (AttackTimer <= 0f && dist < 42.0f)
+                if (AttackTimer <= 0f && dist < 42.0f && Physics.HasLineOfSight(Position + new Vector3(0, 2.5f, 0), pPos + new Vector3(0, 1.2f, 0)))
                 {
-                    AttackTimer = 2.0f;
+                    AttackTimer = 1.95f;
                     Vector3 sp = Position + new Vector3(0, 2.5f, 0);
                     Vector3 aim = (pPos + new Vector3(0, 1.2f, 0)) - sp;
                     foreach (float ang in new[] { -8f, 0f, 8f })
@@ -1998,7 +2304,12 @@ namespace RiskOfCSharp2.Entities
             float moveSpd = effSpeed * (Phase == 4 ? 0.68f : (Phase == 3 ? 1.30f : (Phase == 2 ? 1.18f : 1.05f)));
             if (dist > 4.4f)
             {
-                Position += Forward * moveSpd * dt;
+                Vector3 toP = new(pPos.X - X, 0f, pPos.Z - Z);
+                Vector3 dir = toP.LengthSquared() > 0.01f ? Vector3.Normalize(toP) : Forward;
+                Vector3 perp = new(-dir.Z * _strafeDir, 0f, dir.X * _strafeDir);
+                Vector3 desired = Vector3.Normalize(dir + perp * (Phase == 4 ? 0.15f : 0.28f));
+                Vector3 steered = Physics.ComputeSmartSteerDirection(Position, desired, 1.5f, arenaY, ref _steerSide);
+                Position += steered * moveSpd * dt;
                 Vector3 resolved = Physics.ResolveHorizontalCollision(Position, 1.5f, arenaY);
                 float rx = resolved.X, rz = resolved.Z;
                 if (MathF.Sqrt(rx * rx + rz * rz) > maxArenaR)

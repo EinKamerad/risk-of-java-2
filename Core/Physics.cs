@@ -198,5 +198,128 @@ namespace RiskOfCSharp2.Core
             }
             return true;
         }
+
+        public static bool IsPathBlocked2D(Vector3 pos, Vector3 dir2D, float checkDist, float radius, float entityY, float maxStepHeight = 0.45f)
+        {
+            float sampleX = pos.X + dir2D.X * checkDist;
+            float sampleZ = pos.Z + dir2D.Z * checkDist;
+
+            for (int i = 0; i < Obstacles.Count; i++)
+            {
+                var obs = Obstacles[i];
+                if (entityY >= obs.TopHeight - maxStepHeight || entityY + 1.8f < obs.BaseY)
+                    continue;
+                float dx = sampleX - obs.X, dz = sampleZ - obs.Z;
+                if (MathF.Sqrt(dx * dx + dz * dz) < obs.Radius + radius + 0.25f)
+                    return true;
+            }
+
+            for (int i = 0; i < SkyPlatforms.Count; i++)
+            {
+                var plat = SkyPlatforms[i];
+                float bottomY = plat.TopY - plat.Thickness;
+                if (entityY >= plat.TopY - maxStepHeight || entityY + 1.8f < bottomY)
+                    continue;
+                float dx = sampleX - plat.X, dz = sampleZ - plat.Z;
+                if (MathF.Sqrt(dx * dx + dz * dz) < plat.Radius + radius + 0.25f)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public static Vector3 ComputeSmartSteerDirection(Vector3 pos, Vector3 desiredDir2D, float radius, float entityY, ref float preferSide)
+        {
+            if (desiredDir2D.LengthSquared() < 0.0001f)
+                return Vector3.UnitZ;
+            Vector3 baseDir = Vector3.Normalize(new Vector3(desiredDir2D.X, 0f, desiredDir2D.Z));
+
+            if (!IsPathBlocked2D(pos, baseDir, 1.8f, radius, entityY) &&
+                !IsPathBlocked2D(pos, baseDir, 3.2f, radius * 0.85f, entityY))
+            {
+                return baseDir;
+            }
+
+            float[] testAngles = { 25f, 50f, 75f, 105f, 135f };
+            foreach (float deg in testAngles)
+            {
+                foreach (float side in new[] { preferSide, -preferSide })
+                {
+                    float rad = deg * side * (MathF.PI / 180f);
+                    float c = MathF.Cos(rad), s = MathF.Sin(rad);
+                    Vector3 cand = new(baseDir.X * c - baseDir.Z * s, 0f, baseDir.X * s + baseDir.Z * c);
+                    if (!IsPathBlocked2D(pos, cand, 2.2f, radius, entityY) &&
+                        !IsPathBlocked2D(pos, cand, 3.6f, radius * 0.8f, entityY))
+                    {
+                        preferSide = side;
+                        return cand;
+                    }
+                }
+            }
+
+            return baseDir;
+        }
+
+        public static bool TryFindClimbTarget(
+            Vector3 enemyPos, Vector3 targetPos, float maxJumpHeight,
+            out Vector3 climbGoalPos, out float ledgeTopY, out bool readyToJumpNow)
+        {
+            climbGoalPos = targetPos;
+            ledgeTopY = enemyPos.Y;
+            readyToJumpNow = false;
+
+            float bestScore = 99999f;
+            bool found = false;
+
+            // 1. Проверяем небесные платформы и террасы (SkyPlatforms)
+            for (int i = 0; i < SkyPlatforms.Count; i++)
+            {
+                var plat = SkyPlatforms[i];
+                float hGain = plat.TopY - enemyPos.Y;
+                if (hGain < 0.55f || hGain > maxJumpHeight) continue;
+
+                float dToTarget = MathF.Sqrt((plat.X - targetPos.X) * (plat.X - targetPos.X) + (plat.Z - targetPos.Z) * (plat.Z - targetPos.Z));
+                float dFromEnemy = MathF.Sqrt((plat.X - enemyPos.X) * (plat.X - enemyPos.X) + (plat.Z - enemyPos.Z) * (plat.Z - enemyPos.Z));
+                if (dFromEnemy > 28.0f && dToTarget > plat.Radius + 6.0f) continue;
+
+                float score = dToTarget * 1.15f + MathF.Max(0f, dFromEnemy - plat.Radius) * 0.85f + MathF.Abs(targetPos.Y - plat.TopY) * 2.0f;
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    found = true;
+                    ledgeTopY = plat.TopY;
+                    Vector3 toCenter = new(plat.X - enemyPos.X, 0f, plat.Z - enemyPos.Z);
+                    float len = toCenter.Length();
+                    Vector3 dir = len > 0.01f ? toCenter / len : Vector3.UnitZ;
+                    climbGoalPos = new Vector3(plat.X - dir.X * MathF.Max(0f, plat.Radius - 1.2f), plat.TopY, plat.Z - dir.Z * MathF.Max(0f, plat.Radius - 1.2f));
+                    readyToJumpNow = dFromEnemy <= plat.Radius + 3.4f && dFromEnemy >= plat.Radius - 1.8f;
+                }
+            }
+
+            // 2. Проверяем широкие плоские препятствия и шляпки грибов (Obstacles)
+            for (int i = 0; i < Obstacles.Count; i++)
+            {
+                var obs = Obstacles[i];
+                if (obs.Radius < 1.35f) continue;
+                float hGain = obs.TopHeight - enemyPos.Y;
+                if (hGain < 0.55f || hGain > maxJumpHeight) continue;
+
+                float dToTarget = MathF.Sqrt((obs.X - targetPos.X) * (obs.X - targetPos.X) + (obs.Z - targetPos.Z) * (obs.Z - targetPos.Z));
+                float dFromEnemy = MathF.Sqrt((obs.X - enemyPos.X) * (obs.X - enemyPos.X) + (obs.Z - enemyPos.Z) * (obs.Z - enemyPos.Z));
+                if (dFromEnemy > 20.0f) continue;
+
+                float score = dToTarget * 1.2f + MathF.Max(0f, dFromEnemy - obs.Radius) * 0.9f + MathF.Abs(targetPos.Y - obs.TopHeight) * 2.0f;
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    found = true;
+                    ledgeTopY = obs.TopHeight;
+                    climbGoalPos = new Vector3(obs.X, obs.TopHeight, obs.Z);
+                    readyToJumpNow = dFromEnemy <= obs.Radius + 2.8f;
+                }
+            }
+
+            return found;
+        }
     }
 }
