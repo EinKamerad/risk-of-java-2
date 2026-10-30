@@ -115,6 +115,24 @@ namespace RiskOfCSharp2.Entities
                     new VisualFX(targetPos + new Vector3(0, 1.1f, 0), Color.Red, 1.5f, 0.16f);
                 }
             }
+            else if (p.CharKey == "lappland")
+            {
+                target.ArmorBreakTimer = MathF.Max(target.ArmorBreakTimer, 5.0f);
+                target.SlowTimer = MathF.Max(target.SlowTimer, 2.5f);
+            }
+            else if (p.CharKey == "haze")
+            {
+                int addStacks = (p.SkillVar("m1") == 1) ? 2 : 1;
+                target.FixationStacks = Math.Min(20, target.FixationStacks + addStacks);
+                if (target.FixationStacks >= 20)
+                {
+                    target.FixationStacks = 0;
+                    dmg += p.BaseDamage * 2.5f;
+                    if (!target.IsBoss) target.StunTimer = MathF.Max(target.StunTimer, 0.9f);
+                    g.HealPlayer(8.0f);
+                    new VisualFX(hitPos, Rgb(255, 195, 70), 3.6f, 0.28f);
+                }
+            }
 
             // Leeching Seed + Doran's Blade + врождённый вампиризм навыка
             float healAmt = lifesteal + 1.5f * GetItemCount("leeching_seed") + 2.0f * GetItemCount("dorans_blade");
@@ -147,6 +165,9 @@ namespace RiskOfCSharp2.Entities
                 target.LiandryBurnDps = MathF.Max(target.LiandryBurnDps, p.BaseDamage * (0.45f * liandry) + maxHpBurn);
             }
 
+            SoundManager.Play(isCrit ? "crit" : "hit");
+            if (effAoe >= 3.5f)
+                SoundManager.Play3D("explosion", hitPos, g.PlayerPos, 55f, 0.65f);
             Program.TriggerHitMarker(isCrit, dmg);
             target.TakeDamage(dmg);
             new VisualFX(hitPos, hitColor, effAoe == 0f ? 1.3f : effAoe * 1.35f, 0.22f);
@@ -219,6 +240,7 @@ namespace RiskOfCSharp2.Entities
             int atg = GetItemCount("atg_missile");
             if (atg > 0 && _rng.NextDouble() < MathF.Min(0.75f, 0.12f * atg * luckBonus))
             {
+                SoundManager.Play("rocket", 0.55f, 1.25f);
                 Vector3 mPos = g.PlayerPos + new Vector3(0, 2.2f, 0);
                 new Projectile(mPos, Vector3.Normalize(new Vector3(0, 0.6f, 0.8f)), 48f, p.BaseDamage * (2.2f * atg), 0.36f, Rgb(115, 255, 80), isPlayer: true, homing: true, canProc: false);
             }
@@ -227,6 +249,7 @@ namespace RiskOfCSharp2.Entities
             int poly = GetItemCount("polylute");
             if (poly > 0 && IsValid(target) && _rng.NextDouble() < MathF.Min(0.85f, 0.25f * luckBonus))
             {
+                SoundManager.Play("zap", 0.75f, 1.15f);
                 int strikes = 2 + poly;
                 new VisualFX(targetPos + new Vector3(0, 1.3f, 0), Rgb(205, 85, 255), 3.0f, 0.28f);
                 new LightningBeam(g.PlayerPos + new Vector3(0, 1.5f, 0), targetPos + new Vector3(0, 1.2f, 0), Rgb(205, 85, 255), 0.24f);
@@ -237,6 +260,7 @@ namespace RiskOfCSharp2.Entities
             int uku = GetItemCount("ukulele");
             if (uku > 0 && _rng.NextDouble() < MathF.Min(0.85f, 0.25f * luckBonus))
             {
+                SoundManager.Play("zap", 0.80f);
                 int maxTargets = 2 + uku * 2;
                 float chainRad = 13.0f + uku * 2.5f;
                 int chained = 0;
@@ -266,6 +290,7 @@ namespace RiskOfCSharp2.Entities
                 if (p.StatikkHitCounter >= 4)
                 {
                     p.StatikkHitCounter = 0;
+                    SoundManager.Play("zap", 0.85f, 1.08f);
                     int maxTargets = 3 + shiv;
                     float chainRad = 15.0f + shiv * 2.5f;
                     int chained = 0;
@@ -319,10 +344,11 @@ namespace RiskOfCSharp2.Entities
             if (g == null || p == null) return;
 
             Vector3 deathPos = dead.Position;
+            SoundManager.Play3D(dead.IsBoss ? "boss_roar" : "enemy_death", deathPos, g.PlayerPos, 65f, dead.IsBoss ? 1.0f : 0.85f, dead.IsBoss ? 0.72f : 1.0f);
             new VisualFX(deathPos + new Vector3(0, 1.2f, 0), Color.Orange, 3.5f, 0.38f);
             g.Gold += dead.GoldReward;
             ProgressData.Instance.Kills++;
-            Program.RecordEnemyKill(dead.GoldReward);
+            Program.RecordEnemyKill(dead.GoldReward, dead);
 
             if (p.CharKey == "v1")
                 p.V1AddStyle(dead.IsBoss ? "+ КРУПНОЕ УБИЙСТВО" : "+ УБИЙСТВО", dead.IsBoss ? Color.Red : Color.White, dead.IsBoss ? 160f : 45f);
@@ -384,6 +410,7 @@ namespace RiskOfCSharp2.Entities
             int wisp = GetItemCount("will_o_wisp");
             if (gas > 0 || wisp > 0)
             {
+                SoundManager.Play3D("explosion", deathPos, g.PlayerPos, 60f, 0.85f);
                 float radius = 6.0f + gas * 2.0f + wisp * 3.0f;
                 float burnDmg = p.BaseDamage * (1.2f * gas + 2.0f * wisp);
                 new VisualFX(deathPos + new Vector3(0, 1.0f, 0), gas >= wisp ? Color.Red : Color.Orange, radius * 1.35f, 0.4f);
@@ -558,6 +585,10 @@ namespace RiskOfCSharp2.Entities
                 RotationZ += 540f * dt;
                 return;
             }
+            if (!IsPlayer && p.ZaWarudoTimer > 0f)
+            {
+                return;
+            }
 
             if (GravityArc > 0f)
                 Direction.Y -= GravityArc * dt;
@@ -578,6 +609,7 @@ namespace RiskOfCSharp2.Entities
                 }
             }
 
+            Vector3 prevFramePos = Position;
             Position += Direction * Speed * dt;
             RotationZ += 360f * dt;
             Lifetime -= dt;
@@ -594,8 +626,11 @@ namespace RiskOfCSharp2.Entities
                 return;
             }
 
-            if (!Pierce && Physics.IsInsideSolidObstacle(Position, 0.2f))
+            // Проверяется весь отрезок пути за кадр, а не только конечная точка: быстрые снаряды больше не
+            // «перепрыгивают» тонкие стены, переборки и колонны
+            if (!Pierce && Physics.SegmentHitsSolid(prevFramePos, Position, 0.2f, out Vector3 wallHit))
             {
+                Position = wallHit;
                 new VisualFX(Position, Color, 1.2f, 0.18f);
                 SafeDestroy();
                 return;
@@ -713,6 +748,18 @@ namespace RiskOfCSharp2.Entities
                         cl.Hp -= Damage;
                         new VisualFX(Position, Color.Red, 1.5f, 0.2f);
                         if (cl.Hp <= 0f) Destroy(cl);
+                        SafeDestroy();
+                        return;
+                    }
+                }
+
+                // Попадание вражеских снарядов по миньонам-слугам Джек-О (при малом HP они взрываются!)
+                foreach (var sv in p.JackOServants.ToArray())
+                {
+                    if (IsValid(sv) && Vector3.Distance(Position, sv.Position + new Vector3(0, sv.HitHeight, 0)) <= sv.HitRadius + 0.35f)
+                    {
+                        sv.TakeMinionDamage(Damage);
+                        new VisualFX(Position, Color.Orange, 1.5f, 0.2f);
                         SafeDestroy();
                         return;
                     }

@@ -9,10 +9,12 @@ namespace RiskOfCSharp2.Data
 {
     public class SaveFileDto
     {
+        [JsonPropertyName("player_name")] public string PlayerName { get; set; } = "";
         [JsonPropertyName("kills")] public int Kills { get; set; }
         [JsonPropertyName("boss_kills")] public int BossKills { get; set; }
         [JsonPropertyName("max_stage")] public int MaxStage { get; set; } = 1;
         [JsonPropertyName("unlocked_items")] public List<string> UnlockedItems { get; set; } = new();
+        [JsonPropertyName("unlocked_characters")] public List<string> UnlockedCharacters { get; set; } = new();
         [JsonPropertyName("unlocked_achievements")] public List<string> UnlockedAchievements { get; set; } = new();
         [JsonPropertyName("discovered_stages")] public List<string> DiscoveredStages { get; set; } = new();
         [JsonPropertyName("unlocked_skins")] public List<string> UnlockedSkins { get; set; } = new();
@@ -21,17 +23,40 @@ namespace RiskOfCSharp2.Data
         [JsonPropertyName("selected_loadouts")] public Dictionary<string, int[]> SelectedLoadouts { get; set; } = new();
         [JsonPropertyName("selected_difficulty")] public string SelectedDifficulty { get; set; } = "rainstorm";
         [JsonPropertyName("active_artifacts")] public List<string> ActiveArtifacts { get; set; } = new();
+        [JsonPropertyName("mithrix_defeated")] public bool MithrixDefeated { get; set; } = false;
+        [JsonPropertyName("victories")] public int Victories { get; set; } = 0;
+        [JsonPropertyName("lunar_coins")] public int LunarCoins { get; set; } = 15;
     }
 
     public class ProgressData
     {
-        public static readonly ProgressData Instance = new();
         public static readonly string SavePath = Path.Combine(Directory.GetCurrentDirectory(), "save_logbook.json");
 
+        // Список избранных игроков, которым доступен секретный персонаж SANABI (Бригадный Генерал).
+        // Вы можете добавить сюда любые новые никнеймы прямо в коде:
+        public static readonly string[] SanabiAllowedUsers =
+        {
+            "lddrakon",
+            "EinKamerad"
+        };
+
+        // Стартовый персонаж, доступный с самого первого забега (остальные 29 открываются уникальными испытаниями):
+        public static readonly HashSet<string> DefaultCharacters = new()
+        {
+            "commando"
+        };
+
+        public static readonly ProgressData Instance = new();
+
+        public string PlayerName = "";
         public int Kills = 0;
         public int BossKills = 0;
         public int MaxStage = 1;
+        public bool MithrixDefeated = false;
+        public int Victories = 0;
+        public int LunarCoins = 15;
         public HashSet<string> UnlockedItems = new();
+        public HashSet<string> UnlockedCharacters = new();
         public HashSet<string> UnlockedAchievements = new();
         public HashSet<string> DiscoveredStages = new() { "roost" };
         public HashSet<string> UnlockedSkins = new();
@@ -41,12 +66,63 @@ namespace RiskOfCSharp2.Data
 
         private ProgressData()
         {
+            SyncDefaultUnlocks();
+            Load();
+        }
+
+        public void SyncDefaultUnlocks()
+        {
+            UnlockedItems.Clear();
             foreach (var kv in GameData.ItemPool)
             {
                 if (kv.Value.DefaultUnlocked)
                     UnlockedItems.Add(kv.Key);
             }
-            Load();
+            foreach (var ch in DefaultCharacters)
+                UnlockedCharacters.Add(ch);
+
+            foreach (var achKey in UnlockedAchievements)
+            {
+                if (GameData.Achievements.TryGetValue(achKey, out var ach))
+                {
+                    if (!string.IsNullOrEmpty(ach.UnlocksItem))
+                        UnlockedItems.Add(ach.UnlocksItem);
+                    if (!string.IsNullOrEmpty(ach.UnlocksCharacter))
+                        UnlockedCharacters.Add(ach.UnlocksCharacter);
+                }
+            }
+        }
+
+        public bool IsSanabiAuthorized()
+        {
+            if (string.IsNullOrWhiteSpace(PlayerName)) return false;
+            string trimmed = PlayerName.Trim();
+            foreach (var allowed in SanabiAllowedUsers)
+            {
+                if (string.Equals(trimmed, allowed, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        public bool IsCharacterVisible(string charKey)
+        {
+            if (charKey == "sanabi")
+                return IsSanabiAuthorized();
+            return true;
+        }
+
+        public bool IsCharacterUnlocked(string charKey)
+        {
+            if (charKey == "sanabi")
+                return IsSanabiAuthorized();
+            return DefaultCharacters.Contains(charKey) || UnlockedCharacters.Contains(charKey);
+        }
+
+        public void SetPlayerName(string name)
+        {
+            PlayerName = (name ?? "").Trim();
+            Save();
         }
 
         public int GetSelectedSkin(string charKey)
@@ -60,12 +136,26 @@ namespace RiskOfCSharp2.Data
             Save();
         }
 
+        public string GetLoadoutProfileKey(string charKey)
+        {
+            int skinIdx = GetSelectedSkin(charKey);
+            if (skinIdx > 0 &&
+                Models.SurvivorDatabase.Classes.TryGetValue(charKey, out var cfg) &&
+                skinIdx < cfg.Skins.Count &&
+                cfg.Skins[skinIdx].CustomSkillVariants != null)
+            {
+                return $"{charKey}_s{skinIdx}";
+            }
+            return charKey;
+        }
+
         public int[] GetLoadout(string charKey)
         {
-            if (!SelectedLoadouts.TryGetValue(charKey, out var arr) || arr == null || arr.Length < 4)
+            string profileKey = GetLoadoutProfileKey(charKey);
+            if (!SelectedLoadouts.TryGetValue(profileKey, out var arr) || arr == null || arr.Length < 4)
             {
                 arr = new int[] { 0, 0, 0, 0 };
-                SelectedLoadouts[charKey] = arr;
+                SelectedLoadouts[profileKey] = arr;
             }
             return arr;
         }
@@ -103,12 +193,20 @@ namespace RiskOfCSharp2.Data
         public bool IsSkillUnlocked(string charKey, string slot, int variantIdx)
         {
             if (variantIdx <= 0) return true;
-            return UnlockedSkills.Contains($"{charKey}_{slot}_{variantIdx}");
+            if (charKey == "sanabi" && IsSanabiAuthorized()) return true;
+            string profileKey = GetLoadoutProfileKey(charKey);
+            return UnlockedSkills.Contains($"{profileKey}_{slot}_{variantIdx}");
         }
 
         public bool IsSkinUnlocked(string charKey, int skinIdx, string? unlockAchKey)
         {
             if (skinIdx <= 0) return true;
+            if (Models.SurvivorDatabase.Classes.TryGetValue(charKey, out var cfg) &&
+                skinIdx < cfg.Skins.Count &&
+                cfg.Skins[skinIdx].UnlockedByDefault)
+            {
+                return true;
+            }
             return UnlockedSkins.Contains($"{charKey}_{skinIdx}");
         }
 
@@ -120,12 +218,24 @@ namespace RiskOfCSharp2.Data
                 string json = File.ReadAllText(SavePath);
                 var dto = JsonSerializer.Deserialize<SaveFileDto>(json);
                 if (dto == null) return;
+                PlayerName = (dto.PlayerName ?? "").Trim();
                 Kills = dto.Kills;
                 BossKills = dto.BossKills;
                 MaxStage = Math.Max(1, dto.MaxStage);
-                foreach (var it in dto.UnlockedItems) UnlockedItems.Add(it);
-                foreach (var ach in dto.UnlockedAchievements) UnlockedAchievements.Add(ach);
-                foreach (var st in dto.DiscoveredStages) DiscoveredStages.Add(st);
+                MithrixDefeated = dto.MithrixDefeated || dto.Victories > 0;
+                Victories = Math.Max(0, dto.Victories);
+                LunarCoins = dto.LunarCoins > 0 ? dto.LunarCoins : 15;
+                if (dto.UnlockedAchievements != null)
+                {
+                    foreach (var ach in dto.UnlockedAchievements) UnlockedAchievements.Add(ach);
+                    if (UnlockedAchievements.Contains("ach_safe_travels"))
+                        MithrixDefeated = true;
+                }
+                if (dto.UnlockedCharacters != null)
+                    foreach (var ch in dto.UnlockedCharacters) UnlockedCharacters.Add(ch);
+                SyncDefaultUnlocks();
+                if (dto.DiscoveredStages != null)
+                    foreach (var st in dto.DiscoveredStages) DiscoveredStages.Add(st);
                 if (dto.UnlockedSkins != null)
                     foreach (var sk in dto.UnlockedSkins) UnlockedSkins.Add(sk);
                 if (dto.UnlockedSkills != null)
@@ -158,10 +268,12 @@ namespace RiskOfCSharp2.Data
             {
                 var dto = new SaveFileDto
                 {
+                    PlayerName = PlayerName,
                     Kills = Kills,
                     BossKills = BossKills,
                     MaxStage = MaxStage,
                     UnlockedItems = UnlockedItems.ToList(),
+                    UnlockedCharacters = UnlockedCharacters.ToList(),
                     UnlockedAchievements = UnlockedAchievements.ToList(),
                     DiscoveredStages = DiscoveredStages.ToList(),
                     UnlockedSkins = UnlockedSkins.ToList(),
@@ -169,7 +281,10 @@ namespace RiskOfCSharp2.Data
                     SelectedSkins = SelectedSkins,
                     SelectedLoadouts = SelectedLoadouts,
                     SelectedDifficulty = GameData.SelectedDifficulty,
-                    ActiveArtifacts = GameData.ActiveArtifacts.ToList()
+                    ActiveArtifacts = GameData.ActiveArtifacts.ToList(),
+                    MithrixDefeated = MithrixDefeated,
+                    Victories = Victories,
+                    LunarCoins = LunarCoins
                 };
                 var opts = new JsonSerializerOptions { WriteIndented = true };
                 File.WriteAllText(SavePath, JsonSerializer.Serialize(dto, opts));
@@ -178,24 +293,6 @@ namespace RiskOfCSharp2.Data
             {
                 // Игнорируем ошибки записи
             }
-        }
-
-        public void UnlockAll()
-        {
-            foreach (var k in GameData.ItemPool.Keys) UnlockedItems.Add(k);
-            foreach (var k in GameData.Achievements.Keys) UnlockedAchievements.Add(k);
-            foreach (var p in GameData.StagePalettes) DiscoveredStages.Add(p.Id);
-            foreach (var sp in GameData.SpecialPalettes.Keys) DiscoveredStages.Add(sp);
-            foreach (var ck in Models.SurvivorDatabase.OrderedKeys)
-            {
-                UnlockedSkins.Add($"{ck}_1");
-                UnlockedSkins.Add($"{ck}_2");
-                UnlockedSkills.Add($"{ck}_m1_1");
-                UnlockedSkills.Add($"{ck}_m2_1");
-                UnlockedSkills.Add($"{ck}_shift_1");
-                UnlockedSkills.Add($"{ck}_r_1");
-            }
-            Save();
         }
     }
 }

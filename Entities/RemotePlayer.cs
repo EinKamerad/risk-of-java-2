@@ -22,9 +22,14 @@ namespace RiskOfCSharp2.Entities
         public int LastAnimStep = 0;
         public float Hp = 110f;
         public float MaxHp = 110f;
+        public string ActiveEmote = "";
+        public string RpsChoiceText = "";
+        public float RpsChoiceTimer = 0f;
 
         private SurvivorParts _parts;
         private readonly Entity _labelEnt;
+        private Entity? _chairProp;
+        public SurvivorParts Parts => _parts;
 
         public RemotePlayer(string playerId, string charKey = "commando", int skinIdx = 0) : base(position: new(2, 0, 2))
         {
@@ -36,10 +41,67 @@ namespace RiskOfCSharp2.Entities
             UpdateBillboard();
         }
 
+        private void EnsureChairProp(bool visible)
+        {
+            if (visible)
+            {
+                if (_chairProp == null || _chairProp.IsDestroyed)
+                    _chairProp = BuildPlasticChairEntity(this);
+                _chairProp.Enabled = true;
+            }
+            else if (_chairProp != null && !_chairProp.IsDestroyed)
+            {
+                _chairProp.Enabled = false;
+            }
+        }
+
+        public static Entity BuildPlasticChairEntity(Entity parent)
+        {
+            // Знаменитый белый садовый пластиковый стул-моноблок (Мотивация!)
+            var chair = new Entity(parent: parent, position: new(0, 0f, -0.10f));
+            Color whitePlastic = Rgb(242, 245, 250);
+            Color shadePlastic = Rgb(212, 218, 228);
+            // Сиденье
+            new Entity(parent: chair, model: "cube", scale: new(0.76f, 0.07f, 0.72f), position: new(0, 0.48f, 0.02f), color: whitePlastic);
+            // 4 слегка расставленные пластиковые ножки
+            foreach (float lx in new[] { -0.32f, 0.32f })
+                foreach (float lz in new[] { -0.28f, 0.30f })
+                    new Entity(parent: chair, model: "cube", scale: new(0.07f, 0.50f, 0.07f),
+                        position: new(lx, 0.24f, lz), rotation: new(lz * -14f, 0f, lx * 14f), color: shadePlastic);
+            // Изогнутая спинка с вертикальными прорезями моноблока
+            var back = new Entity(parent: chair, position: new(0, 0.88f, -0.32f), rotation: new(-10f, 0, 0));
+            new Entity(parent: back, model: "cube", scale: new(0.78f, 0.14f, 0.06f), position: new(0, 0.30f, 0), color: whitePlastic);
+            new Entity(parent: back, model: "cube", scale: new(0.76f, 0.10f, 0.06f), position: new(0, -0.26f, 0), color: whitePlastic);
+            foreach (float sx in new[] { -0.34f, -0.17f, 0f, 0.17f, 0.34f })
+                new Entity(parent: back, model: "cube", scale: new(0.07f, 0.56f, 0.06f), position: new(sx, 0.02f, 0), color: sx is -0.34f or 0.34f ? whitePlastic : shadePlastic);
+            // Подлокотники
+            foreach (int s in new[] { -1, 1 })
+            {
+                new Entity(parent: chair, model: "cube", scale: new(0.09f, 0.06f, 0.68f), position: new(s * 0.40f, 0.72f, 0.02f), color: whitePlastic);
+                new Entity(parent: chair, model: "cube", scale: new(0.07f, 0.26f, 0.07f), position: new(s * 0.38f, 0.59f, 0.28f), color: shadePlastic);
+            }
+            return chair;
+        }
+
         private void UpdateBillboard()
         {
             string cName = SurvivorDatabase.Classes[CharKey].Name;
-            _labelEnt.BillboardText = $"[{PlayerId.ToUpper()}] {cName}\n{(int)Hp}/{(int)MaxHp} HP";
+            string extra = "";
+            if (RpsChoiceTimer > 0f && !string.IsNullOrEmpty(RpsChoiceText))
+                extra = $"\n{RpsChoiceText}";
+            else if (ActiveEmote == "rps_wait")
+                extra = "\n[E] СЫГРАТЬ В КАМЕНЬ-НОЖНИЦЫ-БУМАГУ!";
+            _labelEnt.BillboardText = $"[{PlayerId.ToUpper()}] {cName}\n{(int)Hp}/{(int)MaxHp} HP{extra}";
+        }
+
+        public void SetRpsOutcome(string emote, string badgeText, float duration = 3.2f)
+        {
+            ActiveEmote = emote;
+            _parts.SetEmote(emote);
+            EnsureChairProp(emote == "chair");
+            RpsChoiceText = badgeText;
+            RpsChoiceTimer = duration;
+            UpdateBillboard();
         }
 
         public void RebuildClass(string newCharKey, int newSkinIdx = 0)
@@ -51,6 +113,7 @@ namespace RiskOfCSharp2.Entities
             SkinIdx = newSkinIdx;
             Destroy(_parts.Root);
             _parts = SurvivorDatabase.BuildSurvivorMesh(this, newCharKey, newSkinIdx);
+            _parts.SetEmote(ActiveEmote);
             UpdateBillboard();
         }
 
@@ -77,6 +140,14 @@ namespace RiskOfCSharp2.Entities
             bool ultForm = msg["ult_form"]?.GetValue<bool>() ?? false;
             _parts.SetUltForm(ultForm);
 
+            string netEmote = msg["emote"]?.GetValue<string>() ?? "";
+            if (RpsChoiceTimer <= 0f)
+            {
+                ActiveEmote = netEmote;
+                _parts.SetEmote(ActiveEmote);
+                EnsureChairProp(ActiveEmote == "chair");
+            }
+
             int animStep = msg["anim_step"]?.GetValue<int>() ?? LastAnimStep;
             string animSlot = msg["anim_slot"]?.GetValue<string>() ?? "";
             if (animStep != LastAnimStep && !string.IsNullOrEmpty(animSlot))
@@ -91,8 +162,17 @@ namespace RiskOfCSharp2.Entities
         public override void OnUpdate(float dt)
         {
             if (IsDestroyed) return;
+            if (RpsChoiceTimer > 0f)
+            {
+                RpsChoiceTimer = MathF.Max(0f, RpsChoiceTimer - dt);
+                if (RpsChoiceTimer <= 0f)
+                {
+                    RpsChoiceText = "";
+                    UpdateBillboard();
+                }
+            }
             Position = Lerp(Position, TargetPos, MathF.Min(1.0f, dt * 14.0f));
-            RotationY = Lerp(RotationY, TargetRotY, MathF.Min(1.0f, dt * 14.0f));
+            RotationY = LerpAngleDeg(RotationY, TargetRotY, MathF.Min(1.0f, dt * 14.0f));
             _parts.UpdateAnimations(CharKey, dt, IsMoving, isGrounded: Grounded, velY: VelY, moveSpeedRatio: 1.0f, strafeInput: 0f, forwardInput: IsMoving ? 1f : 0f, shieldStance: ShieldStance);
         }
     }

@@ -11,7 +11,7 @@ using static RiskOfCSharp2.Core.Utils;
 
 namespace RiskOfCSharp2
 {
-    public class GameRunContext : IPlayerContext
+    public partial class GameRunContext : IPlayerContext
     {
         public Entity PlayerEntity = null!;
         public SurvivorParts Parts = null!;
@@ -52,15 +52,43 @@ namespace RiskOfCSharp2
         public CombatTarget? ActiveBoss;
         public string BossTitle = "";
         public bool IsBossAlive => IsValid(ActiveBoss) && !ActiveBoss!.IsAlly;
-        public bool CanPlayerInteract => !(CharKey == "mindustry" && Combat != null && Combat.MindustryBuildMode);
+        public bool CanPlayerInteract => !(CharKey == "mindustry" && Combat != null && Combat.MindustryBuildMode) && !Program.HasAnyInGameModalOpen();
         public float MoonDetonationTimer { get; set; } = 0f;
         public bool MithrixSpawned = false;
 
         public float ElapsedTime = 0f;
+        public float StageElapsedTime = 0f;
         public float DirectorCredits = 0f;
         public float SpawnTimer = 1.0f;
         public string StageKinType = "";
         public float VengeanceTimer = 85.0f;
+
+        // Счётчики прогресса достижений за текущий забег
+        public int M1CastCount = 0;
+        public int M2CastCount = 0;
+        public int ShiftCastCount = 0;
+        public int RCastCount = 0;
+        public int TotalAbilityCasts => M1CastCount + M2CastCount + ShiftCastCount + RCastCount;
+        public float MoveStreakTimer = 0f;
+        public bool DroppedLowHp = false;
+        public bool SurvivedCriticalHp = false;
+        public int HitsTakenCount = 0;
+        public float MultiKillWindowTimer = 0f;
+        public int MultiKillCount = 0;
+        public float FrenzyWindowTimer = 0f;
+        public int FrenzyKillCount = 0;
+        public float UntouchedCombatTimer = 0f;
+        public int CloseKills = 0;
+        public int EliteOrBossKills = 0;
+        public int ChestsOpened = 0;
+        public int PyroKills = 0;
+        public int CritHitsCount = 0;
+        public float TeleporterActiveTimer = 0f;
+        public bool TeleporterChargingNow = false;
+        public int AirborneKills = 0;
+        public float PostHitTimer = 0f;
+        public int ThornsKills = 0;
+        public float TotalHealed = 0f;
 
         public Dictionary<string, int> Items { get; } = new();
         public List<string> ItemOrder { get; } = new();
@@ -164,36 +192,61 @@ namespace RiskOfCSharp2
             var prog = ProgressData.Instance;
             var unlockedRewards = new List<string>();
 
-            // 1. Глобальное достижение и предмет для всех персонажей
-            if (!prog.UnlockedAchievements.Contains(achKey))
+            bool newlyUnlockedHero = false;
+            bool isNewAch = !prog.UnlockedAchievements.Contains(achKey);
+            // 1. Глобальное достижение, предмет и персонаж для всех забегов
+            if (isNewAch)
             {
                 prog.UnlockedAchievements.Add(achKey);
+                if (achKey == "ach_safe_travels")
+                    prog.MithrixDefeated = true;
                 if (!string.IsNullOrEmpty(ach.UnlocksItem) && GameData.ItemPool.TryGetValue(ach.UnlocksItem, out var itemInfo))
                 {
                     prog.UnlockedItems.Add(ach.UnlocksItem);
                     unlockedRewards.Add($"Предмет «{itemInfo.Name}»");
                 }
+                if (!string.IsNullOrEmpty(ach.UnlocksCharacter) && SurvivorDatabase.Classes.TryGetValue(ach.UnlocksCharacter, out var charCfg))
+                {
+                    if (!prog.UnlockedCharacters.Contains(ach.UnlocksCharacter))
+                        newlyUnlockedHero = true;
+                    prog.UnlockedCharacters.Add(ach.UnlocksCharacter);
+                    unlockedRewards.Add($"ВЫЖИВШИЙ «{charCfg.Name}»");
+                }
             }
-            else if (!string.IsNullOrEmpty(ach.UnlocksItem) && !prog.UnlockedItems.Contains(ach.UnlocksItem) && GameData.ItemPool.TryGetValue(ach.UnlocksItem, out var itemInfo))
+            else
             {
-                prog.UnlockedItems.Add(ach.UnlocksItem);
-                unlockedRewards.Add($"Предмет «{itemInfo.Name}»");
+                if (!string.IsNullOrEmpty(ach.UnlocksItem) && !prog.UnlockedItems.Contains(ach.UnlocksItem) && GameData.ItemPool.TryGetValue(ach.UnlocksItem, out var itemInfo))
+                {
+                    prog.UnlockedItems.Add(ach.UnlocksItem);
+                    unlockedRewards.Add($"Предмет «{itemInfo.Name}»");
+                }
+                if (!string.IsNullOrEmpty(ach.UnlocksCharacter) && !prog.UnlockedCharacters.Contains(ach.UnlocksCharacter) && SurvivorDatabase.Classes.TryGetValue(ach.UnlocksCharacter, out var charCfg))
+                {
+                    newlyUnlockedHero = true;
+                    prog.UnlockedCharacters.Add(ach.UnlocksCharacter);
+                    unlockedRewards.Add($"ВЫЖИВШИЙ «{charCfg.Name}»");
+                }
             }
 
-            // 2. Персональные альтернативные навыки и скины только для текущего выжившего (CharKey)
+            // 2. Персональные альтернативные навыки и скины только для текущего выжившего (CharKey и его активной альт-версии скина)
             if (SurvivorDatabase.Classes.TryGetValue(CharKey, out var cfg))
             {
+                string profileKey = prog.GetLoadoutProfileKey(CharKey);
+                var activeSkin = cfg.GetActiveSkin();
+                var activeVariantsMap = activeSkin.CustomSkillVariants ?? cfg.SkillVariants;
+                string ownerTitle = activeSkin.CustomSkillVariants != null ? activeSkin.Name : cfg.Name;
+
                 foreach (var slot in new[] { "m1", "m2", "shift", "r" })
                 {
-                    if (!cfg.SkillVariants.TryGetValue(slot, out var variants)) continue;
+                    if (!activeVariantsMap.TryGetValue(slot, out var variants)) continue;
                     for (int vi = 1; vi < variants.Count; vi++)
                     {
                         var vSkill = variants[vi];
-                        string skillUnlockId = $"{CharKey}_{slot}_{vi}";
+                        string skillUnlockId = $"{profileKey}_{slot}_{vi}";
                         if (vSkill.UnlockAchKey == achKey && !prog.UnlockedSkills.Contains(skillUnlockId))
                         {
                             prog.UnlockedSkills.Add(skillUnlockId);
-                            unlockedRewards.Add($"Навык [{cfg.Name}] «{vSkill.Name}»");
+                            unlockedRewards.Add($"Навык [{ownerTitle}] «{vSkill.Name}»");
                         }
                     }
                 }
@@ -210,10 +263,18 @@ namespace RiskOfCSharp2
                 }
             }
 
+            if (isNewAch && unlockedRewards.Count == 0)
+            {
+                unlockedRewards.Add(!string.IsNullOrEmpty(ach.RewardText) ? ach.RewardText : ach.Name);
+            }
+
             if (unlockedRewards.Count > 0)
             {
                 prog.Save();
+                SoundManager.Play("victory", 0.9f);
                 ShowBanner($"ДОСТИЖЕНИЕ «{ach.Name}» :: ОТКРЫТО: {string.Join(" + ", unlockedRewards)}!", Color.Gold, 4.5f);
+                if (newlyUnlockedHero && !string.IsNullOrEmpty(ach.UnlocksCharacter))
+                    TriggerCharacterUnlockCutscene(ach.UnlocksCharacter);
             }
         }
 
@@ -221,6 +282,8 @@ namespace RiskOfCSharp2
         {
             if (amount <= 0f) return;
             if (GameData.SelectedDifficulty == "eclipse") amount *= 0.65f;
+            TotalHealed += amount;
+            if (TotalHealed >= 250f) UnlockAchievement("ach_overheal");
             float maxH = PlayerMaxHp;
             float newHp = PlayerHp + amount;
             if (newHp > maxH)
@@ -235,6 +298,8 @@ namespace RiskOfCSharp2
                 }
             }
             else PlayerHp = newHp;
+            if (DroppedLowHp && PlayerHp >= maxH * 0.85f)
+                UnlockAchievement("ach_field_medic");
         }
 
         public void ApplyDash(Vector3 dashVec, float duration)
@@ -258,14 +323,23 @@ namespace RiskOfCSharp2
                 Items["spinel_tonic"] = (Items.TryGetValue("spinel_tonic", out int curT) ? curT : 0) + 1;
                 if (Combat != null) Combat.TonicBuffTimer = 25.0f;
                 HealPlayer(PlayerMaxHp * 0.25f);
+                SoundManager.Play("item_pickup");
                 ShowBanner($"ЛУННЫЙ ТОНИК АКТИВЕН (25 СЕК)! ВСЕ ИСПОРЧЕННЫЕ ТОНИКИ ВОССТАНОВЛЕНЫ (x{Items["spinel_tonic"]})!", Rgb(65, 195, 255), 3.8f);
+                UnlockAchievement("ach_lunar_addict");
             }
             else
             {
                 if (!ItemOrder.Contains(itemKey)) ItemOrder.Add(itemKey);
                 Items[itemKey] = (Items.TryGetValue(itemKey, out int c) ? c : 0) + 1;
                 var info = GameData.ItemPool[itemKey];
+                SoundManager.Play(info.Tier is "red" or "void" ? "item_legendary" : "item_pickup");
                 ShowBanner($"ПОДОБРАНО: {info.Name} ({info.Desc})", info.Color, 3.2f);
+                if (info.Tier is "lunar" or "void")
+                    UnlockAchievement("ach_lunar_addict");
+                if (itemKey == "purity")
+                    UnlockAchievement("ach_lunar_purity");
+                if (itemKey == "lunar_pauldron")
+                    UnlockAchievement("ach_lunar_stone");
             }
 
             int total = 0;
@@ -285,11 +359,18 @@ namespace RiskOfCSharp2
             if (!ItemOrder.Contains("tonic_affliction")) ItemOrder.Add("tonic_affliction");
             Items["tonic_affliction"] = (Items.TryGetValue("tonic_affliction", out int ta) ? ta : 0) + activeTonics;
             PlayerHp = MathF.Min(PlayerHp, PlayerMaxHp);
+            SoundManager.Play("ui_error");
             ShowBanner($"ДЕЙСТВИЕ ТОНИКА ИСТЕКЛО! ТОНИКИ ИСПОРТИЛИСЬ (x{Items["tonic_affliction"]}): ВСЕ СТАТЫ СНИЖЕНЫ!", Rgb(175, 95, 255), 4.0f);
         }
 
         public void SpawnItemDrop(Vector3 pos, string? itemKey = null, string poolType = "small_chest")
         {
+            if (poolType is "small_chest" or "large_chest" or "legendary_chest" or "lunar_pod" or "shrine_chance")
+            {
+                ChestsOpened++;
+                if (ChestsOpened >= 4) UnlockAchievement("ach_chest_opener");
+                if (poolType == "lunar_pod") UnlockAchievement("ach_lunar_stone");
+            }
             string key = itemKey != null && GameData.ItemPool.ContainsKey(itemKey) ? itemKey : GameData.RollItemFromPool(poolType);
             StageEntities.Add(new ItemDrop(pos, key));
             if (Net.NetworkManager.Instance.Connected)
@@ -314,13 +395,18 @@ namespace RiskOfCSharp2
             Program.EnqueueCommandPicker(tier);
         }
 
+        public void OpenWorkbench()
+        {
+            Program.OpenSteveWorkbench();
+        }
+
         public void ShowBanner(string msg, Color col, float duration = 2.5f)
             => Program.ShowBanner(msg, col, duration);
 
         public void SpawnBoss(Vector3 pos, string? bossType = null, int? forcedNetId = null, bool fromNetwork = false)
         {
             var rng = new Random();
-            string bType = bossType != null && Array.IndexOf(GameData.BossTypes, bossType) >= 0
+            string bType = bossType != null && GameData.IsKnownBossType(bossType)
                 ? bossType
                 : GameData.BossTypes[rng.Next(GameData.BossTypes.Length)];
             float fy = Physics.GetSurfaceHeight(pos.X, pos.Z, pos.Y);
@@ -346,6 +432,10 @@ namespace RiskOfCSharp2
 
         public void OnTeleporterActivated()
         {
+            TeleporterActiveTimer = 0f;
+            TeleporterChargingNow = true;
+            if (StageElapsedTime <= 180f)
+                UnlockAchievement("ach_wind_runner");
             if (Net.NetworkManager.Instance.Mode != "client")
             {
                 Vector3 tpPos = ActiveTeleporterOrPad != null ? ActiveTeleporterOrPad.Position : PlayerPos;
@@ -374,8 +464,13 @@ namespace RiskOfCSharp2
             Program.LoadStage(Stage, null);
         }
 
-        public void EnterBazaar() => Program.LoadStage(Stage, "bazaar");
+        public void EnterBazaar()
+        {
+            UnlockAchievement("ach_lunar_purity");
+            Program.LoadStage(Stage, "bazaar");
+        }
         public void EnterMoonStage() => Program.LoadStage(Stage, "moon");
+        public void EnterSecretStage(string modeKey) => Program.LoadStage(Stage, modeKey);
 
         public void OnMoonPillarCharged()
         {
@@ -430,33 +525,45 @@ namespace RiskOfCSharp2
         {
             ActiveBoss = null;
             MoonDetonationTimer = 75.0f;
+            ProgressData.Instance.MithrixDefeated = true;
+            UnlockAchievement("ach_safe_travels");
             UnlockAchievement("ach_stage4");
             UnlockAchievement("ach_boss_hunter");
+            ProgressData.Instance.Save();
             Vector3 shipPos = new(0, 0, -52.0f);
             StageEntities.Add(new EscapeShip(shipPos));
             StageEntities.Add(new LunarEscapePad(new Vector3(0, Physics.ColosseumY, -46.0f), shipPos));
-            ShowBanner("МИТРИКС ПОВЕРЖЕН! ПРЫГАЙТЕ В ЗЕЛЁНЫЙ ЛУЧ НА КРАЮ КОЛИЗЕЯ К КОРАБЛЮ (75 СЕК)!", Color.Lime, 6.5f);
+            ShowBanner("МИТРИКС ПОВЕРЖЕН! КОРАБЛЬ «SAFE TRAVELS» РАЗБЛОКИРОВАН! ПРЫГАЙТЕ В ЛУЧ ЭВАКУАЦИИ (75 СЕК)!", Color.Lime, 6.5f);
         }
 
         public void OnRunVictory()
             => Program.OnVictory();
     }
-    public static class Program
+    public static partial class Program
     {
-        private static string _screen = "main"; // "main", "mp_connect", "settings", "lobby", "logbook", "in_game"
+        private static string _screen = "login"; // "login", "main", "mp_connect", "settings", "lobby", "logbook", "in_game"
+        private static string _playerNameInput = "";
         private static string _selectedChar = "commando";
-        private static string _lobbyTab = "overview"; // "overview", "skills", "loadout"
+        private static string _lobbyTab = "skills"; // "skills", "overview", "modifiers"
         private static GameRunContext? _run;
         private static bool _paused = false;
         private static bool _isSpectating = false;
         private static int _spectateTargetIdx = 0;
         private static readonly HashSet<string> _deadCoopPlayers = new();
         private static readonly Queue<string> _commandPickerQueue = new();
+        private static bool _workbenchOpen = false;
 
         public static void EnqueueCommandPicker(string tier)
         {
             _commandPickerQueue.Enqueue(tier);
             Raylib.EnableCursor();
+        }
+
+        public static void OpenSteveWorkbench()
+        {
+            _workbenchOpen = true;
+            Raylib.EnableCursor();
+            SoundManager.Play("interact", 0.9f);
         }
 
         // Индикаторы попаданий и урона в стиле CS + Статистика забега
@@ -478,22 +585,113 @@ namespace RiskOfCSharp2
             _hitMarkerTimer = 0.18f;
             _hitMarkerCrit = isCrit;
             RunDamageDealt += dmg;
+            if (_run != null && !_run.IsSafeTravels)
+            {
+                if (dmg >= 90f) _run.UnlockAchievement("ach_first_strike");
+                if (dmg >= 220f) _run.UnlockAchievement("ach_fire_band");
+                if (RunDamageDealt >= 3000f) _run.UnlockAchievement("ach_burn_bright");
+                if (RunDamageDealt >= 8000f) _run.UnlockAchievement("ach_armor_breaker");
+                if (isCrit)
+                {
+                    _run.CritHitsCount++;
+                    if (_run.CritHitsCount >= 10) _run.UnlockAchievement("ach_crit_reaper");
+                }
+            }
         }
 
         public static void TriggerDamageFlash(float dmg)
         {
             if (dmg > 0f)
+            {
                 _damageFlashTimer = Math.Clamp(0.25f + dmg * 0.008f, 0.25f, 0.65f);
+                if (_run != null && !_run.IsSafeTravels)
+                {
+                    _run.HitsTakenCount++;
+                    _run.UntouchedCombatTimer = 0f;
+                    _run.PostHitTimer = 4.5f;
+                    if (_run.HitsTakenCount >= 12) _run.UnlockAchievement("ach_tank_hits");
+                }
+            }
         }
 
-        public static void RecordEnemyKill(int goldGain)
+        public static void RecordEnemyKill(int goldGain, CombatTarget? dead = null)
         {
             RunKills++;
             RunGoldEarned += goldGain;
-            if (_run != null)
+            if (_run != null && !_run.IsSafeTravels)
             {
+                if (_run.Stage == 1 && RunKills >= 8) _run.UnlockAchievement("ach_trophies");
                 if (RunKills >= 12) _run.UnlockAchievement("ach_slayer");
                 if (RunKills >= 25) _run.UnlockAchievement("ach_carnage");
+                if (RunKills >= 35) _run.UnlockAchievement("ach_high_voltage");
+                if (RunKills >= 50) _run.UnlockAchievement("ach_ritual_blood");
+                if (RunGoldEarned >= 120 || _run.Gold >= 120) _run.UnlockAchievement("ach_doran_start");
+
+                if (_run.MultiKillWindowTimer <= 0f)
+                {
+                    _run.MultiKillWindowTimer = 5.0f;
+                    _run.MultiKillCount = 1;
+                }
+                else
+                {
+                    _run.MultiKillCount++;
+                    _run.MultiKillWindowTimer = MathF.Max(_run.MultiKillWindowTimer, 4.0f);
+                }
+                if (_run.MultiKillCount >= 3) _run.UnlockAchievement("ach_demolition");
+                if (_run.MultiKillCount >= 4) _run.UnlockAchievement("ach_shield_bearer");
+
+                if (_run.FrenzyWindowTimer <= 0f)
+                {
+                    _run.FrenzyWindowTimer = 12.0f;
+                    _run.FrenzyKillCount = 1;
+                }
+                else
+                {
+                    _run.FrenzyKillCount++;
+                }
+                if (_run.FrenzyKillCount >= 6) _run.UnlockAchievement("ach_frenzy");
+
+                if (!_run.PlayerGrounded)
+                {
+                    _run.AirborneKills++;
+                    if (_run.AirborneKills >= 6) _run.UnlockAchievement("ach_airborne");
+                }
+                if (_run.PostHitTimer > 0f)
+                {
+                    _run.ThornsKills++;
+                    if (_run.ThornsKills >= 5) _run.UnlockAchievement("ach_thorns");
+                }
+
+                if (dead != null)
+                {
+                    if (dead.IsBoss)
+                    {
+                        RunBossKills++;
+                        _run.UnlockAchievement("ach_boss");
+                        if (RunBossKills >= 2) _run.UnlockAchievement("ach_boss_hunter");
+                    }
+                    if (Vector3.Distance(_run.PlayerPos, dead.Position) <= 13.0f)
+                    {
+                        _run.CloseKills++;
+                        if (_run.CloseKills >= 10) _run.UnlockAchievement("ach_close_combat");
+                        if (_run.CloseKills >= 20) _run.UnlockAchievement("ach_blizzard");
+                    }
+                    if (dead.IsElite || dead.IsBoss || dead.IsDoppelganger)
+                    {
+                        _run.EliteOrBossKills++;
+                        if (_run.EliteOrBossKills >= 3) _run.UnlockAchievement("ach_shock_tactics");
+                        if (_run.EliteOrBossKills >= 7) _run.UnlockAchievement("ach_elite_slayer");
+                    }
+                    if (dead.EnemyType is "wisp" or "greater_wisp" or "lemurian" or "elder_lemurian" or "imp" or "nether_blaze" or "hell_drone")
+                    {
+                        _run.PyroKills++;
+                        if (_run.PyroKills >= 10) _run.UnlockAchievement("ach_wisp_hunter");
+                    }
+                    if (dead.IsBoss && _run.TeleporterChargingNow && _run.TeleporterActiveTimer <= 45.0f)
+                    {
+                        _run.UnlockAchievement("ach_ice_band");
+                    }
+                }
             }
         }
 
@@ -535,6 +733,8 @@ namespace RiskOfCSharp2
         private static string _roomCodeInput = "";
         private static string _netStatusText = "";
         private static float _netSyncTimer = 0f;
+        private static Vector3 _lastResolvedPlayerPos = Vector3.Zero;
+        private static bool _playerSweepValid = false;
         private static float _enemySyncTimer = 0f;
 
         private static string _bannerText = "";
@@ -770,12 +970,15 @@ namespace RiskOfCSharp2
         {
             Engine.Init(1536, 864, "Risk of C# 2 — Кооператив по LAN и коду комнаты");
             _netStatusText = $"Ваш локальный IP: {_net.HostIp}";
+            _playerNameInput = ProgressData.Instance.PlayerName;
+            _screen = "login";
             SetupDiorama();
 
             while (!Raylib.WindowShouldClose())
             {
                 float dt = Math.Min(Raylib.GetFrameTime(), 0.05f);
                 ProcessNetwork();
+                SoundManager.UpdateAmbient(dt, _screen == "in_game" && !_paused, _run != null && _run.IsBossAlive);
                 if (_bannerTimer > 0f) _bannerTimer -= dt;
                 if (_hitMarkerTimer > 0f) _hitMarkerTimer -= dt;
                 if (_damageFlashTimer > 0f) _damageFlashTimer -= dt;
@@ -784,21 +987,56 @@ namespace RiskOfCSharp2
                 {
                     if (Raylib.IsKeyPressed(KeyboardKey.Escape))
                     {
-                        _paused = !_paused;
-                        if (_paused || _commandPickerQueue.Count > 0 || (_run != null && (SurvivorDatabase.IsMobaCharacter(_run.CharKey) || _run.CharKey == "mindustry")))
-                            Raylib.EnableCursor();
+                        if (_dialogueOpen)
+                        {
+                            CloseSafeTravelsDialogueModal();
+                            SoundManager.Play("ui_click");
+                        }
+                        else if (_rpsOpen)
+                        {
+                            CloseRpsMiniGame();
+                            SoundManager.Play("ui_click");
+                        }
+                        else if (_emoteWheelOpen)
+                        {
+                            _emoteWheelOpen = false;
+                            SoundManager.Play("ui_click");
+                            RestoreInGameCursorIfNeeded();
+                        }
+                        else if (_safeTravelsWardrobeOpen)
+                        {
+                            _safeTravelsWardrobeOpen = false;
+                            SoundManager.Play("ui_click");
+                            RestoreInGameCursorIfNeeded();
+                        }
+                        else if (_workbenchOpen)
+                        {
+                            _workbenchOpen = false;
+                            SoundManager.Play("ui_click");
+                            RestoreInGameCursorIfNeeded();
+                        }
                         else
-                            Raylib.DisableCursor();
+                        {
+                            _paused = !_paused;
+                            SoundManager.Play("ui_click");
+                            RestoreInGameCursorIfNeeded();
+                        }
                     }
 
                     if (!_paused)
                     {
                         UpdateInGame(dt);
-                        Engine.Update(dt);
+                        // Во время катсцены разблокировки мир стоит на паузе: враги, снаряды и ловушки замирают
+                        // (в сетевой игре мир продолжает жить у других игроков, поэтому там только неуязвимость)
+                        if (!IsCutscenePlaying || _net.Connected)
+                            Engine.Update(dt);
                     }
+                    Engine.ObstructionFadeEnabled = _run != null && (!SurvivorCombatController.IsFirstPersonCharacter(_run.CharKey) || !string.IsNullOrEmpty(_run.Parts.ActiveEmote) || _dialogueOpen);
+                    if (_run != null) Engine.PlayerWorldPos = _run.PlayerPos;
                 }
                 else
                 {
+                    Engine.ObstructionFadeEnabled = false;
                     HandleInput(dt);
                     Engine.Update(dt);
                     UpdateDiorama(dt);
@@ -809,7 +1047,11 @@ namespace RiskOfCSharp2
 
                     if (_screen == "lobby" && _net.Connected && _lobbyCountdownActive)
                     {
+                        int prevSec = (int)MathF.Ceiling(_lobbyCountdown);
                         _lobbyCountdown = MathF.Max(0f, _lobbyCountdown - dt);
+                        int newSec = (int)MathF.Ceiling(_lobbyCountdown);
+                        if (newSec < prevSec && newSec <= 5 && newSec > 0)
+                            SoundManager.Play("ui_tick");
                         if (_net.Mode == "host" && _lobbyCountdown <= 0f)
                         {
                             _lobbyCountdownActive = false;
@@ -821,17 +1063,21 @@ namespace RiskOfCSharp2
                 Raylib.BeginDrawing();
                 Raylib.ClearBackground(Engine.BackgroundColor);
 
-                Raylib.BeginMode3D(Engine.Camera);
-                Engine.Draw3D();
-                Raylib.EndMode3D();
+                if (!(_screen == "logbook" && _logDetailOpen))
+                {
+                    Raylib.BeginMode3D(Engine.Camera);
+                    Engine.Draw3D();
+                    Raylib.EndMode3D();
 
-                Engine.Draw3DBillboardLabels(Engine.Camera);
+                    Engine.Draw3DBillboardLabels(Engine.Camera);
+                }
 
                 if (_screen == "in_game")
                 {
                     DrawInGameHUD();
                     if (_paused) DrawPauseOverlay();
                 }
+                else if (_screen == "login") DrawLoginUI();
                 else if (_screen == "main") DrawMainMenuUI();
                 else if (_screen == "mp_connect") DrawMpConnectUI();
                 else if (_screen == "settings") DrawSettingsUI();
@@ -852,6 +1098,7 @@ namespace RiskOfCSharp2
             }
 
             _net.StopSession();
+            SoundManager.Shutdown();
             Raylib.CloseWindow();
         }
 
@@ -1247,19 +1494,24 @@ namespace RiskOfCSharp2
                     FinishRunWithSummary(victory: true);
                     ShowBanner("ПОБЕДА! КОМАНДА ЭВАКУИРОВАЛАСЬ С ЛУНЫ!", Color.Gold, 6.5f);
                 }
+                else if (mtype == "rps_duel" && _screen == "in_game" && _run != null)
+                {
+                    HandleNetworkRpsDuel(msg);
+                }
             }
         }
 
         private static void BroadcastLobbyState()
         {
             if (!_net.Connected) return;
+            string netChar = Data.ProgressData.Instance.IsCharacterUnlocked(_selectedChar) ? _selectedChar : "commando";
             _net.Broadcast(new System.Text.Json.Nodes.JsonObject
             {
                 ["type"] = "lobby_state",
                 ["player_id"] = _net.MyId,
-                ["char_key"] = _selectedChar,
+                ["char_key"] = netChar,
                 ["ready"] = _myReady,
-                ["skin_idx"] = Data.ProgressData.Instance.GetSelectedSkin(_selectedChar),
+                ["skin_idx"] = Data.ProgressData.Instance.GetSelectedSkin(netChar),
                 ["diff"] = GameData.SelectedDifficulty,
                 ["arts"] = string.Join(",", GameData.ActiveArtifacts)
             });
@@ -1314,6 +1566,7 @@ namespace RiskOfCSharp2
             _pedestalRing.Color = activeSkin.PrimaryColor;
             _previewSurvivorParts = SurvivorDatabase.BuildSurvivorMesh(_previewActor, charKey);
             new VisualFX(_mainPedestal.Position + new Vector3(0, 1.2f, 0), cfg.BodyColor, maxScale: 3.0f, duration: 0.25f);
+            if (_screen == "lobby") SoundManager.Play("ui_select_char");
             BroadcastLobbyState();
         }
 
@@ -1330,22 +1583,30 @@ namespace RiskOfCSharp2
 
             if (category == "items" && GameData.ItemPool.TryGetValue(key, out var item))
             {
+                bool unl = ProgressData.Instance.UnlockedItems.Contains(key);
                 _previewBaseScale = 1.85f;
                 _previewActor.Position = new Vector3(0, 1.35f, 0);
-                _pedestalRing.Color = item.Color;
-                ItemBuilder.BuildItemMesh(_previewActor, key);
+                _pedestalRing.Color = unl ? item.Color : Color.Gray;
+                if (unl)
+                    ItemBuilder.BuildItemMesh(_previewActor, key);
+                else
+                    new Entity(parent: _previewActor, model: "diamond", scale: new(0.65f, 1.05f, 0.65f), color: Rgb(65, 72, 88), unlit: true);
             }
             else if (category == "survivors" && SurvivorDatabase.Classes.TryGetValue(key, out var surv))
             {
+                bool unl = ProgressData.Instance.IsCharacterUnlocked(key);
                 _previewBaseScale = 1.0f;
                 _previewActor.Position = new Vector3(0, 0.12f, 0);
-                _pedestalRing.Color = surv.BodyColor;
-                _previewSurvivorParts = SurvivorDatabase.BuildSurvivorMesh(_previewActor, key);
+                _pedestalRing.Color = unl ? surv.BodyColor : Color.Gray;
+                if (unl)
+                    _previewSurvivorParts = SurvivorDatabase.BuildSurvivorMesh(_previewActor, key);
+                else
+                    new Entity(parent: _previewActor, model: "diamond", scale: new(0.85f, 1.65f, 0.85f), position: new(0, 1.1f, 0), color: Rgb(65, 72, 88), unlit: true);
             }
             else if (category == "monsters")
             {
                 _previewBaseScale = key is "parent" or "elder_lemurian" ? 0.58f : (key is "golem" or "greater_wisp" or "lunar_chimera" or "bison" or "brass_contraption" ? 0.76f : 0.95f);
-                float yOff = key is "wisp" or "jellyfish" or "greater_wisp" or "lunar_chimera" or "brass_contraption" ? -0.75f : 0.12f;
+                float yOff = key is "wisp" or "jellyfish" or "greater_wisp" or "lunar_chimera" or "brass_contraption" or "hell_drone" or "nether_blaze" ? -0.75f : 0.12f;
                 _previewActor.Position = new Vector3(0, yOff, 0);
                 _pedestalRing.Color = Rgb(255, 140, 50);
                 _previewEnemyParts = EnemyAndBossBuilder.BuildEnemyMesh(_previewActor, key);
@@ -1362,40 +1623,67 @@ namespace RiskOfCSharp2
             }
             else if (category == "stages")
             {
+                bool disc = ProgressData.Instance.DiscoveredStages.Contains(key) || (key == "safe_travels" && IsSafeTravelsUnlocked());
                 var pal = GameData.StagePalettes.Find(p => p.Id == key)
                           ?? (GameData.SpecialPalettes.TryGetValue(key, out var sp) ? sp : GameData.StagePalettes[0]);
                 _previewBaseScale = 0.24f;
                 _previewActor.Position = new Vector3(0, 0.45f, 0);
-                _pedestalRing.Color = pal.Accent;
+                _pedestalRing.Color = disc ? pal.Accent : Color.Gray;
+                if (!disc)
+                {
+                    new Entity(parent: _previewActor, model: "diamond", scale: new(3.2f, 4.8f, 3.2f), position: new(0, 2.5f, 0), color: Rgb(65, 72, 88), unlit: true);
+                    return;
+                }
                 var root = new Entity(parent: _previewActor);
                 new Entity(parent: root, model: "sphere", scale: new(9.5f, 1.2f, 9.5f), position: new(0, -0.4f, 0), color: pal.Ground);
                 new Entity(parent: root, model: "diamond", scale: new(10.0f, 0.25f, 10.0f), color: pal.Accent, unlit: true);
-                string stType = key switch
+                if (key == "safe_travels")
                 {
-                    "ionia" => "torii",
-                    "sundered" => "giant_mushroom",
-                    "rallypoint" => "ice_spire",
-                    "sulfur" => "sulfur_geyser",
-                    "aqueduct" => "aqueduct_pillar",
-                    "aphelian" => "sun_temple",
-                    "wetland" => "swamp_root",
-                    "meadow" => "astral_ring",
-                    "roost" or "moon" => "arch",
-                    "acres" or "bazaar" => "monolith",
-                    _ => "crystals"
-                };
-                WorldStructuresBuilder.BuildMapStructure(root, stType, pal, Vector3.Zero, 25f);
+                    new Entity(parent: root, model: "cube", scale: new(2.6f, 1.2f, 7.6f), position: new(0, 2.2f, 0), color: Rgb(185, 200, 222));
+                    new Entity(parent: root, model: "cube", scale: new(4.8f, 0.4f, 2.8f), position: new(0, 2.1f, -1.2f), color: Rgb(95, 118, 152));
+                    new Entity(parent: root, model: "cube", scale: new(1.6f, 0.7f, 2.0f), position: new(0, 3.05f, 2.1f), color: Rgb(80, 220, 255), unlit: true);
+                    foreach (int s in new[] { -1, 1 })
+                        new Entity(parent: root, model: "sphere", scale: new(0.95f, 0.95f, 1.8f), position: new(s * 1.65f, 2.1f, -3.8f), color: Rgb(75, 225, 255), unlit: true);
+                }
+                else
+                {
+                    string stType = key switch
+                    {
+                        "ionia" or "hakurei_shrine" => "torii",
+                        "sundered" => "giant_mushroom",
+                        "rallypoint" => "ice_spire",
+                        "sulfur" or "black_mesa" or "hell_cybergrind" => "sulfur_geyser",
+                        "aqueduct" or "tartarus" => "aqueduct_pillar",
+                        "aphelian" or "tracen_derby" => "sun_temple",
+                        "wetland" => "swamp_root",
+                        "meadow" => "astral_ring",
+                        "roost" or "moon" or "qliphoth" => "arch",
+                        "acres" or "bazaar" or "pizzeria" => "monolith",
+                        _ => "crystals"
+                    };
+                    WorldStructuresBuilder.BuildMapStructure(root, stType, pal, Vector3.Zero, 25f);
+                }
             }
             else if (category == "achievements" && GameData.Achievements.TryGetValue(key, out var ach))
             {
                 bool unlocked = ProgressData.Instance.UnlockedAchievements.Contains(key);
-                _previewBaseScale = 1.45f;
-                _previewActor.Position = new Vector3(0, 1.25f, 0);
-                _pedestalRing.Color = unlocked ? Color.Gold : Color.Gray;
-                if (ach.UnlocksItem != null)
-                    ItemBuilder.BuildItemMesh(_previewActor, ach.UnlocksItem);
+                if (unlocked && !string.IsNullOrEmpty(ach.UnlocksCharacter) && SurvivorDatabase.Classes.TryGetValue(ach.UnlocksCharacter, out var achSurv))
+                {
+                    _previewBaseScale = 1.0f;
+                    _previewActor.Position = new Vector3(0, 0.12f, 0);
+                    _pedestalRing.Color = Color.Gold;
+                    _previewSurvivorParts = SurvivorDatabase.BuildSurvivorMesh(_previewActor, ach.UnlocksCharacter);
+                }
                 else
-                    new Entity(parent: _previewActor, model: "diamond", scale: new(0.75f, 1.15f, 0.75f), color: unlocked ? Color.Gold : Color.Gray, unlit: true);
+                {
+                    _previewBaseScale = 1.45f;
+                    _previewActor.Position = new Vector3(0, 1.25f, 0);
+                    _pedestalRing.Color = unlocked ? Color.Gold : Color.Gray;
+                    if (unlocked && ach.UnlocksItem != null)
+                        ItemBuilder.BuildItemMesh(_previewActor, ach.UnlocksItem);
+                    else
+                        new Entity(parent: _previewActor, model: "diamond", scale: new(0.75f, 1.15f, 0.75f), color: unlocked ? Color.Gold : Rgb(65, 72, 88), unlit: true);
+                }
             }
             else if (category == "modifiers")
             {
@@ -1411,17 +1699,13 @@ namespace RiskOfCSharp2
                 new Entity(parent: relic, model: "cube", scale: new(1.12f, 0.08f, 1.12f), rotation: new(18f, 45f, 0), color: modCol, unlit: true);
                 new Entity(parent: relic, model: "sphere", scale: new(0.42f), color: Color.White, unlit: true);
             }
-
-            if (false)
-            {
-                // placeholder
-            }
         }
 
         private static void TriggerLobbySkillPreview(string charKey, string slot, int variantIdx)
         {
             if (!SurvivorDatabase.Classes.TryGetValue(charKey, out var cfg)) return;
             cfg.SyncLoadout();
+            SoundManager.Play("ui_ready");
 
             float animDur = slot switch
             {
@@ -1452,7 +1736,8 @@ namespace RiskOfCSharp2
             };
 
             string skName = cfg.Skills.TryGetValue(slot, out var sk) ? sk.Name : slot.ToUpper();
-            if (cfg.SkillVariants.TryGetValue(slot, out var vars) && variantIdx >= 0 && variantIdx < vars.Count)
+            var activeVars = cfg.GetActiveSkin().CustomSkillVariants ?? cfg.SkillVariants;
+            if (activeVars.TryGetValue(slot, out var vars) && variantIdx >= 0 && variantIdx < vars.Count)
                 skName = vars[variantIdx].Name;
 
             _skillPreviewTitle = $"▶ АНИМАЦИЯ НАВЫКА [{bindLabel}]: {skName} {(variantIdx == 0 ? "[СТАНД.]" : "[АЛЬТ.]")}";
@@ -1490,7 +1775,7 @@ namespace RiskOfCSharp2
                 return;
             }
 
-            bool isBossModel = key is "boss" or "vagrant" or "overlord" or "magma_worm" or "solus_control" or "mithrix";
+            bool isBossModel = GameData.IsKnownBossType(key);
             if (isBossModel)
             {
                 _previewBaseScale = key == "magma_worm" ? 0.42f : 0.48f;
@@ -1500,7 +1785,7 @@ namespace RiskOfCSharp2
             else
             {
                 _previewBaseScale = key is "parent" or "elder_lemurian" ? 0.58f : (key is "golem" or "greater_wisp" or "lunar_chimera" or "bison" or "brass_contraption" ? 0.76f : 0.95f);
-                float yOff = key is "wisp" or "jellyfish" or "greater_wisp" or "lunar_chimera" or "brass_contraption" ? -0.75f : 0.12f;
+                float yOff = key is "wisp" or "jellyfish" or "greater_wisp" or "lunar_chimera" or "brass_contraption" or "hell_drone" or "nether_blaze" ? -0.75f : 0.12f;
                 _previewActor.Position = new Vector3(0f, yOff, 0f);
             }
 
@@ -1713,15 +1998,38 @@ namespace RiskOfCSharp2
                     Destroy(this);
             }
         }
-        private static void _EndSelectLogbookPlaceholder()
+
+        private static void ConfirmLoginProfile()
         {
-            if (false)
-            {
-            }
+            string finalName = string.IsNullOrWhiteSpace(_playerNameInput) ? "Survivor" : _playerNameInput.Trim();
+            ProgressData.Instance.SetPlayerName(finalName);
+            _playerNameInput = ProgressData.Instance.PlayerName;
+            _screen = "main";
+            if (!ProgressData.Instance.IsSanabiAuthorized() && _selectedChar == "sanabi")
+                SelectCharacter("commando");
+            SoundManager.Play("ui_ready", 0.8f);
+            ShowBanner($"ПРОФИЛЬ ИГРОКА: {finalName}", Color.SkyBlue, 2.2f);
         }
 
         private static void HandleInput(float dt)
         {
+            if (_screen == "login")
+            {
+                int ch = Raylib.GetCharPressed();
+                while (ch > 0)
+                {
+                    char c = (char)ch;
+                    if ((char.IsLetterOrDigit(c) || c is '_' or '-' or '.') && _playerNameInput.Length < 22)
+                        _playerNameInput += c;
+                    ch = Raylib.GetCharPressed();
+                }
+                if (Raylib.IsKeyPressed(KeyboardKey.Backspace) && _playerNameInput.Length > 0)
+                    _playerNameInput = _playerNameInput[..^1];
+                if (Raylib.IsKeyPressed(KeyboardKey.Enter))
+                    ConfirmLoginProfile();
+                return;
+            }
+
             if (_screen == "mp_connect" && _typingCode)
             {
                 int ch = Raylib.GetCharPressed();
@@ -1741,6 +2049,19 @@ namespace RiskOfCSharp2
                 return;
             }
 
+            if (_screen == "logbook" && _logDetailOpen)
+            {
+                if (Raylib.IsKeyPressed(KeyboardKey.Escape))
+                    CloseLogbookDetailPage();
+                return;
+            }
+
+            if (_screen == "logbook" && !_logDetailOpen && Raylib.IsKeyPressed(KeyboardKey.Enter) && !string.IsNullOrEmpty(_logSelectedKey))
+            {
+                OpenLogbookDetailPage(_logCategory, _logSelectedKey, 0);
+                return;
+            }
+
             if (Raylib.IsKeyPressed(KeyboardKey.Escape) && _screen != "main")
             {
                 if (_screen == "lobby") _net.StopSession();
@@ -1757,7 +2078,10 @@ namespace RiskOfCSharp2
             }
 
             bool dragging = Raylib.IsMouseButtonDown(MouseButton.Right) ||
-                            (Raylib.IsMouseButtonDown(MouseButton.Left) && Raylib.GetMouseX() > 760);
+                            (Raylib.IsMouseButtonDown(MouseButton.Left) &&
+                             (_screen == "lobby"
+                                 ? (Raylib.GetMouseX() > 420 && Raylib.GetMouseX() < 910 && Raylib.GetMouseY() > 165 && Raylib.GetMouseY() < 620)
+                                 : Raylib.GetMouseX() > 760));
             if (dragging)
             {
                 Vector2 delta = Raylib.GetMouseDelta();
@@ -1773,6 +2097,9 @@ namespace RiskOfCSharp2
         private static void UpdateDiorama(float dt)
         {
             float t = (float)Raylib.GetTime();
+            float targetPedestalX = _screen == "lobby" ? -0.95f : 1.35f;
+            _mainPedestal.X = Lerp(_mainPedestal.X, targetPedestalX, MathF.Min(1f, dt * 12f));
+            _menuCrystal.X = _mainPedestal.X;
             _menuCrystal.RotationY += 55f * dt;
             _menuCrystal.Y = 3.3f + MathF.Sin(t * 2.5f) * 0.18f;
             _previewActor.Scale = new Vector3(_previewBaseScale * _previewZoom);
@@ -1807,14 +2134,51 @@ namespace RiskOfCSharp2
             Engine.DrawTextCentered("RISK OF C# 2 : КООПЕРАТИВ ПО СЕТИ И КОДУ КОМНАТЫ", sw * 0.5f, 27f, 23f, Rgb(255, 185, 60));
         }
 
+        private static void DrawLoginUI()
+        {
+            DrawHeader();
+            Raylib.DrawRectangle(60, 165, 580, 320, Rgb(14, 18, 30, 244));
+            Raylib.DrawRectangle(60, 165, 580, 4, Color.SkyBlue);
+            Engine.DrawTextCentered("ПРОФИЛЬ ВЫЖИВШЕГО", 350, 204, 24f, Color.White);
+            Engine.DrawTextCentered("Введите ваше имя пользователя:", 350, 240, 16f, Rgb(190, 215, 245));
+
+            bool blink = ((int)(Raylib.GetTime() * 2.5f) % 2) == 0;
+            string shownName = string.IsNullOrEmpty(_playerNameInput)
+                ? (blink ? "_" : "Введите никнейм...")
+                : (_playerNameInput + (blink ? "_" : ""));
+
+            Raylib.DrawRectangle(100, 274, 500, 58, Rgb(22, 30, 48, 250));
+            Raylib.DrawRectangleLines(100, 274, 500, 58, Color.SkyBlue);
+            Engine.DrawTextCentered(shownName, 350, 303, 22f, Color.Yellow);
+
+            if (Engine.DrawButton(new Rectangle(100, 356, 500, 58), "ВОЙТИ В ИГРУ [ENTER]",
+                Rgb(38, 115, 72), Rgb(55, 160, 98), Color.White, 19f, Color.Lime))
+            {
+                ConfirmLoginProfile();
+            }
+
+            if (Engine.DrawButton(new Rectangle(100, 426, 500, 38), "ОЧИСТИТЬ ПОЛЕ ВВОДА [BACKSPACE]", Rgb(55, 36, 44), Rgb(85, 52, 64), Rgb(220, 180, 180), 14f))
+                _playerNameInput = "";
+        }
+
         private static void DrawMainMenuUI()
         {
             DrawHeader();
-            Raylib.DrawRectangle(60, 140, 480, 500, Rgb(14, 18, 30, 238));
-            Raylib.DrawRectangle(60, 140, 480, 4, Color.SkyBlue);
-            Engine.DrawTextCentered("ГЛАВНОЕ МЕНЮ", 300, 180, 24f, Color.White);
+            Raylib.DrawRectangle(60, 118, 480, 628, Rgb(14, 18, 30, 238));
+            Raylib.DrawRectangle(60, 118, 480, 4, Color.SkyBlue);
+            Engine.DrawTextCentered("ГЛАВНОЕ МЕНЮ", 300, 148, 24f, Color.White);
 
-            if (Engine.DrawButton(new Rectangle(100, 225, 400, 56), "ОДИНОЧНАЯ ИГРА", Rgb(38, 105, 70), Rgb(55, 150, 95), Color.White, 19f))
+            string curUser = string.IsNullOrWhiteSpace(ProgressData.Instance.PlayerName) ? "Survivor" : ProgressData.Instance.PlayerName;
+            if (Engine.DrawButton(new Rectangle(100, 174, 400, 36),
+                $"ПРОФИЛЬ: {curUser}  [СМЕНИТЬ НИК]",
+                Rgb(26, 36, 56), Rgb(48, 68, 104),
+                Color.SkyBlue, 14f, Color.SkyBlue))
+            {
+                _playerNameInput = ProgressData.Instance.PlayerName;
+                _screen = "login";
+            }
+
+            if (Engine.DrawButton(new Rectangle(100, 222, 400, 54), "ОДИНОЧНАЯ ИГРА", Rgb(38, 105, 70), Rgb(55, 150, 95), Color.White, 19f))
             {
                 _net.StopSession();
                 _lobbyPlayers.Clear();
@@ -1822,27 +2186,53 @@ namespace RiskOfCSharp2
                 _lobbyCountdownActive = false;
                 _screen = "lobby";
                 SelectCharacter(_selectedChar);
-                SelectCharacter(_selectedChar);
             }
-            if (Engine.DrawButton(new Rectangle(100, 298, 400, 56), "СЕТЕВАЯ ИГРА (КООПЕРАТИВ)", Rgb(40, 85, 145), Rgb(60, 125, 205), Color.White, 19f))
+
+            bool shipUnl = IsSafeTravelsUnlocked();
+            string shipLabel = shipUnl
+                ? "★ КОРАБЛЬ UES «SAFE TRAVELS»"
+                : "[ЗАКРЫТО] КОРАБЛЬ «SAFE TRAVELS»";
+            if (Engine.DrawButton(new Rectangle(100, 286, 400, 58), shipLabel,
+                shipUnl ? Rgb(28, 78, 128) : Rgb(36, 34, 46),
+                shipUnl ? Rgb(48, 116, 186) : Rgb(56, 50, 68),
+                shipUnl ? Color.Yellow : Rgb(165, 175, 195), 17f,
+                shipUnl ? Color.SkyBlue : Color.Gray))
+            {
+                if (shipUnl)
+                {
+                    EnterSafeTravels(_selectedChar);
+                }
+                else
+                {
+                    SoundManager.Play("ui_error");
+                    ShowBanner("ПОБЕДИТЕ МИТРИКСА НА ЛУНЕ ХОТЯ БЫ 1 РАЗ, ЧТОБЫ ПОДНЯТЬСЯ НА БОРТ UES «SAFE TRAVELS»!", Color.Orange, 4.0f);
+                }
+            }
+            Engine.DrawTextCentered(
+                shipUnl ? "Хаб выживших: каюты, полигон урона и диалоги всего экипажа" : "Условие: одолейте Митрикса хотя бы один раз",
+                300f, 354f, 12f, shipUnl ? Rgb(120, 225, 255) : Rgb(155, 165, 185));
+
+            if (Engine.DrawButton(new Rectangle(100, 368, 400, 54), "СЕТЕВАЯ ИГРА (КООПЕРАТИВ)", Rgb(40, 85, 145), Rgb(60, 125, 205), Color.White, 19f))
             {
                 _typingCode = false;
                 _netStatusText = $"Ваш локальный IP: {_net.HostIp}";
                 _screen = "mp_connect";
             }
-            if (Engine.DrawButton(new Rectangle(100, 371, 400, 56), "ЖУРНАЛ ВЫЖИВШЕГО", Rgb(125, 75, 165), Rgb(165, 105, 215), Color.White, 19f))
+            if (Engine.DrawButton(new Rectangle(100, 434, 400, 54), "ЖУРНАЛ ВЫЖИВШЕГО", Rgb(125, 75, 165), Rgb(165, 105, 215), Color.White, 19f))
             {
+                _logDetailOpen = false;
                 _screen = "logbook";
                 var list = GetLogEntries(_logCategory);
                 if (list.Count > 0) SelectLogbookEntry(_logCategory, list[0].Key);
             }
-            if (Engine.DrawButton(new Rectangle(100, 444, 400, 56), "НАСТРОЙКИ", Rgb(65, 72, 95), Rgb(95, 105, 135), Color.White, 19f))
+            if (Engine.DrawButton(new Rectangle(100, 500, 400, 54), "НАСТРОЙКИ", Rgb(65, 72, 95), Rgb(95, 105, 135), Color.White, 19f))
             {
                 _screen = "settings";
             }
-            if (Engine.DrawButton(new Rectangle(100, 517, 400, 56), "ВЫХОД ИЗ ИГРЫ", Rgb(135, 40, 45), Rgb(185, 60, 65), Color.White, 19f))
+            if (Engine.DrawButton(new Rectangle(100, 566, 400, 54), "ВЫХОД ИЗ ИГРЫ", Rgb(135, 40, 45), Rgb(185, 60, 65), Color.White, 19f))
             {
                 _net.StopSession();
+                SoundManager.Shutdown();
                 Raylib.CloseWindow();
                 Environment.Exit(0);
             }
@@ -1922,139 +2312,362 @@ namespace RiskOfCSharp2
         private static void DrawSettingsUI()
         {
             DrawHeader();
-            Raylib.DrawRectangle(60, 130, 580, 520, Rgb(14, 18, 30, 240));
-            Raylib.DrawRectangle(60, 130, 580, 4, Color.Gold);
-            Engine.DrawTextCentered("НАСТРОЙКИ ИГРЫ", 350, 168, 22f, Color.Gold);
+            Raylib.DrawRectangle(60, 110, 580, 620, Rgb(14, 18, 30, 240));
+            Raylib.DrawRectangle(60, 110, 580, 4, Color.Gold);
+            Engine.DrawTextCentered("НАСТРОЙКИ ИГРЫ И ЗВУКА", 350, 142, 22f, Color.Gold);
 
-            Engine.DrawTextLeft($"Чувствительность мыши: {(int)(_mouseSens * 250f)}", 95, 232, 18f, Color.White);
-            if (Engine.DrawButton(new Rectangle(460, 224, 52, 40), "-", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+            Engine.DrawTextLeft($"Чувствительность мыши: {(int)(_mouseSens * 250f)}", 95, 192, 18f, Color.White);
+            if (Engine.DrawButton(new Rectangle(460, 184, 52, 38), "-", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
                 _mouseSens = Math.Clamp(_mouseSens - 0.02f, 0.04f, 0.50f);
-            if (Engine.DrawButton(new Rectangle(524, 224, 52, 40), "+", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+            if (Engine.DrawButton(new Rectangle(524, 184, 52, 38), "+", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
                 _mouseSens = Math.Clamp(_mouseSens + 0.02f, 0.04f, 0.50f);
 
-            Engine.DrawTextLeft($"Угол обзора камеры (FOV): {(int)_fov}", 95, 302, 18f, Color.White);
-            if (Engine.DrawButton(new Rectangle(460, 294, 52, 40), "-", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+            Engine.DrawTextLeft($"Угол обзора камеры (FOV): {(int)_fov}", 95, 244, 18f, Color.White);
+            if (Engine.DrawButton(new Rectangle(460, 236, 52, 38), "-", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
                 _fov = Math.Clamp(_fov - 5f, 45f, 95f);
-            if (Engine.DrawButton(new Rectangle(524, 294, 52, 40), "+", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+            if (Engine.DrawButton(new Rectangle(524, 236, 52, 38), "+", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
                 _fov = Math.Clamp(_fov + 5f, 45f, 95f);
 
+            Engine.DrawTextLeft($"Общая громкость: {(int)MathF.Round(SoundManager.MasterVolume * 100f)}%", 95, 296, 18f, Color.SkyBlue);
+            if (Engine.DrawButton(new Rectangle(460, 288, 52, 38), "-", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+                SoundManager.SetMasterVolume(SoundManager.MasterVolume - 0.10f);
+            if (Engine.DrawButton(new Rectangle(524, 288, 52, 38), "+", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+                SoundManager.SetMasterVolume(SoundManager.MasterVolume + 0.10f);
+
+            Engine.DrawTextLeft($"Громкость эффектов (SFX): {(int)MathF.Round(SoundManager.SfxVolume * 100f)}%", 95, 348, 18f, Color.SkyBlue);
+            if (Engine.DrawButton(new Rectangle(460, 340, 52, 38), "-", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+                SoundManager.SetSfxVolume(SoundManager.SfxVolume - 0.10f);
+            if (Engine.DrawButton(new Rectangle(524, 340, 52, 38), "+", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+                SoundManager.SetSfxVolume(SoundManager.SfxVolume + 0.10f);
+
+            Engine.DrawTextLeft($"Фоновый синтезатор: {(int)MathF.Round(SoundManager.AmbientVolume * 100f)}%", 95, 400, 18f, Color.SkyBlue);
+            if (Engine.DrawButton(new Rectangle(460, 392, 52, 38), "-", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+                SoundManager.SetAmbientVolume(SoundManager.AmbientVolume - 0.05f);
+            if (Engine.DrawButton(new Rectangle(524, 392, 52, 38), "+", Rgb(45, 55, 75), Rgb(70, 85, 115), Color.White, 20f))
+                SoundManager.SetAmbientVolume(SoundManager.AmbientVolume + 0.05f);
+
+            if (Engine.DrawButton(new Rectangle(160, 452, 380, 44),
+                $"ЗВУК В ИГРЕ: {(SoundManager.Muted ? "ВЫКЛЮЧЕН (MUTE)" : "ВКЛЮЧЕН")}",
+                SoundManager.Muted ? Rgb(115, 42, 48) : Rgb(38, 95, 68),
+                SoundManager.Muted ? Rgb(155, 58, 65) : Rgb(55, 135, 95), Color.White, 17f))
+            {
+                SoundManager.ToggleMute();
+            }
+
             bool isFs = Raylib.IsWindowFullscreen();
-            if (Engine.DrawButton(new Rectangle(160, 380, 380, 48), $"ПОЛНЫЙ ЭКРАН: {(isFs ? "ВКЛ" : "ВЫКЛ")}", Rgb(45, 65, 95), Rgb(65, 95, 135), Color.White, 18f))
+            if (Engine.DrawButton(new Rectangle(160, 508, 380, 44), $"ПОЛНЫЙ ЭКРАН: {(isFs ? "ВКЛ" : "ВЫКЛ")}", Rgb(45, 65, 95), Rgb(65, 95, 135), Color.White, 17f))
                 Raylib.ToggleFullscreen();
 
-            if (Engine.DrawButton(new Rectangle(160, 560, 380, 50), "<- НАЗАД В ГЛАВНОЕ МЕНЮ", Rgb(60, 65, 82), Rgb(85, 92, 115), Color.White, 17f))
+            if (Engine.DrawButton(new Rectangle(160, 566, 380, 48), "<- НАЗАД В ГЛАВНОЕ МЕНЮ", Rgb(60, 65, 82), Rgb(85, 92, 115), Color.White, 17f))
                 _screen = "main";
         }
+
+        private static void DrawWrappedText(string text, float x, float y, int maxCharsPerLine, float fontSize, Color col, int maxLines = 3, float lineStep = 18f)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            string clean = text.Replace("\r", "").Replace("\n", " ");
+            string[] words = clean.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            int curLine = 0;
+            string line = "";
+
+            for (int i = 0; i < words.Length; i++)
+            {
+                string candidate = string.IsNullOrEmpty(line) ? words[i] : $"{line} {words[i]}";
+                if (candidate.Length > maxCharsPerLine && !string.IsNullOrEmpty(line))
+                {
+                    if (curLine == maxLines - 1)
+                    {
+                        string ell = line.Length > maxCharsPerLine - 3 ? line[..(maxCharsPerLine - 3)] + "..." : line + "...";
+                        Engine.DrawTextLeft(ell, x, y + curLine * lineStep, fontSize, col);
+                        return;
+                    }
+                    Engine.DrawTextLeft(line, x, y + curLine * lineStep, fontSize, col);
+                    curLine++;
+                    line = words[i];
+                }
+                else
+                {
+                    line = candidate;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(line) && curLine < maxLines)
+            {
+                Engine.DrawTextLeft(line, x, y + curLine * lineStep, fontSize, col);
+            }
+        }
+
+        private static string GetReadableRosterName(string key, SurvivorConfig scfg) => key switch
+        {
+            "commando" => "Коммандо",
+            "artificer" => "Изобретатель",
+            "huntress" => "Охотница",
+            "buzz" => "Базз Лайтер",
+            "v1" => "V1 (ULTRAKILL)",
+            "sol" => "Сол Бэдгай",
+            "gwen" => "Гвен (LoL)",
+            "enforcer" => "Силовик",
+            "scout" => "Разведчик TF2",
+            "m4a1" => "M4A1 (GFL)",
+            "medic" => "Медик TF2",
+            "aigis" => "Айгис (P3)",
+            "reimu" => "Рейму Хакурей",
+            "mindustry" => "Ядро Mindustry",
+            "slark" => "Сларк (Dota)",
+            "tidehunter" => "Тайдхантер",
+            "freeman" => "Гордон Фриман",
+            "dante" => "Данте (Limbus)",
+            "cheburashka" => "Чебурашка",
+            "ahri" => "Ари (LoL)",
+            "lappland" => "Лаппланд",
+            "w_arknights" => "W / Вишадель",
+            "gold_ship" => "Голд Шип",
+            "pushnoy" => "А. Пушной",
+            "freddy" => "Мишка Фредди",
+            "steve" => "Стив (Minecraft)",
+            "jotaro" => "Джотаро Куджо",
+            "vyper" => "Вайпер",
+            "haze" => "Хейз (Deadlock)",
+            "dmc_trio" => "Трио DMC",
+            "jack_o" => "Джек-О Валентайн",
+            "sanabi" => "SANABI (Генерал)",
+            _ => scfg.Name
+        };
 
         private static void DrawLobbyUI()
         {
             DrawHeader();
-            int sw = Raylib.GetScreenWidth();
+            if (_selectedChar == "sanabi" && !Data.ProgressData.Instance.IsSanabiAuthorized())
+                _selectedChar = "commando";
+
             var cfg = SurvivorDatabase.Classes[_selectedChar];
-            for (int i = 0; i < SurvivorDatabase.OrderedKeys.Length; i++)
+            cfg.SyncLoadout();
+            var prog = Data.ProgressData.Instance;
+            var activeSkin = cfg.GetActiveSkin();
+            var rosterKeys = SurvivorDatabase.GetVisibleRosterKeys();
+
+            // =========================================================================
+            // 1. ЛЕВАЯ КОЛОНКА (x = 18..408): СПИСОК ПЕРСОНАЖЕЙ С ОТМЕТКАМИ ОТКРЫТИЯ
+            // =========================================================================
+            Raylib.DrawRectangle(18, 66, 390, 782, Rgb(12, 16, 28, 244));
+            Raylib.DrawRectangle(18, 66, 390, 4, Color.SkyBlue);
+            int unlockedHeroCount = 0;
+            foreach (var rk in rosterKeys) if (prog.IsCharacterUnlocked(rk)) unlockedHeroCount++;
+            Engine.DrawTextLeft($"ВЫБОР ГЕРОЯ ({unlockedHeroCount}/{rosterKeys.Count} ОТКРЫТО)", 30, 76, 16f, Color.SkyBlue);
+
+            for (int i = 0; i < rosterKeys.Count; i++)
             {
-                string k = SurvivorDatabase.OrderedKeys[i];
+                string k = rosterKeys[i];
                 var scfg = SurvivorDatabase.Classes[k];
-                int row = i / 10, col = i % 10;
-                Rectangle rect = new(36 + col * 72, 70 + row * 46, 68, 38);
+                int row = i / 2, col = i % 2;
+                int bx = 28 + col * 188;
+                int by = 100 + row * 39;
+                Rectangle rect = new(bx, by, 182, 35);
                 bool isSel = k == _selectedChar;
-                if (Engine.DrawButton(rect, scfg.Icon, Rgb(22, 28, 42, 245), scfg.BodyColor,
-                    isSel ? Color.Yellow : Color.White, 14f, isSel ? Color.White : scfg.BodyColor))
+                bool isUnlocked = prog.IsCharacterUnlocked(k);
+                bool isSanabi = k == "sanabi";
+
+                string readableName = GetReadableRosterName(k, scfg);
+                string btnTitle = isUnlocked
+                    ? (isSanabi ? "★ " : "") + readableName
+                    : $"[ЗАКР.] {readableName}";
+                Color bgCol = isSel
+                    ? Rgb(44, 86, 148, 250)
+                    : (isSanabi ? Rgb(54, 36, 20, 245) : (isUnlocked ? Rgb(20, 26, 40, 240) : Rgb(14, 16, 24, 235)));
+                Color borderCol = isSel
+                    ? Color.Yellow
+                    : (isSanabi ? Color.Gold : (isUnlocked ? Rgb(scfg.BodyColor.R, scfg.BodyColor.G, scfg.BodyColor.B, 140) : Rgb(75, 82, 98, 130)));
+                Color txtCol = isSel
+                    ? Color.Yellow
+                    : (isSanabi ? Color.Gold : (isUnlocked ? Color.White : Rgb(132, 142, 162)));
+
+                if (Engine.DrawButton(rect, btnTitle, bgCol, Rgb(56, 98, 165), txtCol, 12.5f, borderCol))
                 {
                     SelectCharacter(k);
+                    if (!isUnlocked)
+                    {
+                        var (howTo, _) = GetCharacterUnlockInfo(k);
+                        ShowBanner($"КАК ОТКРЫТЬ «{scfg.Name}»: {howTo}", Color.Orange, 3.8f);
+                    }
                 }
+                // Цветной маркер героя слева на кнопке
+                Raylib.DrawRectangle(bx, by, 5, 35, isSel ? Color.Yellow : (isUnlocked ? scfg.BodyColor : Rgb(70, 75, 90)));
             }
 
-            DrawLobbyCharacterPanel(cfg);
-            if (_lobbyTab == "__legacy__")
-            {
-                Raylib.DrawRectangle(36, 172, 680, 640, Rgb(12, 16, 28, 238));
-            Raylib.DrawRectangle(36, 172, 680, 4, cfg.BodyColor);
-            Engine.DrawTextLeft(cfg.Name, 56, 188, 27f, cfg.BodyColor);
-            Engine.DrawTextLeft(cfg.Subtitle, 56, 222, 18f, Rgb(175, 210, 245));
-            Engine.DrawTextLeft($"HP: {cfg.Hp}   |   Скорость: {cfg.Speed}   |   Урон: {cfg.Damage}   |   Атака: {cfg.FireRate}/с", 56, 252, 17f, Color.Gold);
-
-            float sy = 294f;
-            foreach (var skKey in new[] { "m1", "m2", "shift", "r" })
-            {
-                if (!cfg.Skills.TryGetValue(skKey, out var sk)) continue;
-                Engine.DrawTextLeft($"• {sk.Name} (КД: {sk.Cd}с)", 56, sy, 18f, Color.SkyBlue);
-                Engine.DrawTextLeft($"  {sk.Desc}", 56, sy + 24f, 16f, Color.White);
-                sy += 64f;
-            }
-            }
-
-            // Панель статуса комнаты справа сверху
-            var diffInfo = GameData.GetActiveDifficulty();
-            string artSummary = GameData.ActiveArtifacts.Count == 0
-                ? "Артефакты: Выкл. (0/10)"
-                : $"Артефакты ({GameData.ActiveArtifacts.Count}): " + string.Join(", ", System.Linq.Enumerable.Select(GameData.ActiveArtifacts, ak => GameData.RunArtifacts[ak].Short));
-
-            // Панель статуса комнаты и модификаторов справа сверху
-            Raylib.DrawRectangle(sw - 470, 74, 434, 244, Rgb(12, 16, 28, 232));
-            Raylib.DrawRectangle(sw - 470, 74, 434, 3, diffInfo.Color);
-            Engine.DrawTextLeft($"СЛОЖНОСТЬ: {diffInfo.Name} (x{diffInfo.ScaleMult:F2})", sw - 452, 238, 15f, diffInfo.Color);
-            Engine.DrawTextLeft(artSummary, sw - 452, 260, 13f, GameData.ActiveArtifacts.Count > 0 ? Color.Gold : Rgb(160, 180, 210));
-            if (Engine.DrawButton(new Rectangle(sw - 452, 282, 398, 28), "4. ВЫБРАТЬ СЛОЖНОСТЬ И АРТЕФАКТЫ ЗАБЕГА ->",
-                Rgb(34, 52, 86), Rgb(52, 82, 132), Color.Yellow, 13f, diffInfo.Color))
-            {
-                _lobbyTab = "modifiers";
-            }
-
-            if (_skillPreviewTimer > 0f || _lobbyTab is "loadout" or "skills")
-            {
-                Color pCol = _skillPreviewTimer > 0f ? _skillPreviewColor : cfg.GetActiveSkin().PrimaryColor;
-                string pTxt = _skillPreviewTimer > 0f
-                    ? _skillPreviewTitle
-                    : "3D-ПРЕВЬЮ: Нажмите на способность в «Снаряжении» для просмотра анимации";
-                Raylib.DrawRectangle(sw - 470, 326, 434, 36, Rgb(14, 20, 34, 238));
-                Raylib.DrawRectangle(sw - 470, 326, 4, 36, pCol);
-                Engine.DrawTextLeft(pTxt, sw - 456, 336, 13f, _skillPreviewTimer > 0f ? Color.Yellow : Rgb(185, 215, 245));
-            }
             if (!_net.Connected)
             {
-                Engine.DrawTextLeft("РЕЖИМ: ОДИНОЧНАЯ ИГРА", sw - 450, 90, 18f, Color.SkyBlue);
-                Engine.DrawTextLeft($"Выживший: {cfg.Name}\nНажмите кнопку ниже для старта.", sw - 450, 122, 16f, Color.White);
-            }
-            else
-            {
-                Engine.DrawTextLeft($"КОМНАТА: {_net.RoomCode} ({_net.Mode?.ToUpper()})", sw - 450, 90, 18f, Color.Lime);
-                int ly = 120;
-                Engine.DrawTextLeft($"• ВЫ [{_net.MyId.ToUpper()}]: {cfg.Name} — [{(_myReady ? "ГОТОВ ✓" : "ВЫБИРАЕТ")}]", sw - 450, ly, 16f, Color.White);
-                foreach (var kv in _lobbyPlayers)
+                bool shipUnlLobby = IsSafeTravelsUnlocked();
+                if (Engine.DrawButton(new Rectangle(28, 746, 370, 40),
+                    shipUnlLobby ? "★ НА БОРТ UES «SAFE TRAVELS»" : "[ЗАКР.] UES «SAFE TRAVELS» (ПОБЕДИТЕ МИТРИКСА)",
+                    shipUnlLobby ? Rgb(28, 76, 126) : Rgb(28, 28, 38),
+                    shipUnlLobby ? Rgb(48, 114, 182) : Rgb(44, 44, 58),
+                    shipUnlLobby ? Color.Yellow : Color.Gray, 13f,
+                    shipUnlLobby ? Color.SkyBlue : Color.Gray))
                 {
-                    ly += 24;
-                    string cName = SurvivorDatabase.Classes.TryGetValue(kv.Value.CharKey, out var sc) ? sc.Name : "COMMANDO";
-                    Engine.DrawTextLeft($"• ИГРОК [{kv.Key.ToUpper()}]: {cName} — [{(kv.Value.Ready ? "ГОТОВ ✓" : "ВЫБИРАЕТ")}]", sw - 450, ly, 16f, Color.SkyBlue);
-                }
-                if (_lobbyCountdownActive)
-                    Engine.DrawTextCentered($"ДО СТАРТА: {_lobbyCountdown:F1} СЕК.", sw - 253, 240, 18f, Color.Yellow);
-            }
-
-            string startLabel = !_net.Connected
-                ? "НАЧАТЬ ЗАБЕГ (СТАРТ) [ENTER]"
-                : (_myReady ? "ВЫ ГОТОВЫ ✓ (ОЖИДАНИЕ)" : "ГОТОВ К БОЮ! [ENTER]");
-            if (Engine.DrawButton(new Rectangle(sw - 470, 700, 434, 62), startLabel,
-                Rgb(38, 120, 70), Rgb(55, 165, 95), Color.White, 20f, Color.Lime) || Raylib.IsKeyPressed(KeyboardKey.Enter))
-            {
-                if (!_net.Connected)
-                {
-                    StartRun(_selectedChar);
-                }
-                else if (!_myReady)
-                {
-                    _myReady = true;
-                    BroadcastLobbyState();
-                    EvaluateLobbyCountdown();
+                    if (shipUnlLobby) EnterSafeTravels(_selectedChar);
+                    else
+                    {
+                        SoundManager.Play("ui_error");
+                        ShowBanner("ПОБЕДИТЕ МИТРИКСА ХОТЯ БЫ 1 РАЗ, ЧТОБЫ ОТКРЫТЬ КОРАБЛЬ UES «SAFE TRAVELS»!", Color.Orange, 3.5f);
+                    }
                 }
             }
 
-            if (Engine.DrawButton(new Rectangle(sw - 470, 774, 434, 42), "<- ПОКИНУТЬ ЛОББИ [ESC]", Rgb(85, 40, 48), Rgb(125, 55, 65), Color.White, 16f))
+            if (Engine.DrawButton(new Rectangle(28, 792, 370, 44), "<- ВЫЙТИ В ГЛАВНОЕ МЕНЮ [ESC]",
+                Rgb(82, 38, 46), Rgb(122, 54, 64), Color.White, 15f))
             {
                 _net.StopSession();
                 _lobbyPlayers.Clear();
                 _screen = "main";
             }
+
+            // =========================================================================
+            // 2. ЦЕНТРАЛЬНАЯ ВИТРИНА (x = 420..908): КАРТОЧКА СТАТОВ, 3D-МОДЕЛЬ И СКИНЫ
+            // =========================================================================
+            // Верхняя плашка имени, подзаголовка и 4 ключевых статов
+            Raylib.DrawRectangle(420, 66, 488, 92, Rgb(12, 16, 28, 238));
+            Raylib.DrawRectangle(420, 66, 488, 4, activeSkin.PrimaryColor);
+
+            string heroDisplayTitle = activeSkin.CustomSkillVariants != null
+                ? $"{cfg.Name} :: {activeSkin.Name.ToUpper()}"
+                : cfg.Name;
+            Engine.DrawTextCentered(heroDisplayTitle, 664f, 84f, 22f, activeSkin.PrimaryColor);
+            Engine.DrawTextCentered(cfg.Subtitle, 664f, 108f, 13f, Rgb(185, 215, 245));
+
+            // 4 аккуратных индикатора характеристик
+            (string lbl, string val, Color c)[] statPills =
+            {
+                ("ЗДОРОВЬЕ", $"{cfg.Hp} HP", Rgb(95, 230, 110)),
+                ("УРОН", $"{cfg.Damage}", Rgb(255, 195, 65)),
+                ("СКОРОСТЬ", $"{cfg.Speed} м/с", Color.SkyBlue),
+                ("АТАКА", $"{cfg.FireRate}/с", Rgb(235, 130, 255))
+            };
+            for (int si = 0; si < statPills.Length; si++)
+            {
+                int px = 430 + si * 118;
+                Raylib.DrawRectangle(px, 124, 112, 26, Rgb(20, 28, 44, 235));
+                Engine.DrawTextCentered($"{statPills[si].lbl}: {statPills[si].val}", px + 56, 137, 12f, statPills[si].c);
+            }
+
+            // Подсказка вращения 3D-модели или баннер активного превью навыка
+            if (_skillPreviewTimer > 0f)
+            {
+                Raylib.DrawRectangle(420, 580, 488, 34, Rgb(14, 20, 34, 240));
+                Raylib.DrawRectangle(420, 580, 4, 34, _skillPreviewColor);
+                Engine.DrawTextCentered(_skillPreviewTitle, 664f, 597f, 13f, Color.Yellow);
+            }
+            else
+            {
+                Raylib.DrawRectangle(460, 584, 408, 26, Rgb(10, 14, 24, 175));
+                Engine.DrawTextCentered("Зажмите ЛКМ/ПКМ по герою для вращения  |  Колесо — масштаб", 664f, 597f, 12f, Rgb(170, 195, 225));
+            }
+
+            // Панель быстрого выбора Скина / Альтернативной Версии прямо под 3D-моделью!
+            Raylib.DrawRectangle(420, 620, 488, 84, Rgb(12, 16, 28, 242));
+            Raylib.DrawRectangle(420, 620, 488, 3, Color.Gold);
+            string skinHeader = cfg.Skins.Exists(s => s.CustomSkillVariants != null)
+                ? "ВЫБОР ОБЛИКА / ВЕРСИИ ГЕРОЯ (МЕНЯЕТ НАВЫКИ ★):"
+                : "ВЫБОР ОБЛИКА (СКИНА) ГЕРОЯ:";
+            Engine.DrawTextLeft(skinHeader, 432, 628, 13f, Color.Gold);
+
+            int curSkinIdx = prog.GetSelectedSkin(_selectedChar);
+            for (int si = 0; si < cfg.Skins.Count; si++)
+            {
+                var skDef = cfg.Skins[si];
+                bool unlocked = prog.IsSkinUnlocked(_selectedChar, si, skDef.UnlockAchievementKey);
+                bool selected = curSkinIdx == si && unlocked;
+                Rectangle sRect = new(430 + si * 158, 648, 152, 48);
+
+                string prefix = !unlocked ? "[ЗАКР.] " : (skDef.CustomSkillVariants != null ? "★ " : "");
+                string btnLabel = skDef.CustomSkillVariants != null
+                    ? $"{prefix}{skDef.Name}\n[НОВЫЕ НАВЫКИ]"
+                    : $"{prefix}{skDef.Name}";
+
+                Color bgCol = selected
+                    ? Rgb(48, 95, 160)
+                    : (unlocked ? Rgb(24, 32, 50) : Rgb(18, 20, 28));
+                Color borderCol = selected
+                    ? Color.Yellow
+                    : (unlocked ? skDef.PrimaryColor : Color.Gray);
+
+                if (Engine.DrawButton(sRect, btnLabel, bgCol, Rgb(65, 115, 185),
+                    unlocked ? (selected ? Color.Yellow : Color.White) : Color.Gray, 12f, borderCol))
+                {
+                    if (unlocked)
+                    {
+                        prog.SetSelectedSkin(_selectedChar, si);
+                        SelectCharacter(_selectedChar);
+                    }
+                    else
+                    {
+                        SoundManager.Play("ui_error");
+                        ShowBanner($"ОБЛИК ЗАКРЫТ :: {GetSkinUnlockInfo(cfg, si)}", Color.Orange, 3.2f);
+                    }
+                }
+            }
+
+            // Крупная кнопка старта забега
+            bool isSelectedUnlocked = prog.IsCharacterUnlocked(_selectedChar);
+            if (isSelectedUnlocked)
+            {
+                string startLabel = !_net.Connected
+                    ? "НАЧАТЬ ЗАБЕГ (СТАРТ) [ENTER]"
+                    : (_myReady ? "ВЫ ГОТОВЫ ✓ (ОЖИДАНИЕ ИГРОКОВ)" : "ГОТОВ К БОЮ! [ENTER]");
+                if (Engine.DrawButton(new Rectangle(420, 712, 488, 62), startLabel,
+                    Rgb(36, 122, 70), Rgb(54, 168, 96), Color.White, 20f, Color.Lime) || Raylib.IsKeyPressed(KeyboardKey.Enter))
+                {
+                    if (!_net.Connected)
+                    {
+                        StartRun(_selectedChar);
+                    }
+                    else if (!_myReady)
+                    {
+                        _myReady = true;
+                        SoundManager.Play("ui_ready");
+                        BroadcastLobbyState();
+                        EvaluateLobbyCountdown();
+                    }
+                }
+            }
+            else
+            {
+                var (howToUnlock, _) = GetCharacterUnlockInfo(_selectedChar);
+                Raylib.DrawRectangle(420, 712, 488, 62, Rgb(44, 20, 28, 246));
+                Raylib.DrawRectangleLines(420, 712, 488, 62, Color.Orange);
+                Raylib.DrawRectangle(420, 712, 5, 62, Color.Orange);
+                Engine.DrawTextLeft("★ ПЕРСОНАЖ ЗАКРЫТ — УСЛОВИЕ РАЗБЛОКИРОВКИ:", 434, 717, 13f, Color.Gold);
+                DrawWrappedText(howToUnlock, 434, 735, 58, 12.5f, Color.White, maxLines: 2, lineStep: 16f);
+                if ((Raylib.CheckCollisionPointRec(Raylib.GetMousePosition(), new Rectangle(420, 712, 488, 62))
+                     && Raylib.IsMouseButtonPressed(MouseButton.Left)) || Raylib.IsKeyPressed(KeyboardKey.Enter))
+                {
+                    SoundManager.Play("ui_error");
+                    ShowBanner($"КАК ОТКРЫТЬ «{cfg.Name}»: {howToUnlock}", Color.Orange, 3.8f);
+                }
+            }
+
+            // Компактная плашка статуса комнаты и сложности под кнопкой старта
+            var diffInfo = GameData.GetActiveDifficulty();
+            Raylib.DrawRectangle(420, 782, 488, 66, Rgb(12, 16, 28, 238));
+            Raylib.DrawRectangle(420, 782, 4, 66, diffInfo.Color);
+            if (!_net.Connected)
+            {
+                Engine.DrawTextLeft($"РЕЖИМ: Одиночная игра  |  Сложность: {diffInfo.Name} (x{diffInfo.ScaleMult:F2})", 434, 792, 14f, diffInfo.Color);
+                string artTxt = GameData.ActiveArtifacts.Count == 0
+                    ? "Артефакты забега: Выключены (0/10)"
+                    : $"Активные артефакты ({GameData.ActiveArtifacts.Count}): " + string.Join(", ", System.Linq.Enumerable.Select(GameData.ActiveArtifacts, ak => GameData.RunArtifacts[ak].Short));
+                Engine.DrawTextLeft(artTxt, 434, 816, 13f, GameData.ActiveArtifacts.Count > 0 ? Color.Gold : Rgb(165, 185, 210));
+            }
+            else
+            {
+                string cdTxt = _lobbyCountdownActive ? $"  |  СТАРТ ЧЕРЕЗ {_lobbyCountdown:F1}С" : "";
+                Engine.DrawTextLeft($"КОМНАТА: {_net.RoomCode} [{_net.Mode?.ToUpper()}]{cdTxt}", 434, 792, 14f, Color.Lime);
+                Engine.DrawTextLeft($"Игроков в лобби: {1 + _lobbyPlayers.Count}  |  Сложность: {diffInfo.Name}", 434, 816, 13f, Color.SkyBlue);
+            }
+
+            // =========================================================================
+            // 3. ПРАВАЯ КОЛОНКА (x = 920..1518): НАВЫКИ, ДОСЬЕ И МОДИФИКАТОРЫ
+            // =========================================================================
+            DrawLobbyCharacterPanel(cfg);
         }
 
         private static void DrawLobbyCharacterPanel(SurvivorConfig cfg)
@@ -2063,250 +2676,175 @@ namespace RiskOfCSharp2
             var prog = Data.ProgressData.Instance;
             var activeSkin = cfg.GetActiveSkin();
 
-            // Основная подложка левой панели персонажа
-            Raylib.DrawRectangle(36, 168, 684, 650, Rgb(12, 16, 28, 242));
-            Raylib.DrawRectangle(36, 168, 684, 4, activeSkin.PrimaryColor);
+            int px = 920, py = 66, pw = 598, ph = 782;
+            Raylib.DrawRectangle(px, py, pw, ph, Rgb(12, 16, 28, 244));
+            Raylib.DrawRectangle(px, py, pw, 4, activeSkin.PrimaryColor);
 
-            // Шапка персонажа + активный скин
-            Engine.DrawTextLeft(cfg.Name, 54, 180, 26f, activeSkin.PrimaryColor);
-            Engine.DrawTextLeft(cfg.Subtitle, 54, 210, 16f, Rgb(175, 210, 245));
-            string skinBadge = activeSkin.ChangesModel ? $"★ МОДЕЛЬ: {activeSkin.Name}" : $"ОБЛИК: {activeSkin.Name}";
-            Engine.DrawTextLeft(skinBadge, 440, 186, 14f, activeSkin.ChangesModel ? Color.Gold : activeSkin.AccentColor);
+            if (_lobbyTab == "loadout") _lobbyTab = "skills";
 
-            // 4 КНОПКИ ВКЛАДОК: ОБЗОР | НАВЫКИ | СНАРЯЖЕНИЕ | МОДИФИКАТОРЫ
+            // 3 ЧИСТЫЕ И ПОНЯТНЫЕ ВКЛАДКИ СПРАВА
             (string tabId, string tabTitle)[] lobbyTabs =
             {
-                ("overview", "1. ОБЗОР"),
-                ("skills", "2. НАВЫКИ"),
-                ("loadout", "3. СНАРЯЖЕНИЕ"),
-                ("modifiers", "4. МОДИФИКАТОРЫ")
+                ("skills", "1. НАВЫКИ И СНАРЯЖЕНИЕ"),
+                ("overview", "2. ДОСЬЕ И ОПИСАНИЕ"),
+                ("modifiers", $"3. СЛОЖНОСТЬ ({GameData.ActiveArtifacts.Count})")
             };
             for (int ti = 0; ti < lobbyTabs.Length; ti++)
             {
                 var (tid, ttitle) = lobbyTabs[ti];
                 bool isTab = _lobbyTab == tid;
-                Rectangle tRect = new(54 + ti * 164, 236, 156, 38);
+                Rectangle tRect = new(px + 14 + ti * 192, py + 12, 186, 40);
                 if (Engine.DrawButton(tRect, ttitle,
                     isTab ? Rgb(45, 92, 158) : Rgb(22, 28, 44),
                     Rgb(65, 120, 195),
-                    isTab ? Color.Yellow : Color.White, 14f,
+                    isTab ? Color.Yellow : Color.White, 13f,
                     isTab ? Color.Yellow : activeSkin.PrimaryColor))
                 {
                     _lobbyTab = tid;
                 }
             }
 
-            if (_lobbyTab == "overview")
+            if (_lobbyTab == "skills")
             {
-                // Блок базовых характеристик
-                Raylib.DrawRectangle(54, 286, 648, 68, Rgb(18, 24, 40, 235));
-                Raylib.DrawRectangle(54, 286, 4, 68, Color.Gold);
-                Engine.DrawTextLeft("БАЗОВЫЕ ПОКАЗАТЕЛИ ВЫЖИВШЕГО:", 68, 294, 14f, Color.Gold);
-                Engine.DrawTextLeft($"Здоровье: {cfg.Hp} HP   |   Урон: {cfg.Damage}   |   Скорость: {cfg.Speed} м/с   |   Атака: {cfg.FireRate}/с",
-                    68, 320, 17f, Color.White);
+                // Карточка пассивной способности
+                int passY = py + 62;
+                Raylib.DrawRectangle(px + 14, passY, pw - 28, 84, Rgb(18, 26, 44, 240));
+                Raylib.DrawRectangle(px + 14, passY, 4, 84, Color.Gold);
+                Engine.DrawTextLeft($"ПАССИВКА :: {cfg.PassiveName}", px + 26, passY + 8, 16f, Color.Gold);
+                DrawWrappedText(cfg.PassiveDesc, px + 26, passY + 32, 66, 14f, Rgb(220, 232, 248), maxLines: 2, lineStep: 20f);
 
-                // Блок биографии и стиля игры
-                Raylib.DrawRectangle(54, 366, 648, 128, Rgb(18, 24, 40, 235));
-                Raylib.DrawRectangle(54, 366, 4, 128, activeSkin.PrimaryColor);
-                Engine.DrawTextLeft("ДОСЬЕ И ОСОБЕННОСТИ ГЕРОЯ:", 68, 376, 15f, activeSkin.PrimaryColor);
-                Engine.DrawTextLeft(cfg.OverviewLore, 68, 404, 16f, Rgb(220, 232, 248));
-
-                // Блок пассивной особенности
-                Raylib.DrawRectangle(54, 506, 648, 118, Rgb(18, 24, 40, 235));
-                Raylib.DrawRectangle(54, 506, 4, 118, Color.SkyBlue);
-                Engine.DrawTextLeft($"ВРОЖДЁННАЯ ОСОБЕННОСТЬ :: {cfg.PassiveName.ToUpper()}", 68, 516, 16f, Color.SkyBlue);
-                Engine.DrawTextLeft(cfg.PassiveDesc, 68, 544, 15f, Color.White);
-
-                // Сводка выбранного снаряжения и облика
-                Raylib.DrawRectangle(54, 636, 648, 164, Rgb(16, 22, 36, 235));
-                Raylib.DrawRectangle(54, 636, 648, 2, activeSkin.AccentColor);
-                Engine.DrawTextLeft($"АКТИВНЫЙ ОБЛИК: {activeSkin.Name}", 68, 648, 16f, activeSkin.ChangesModel ? Color.Gold : activeSkin.AccentColor);
-                Engine.DrawTextLeft(activeSkin.Desc, 68, 672, 14f, Rgb(190, 205, 225));
-                Engine.DrawTextLeft(
-                    $"ЭКИПИРОВАНО: [ЛКМ] {cfg.Skills["m1"].Name}  |  [ПКМ] {cfg.Skills["m2"].Name}",
-                    68, 702, 14f, Color.Yellow);
-                Engine.DrawTextLeft(
-                    $"             [Shift] {cfg.Skills["shift"].Name}  |  [R] {cfg.Skills["r"].Name}",
-                    68, 724, 14f, Color.SkyBlue);
-
-                if (Engine.DrawButton(new Rectangle(68, 752, 360, 38), "НАСТРОИТЬ СПОСОБНОСТИ И СКИНЫ ->",
-                    Rgb(38, 78, 128), Rgb(55, 110, 175), Color.White, 15f, Color.SkyBlue))
-                {
-                    _lobbyTab = "loadout";
-                }
-            }
-            else if (_lobbyTab == "skills")
-            {
-                // Пассивная способность сверху
-                Raylib.DrawRectangle(54, 286, 648, 86, Rgb(18, 26, 44, 235));
-                Raylib.DrawRectangle(54, 286, 4, 86, Color.Gold);
-                Engine.DrawTextLeft($"[ПАССИВКА] {cfg.PassiveName}", 68, 294, 17f, Color.Gold);
-                Engine.DrawTextLeft(cfg.PassiveDesc, 68, 320, 14f, Rgb(220, 230, 245));
-
-                // 4 выбранные игроком активные способности
+                // 4 Карточки активных навыков с прямым переключением [СТАНД.] / [АЛЬТ.] и кнопкой [▶ 3D]
                 (string slot, string bindName, Color slotCol)[] slotInfos =
                 {
-                    ("m1", "ЛКМ / ОСНОВНАЯ", Color.Yellow),
-                    ("m2", "ПКМ / ВТОРИЧНАЯ", Color.Orange),
-                    ("shift", "SHIFT / УТИЛИТА", Color.SkyBlue),
-                    ("r", "R / ОСОБАЯ (УЛЬТА)", Color.Magenta)
+                    ("m1", "ЛКМ", Color.Yellow),
+                    ("m2", "ПКМ", Color.Orange),
+                    ("shift", "SHIFT", Color.SkyBlue),
+                    ("r", "R (УЛЬТА)", Color.Magenta)
                 };
 
-                float sy = 382f;
+                var activeVariantsMap = activeSkin.CustomSkillVariants ?? cfg.SkillVariants;
+                int sy = passY + 94;
+
                 foreach (var (slot, bindName, slotCol) in slotInfos)
                 {
                     if (!cfg.Skills.TryGetValue(slot, out var sk)) continue;
-                    int varIdx = prog.GetSkillVariant(_selectedChar, slot);
-                    string varTag = varIdx == 0 ? "[СТАНД.]" : "[АЛЬТ.]";
+                    int curVar = prog.GetSkillVariant(_selectedChar, slot);
+                    var variants = activeVariantsMap.TryGetValue(slot, out var vList) ? vList : null;
 
-                    Raylib.DrawRectangle(54, (int)sy, 648, 98, Rgb(18, 24, 38, 235));
-                    Raylib.DrawRectangle(54, (int)sy, 4, 98, slotCol);
-                    Engine.DrawTextLeft($"[{bindName}]  {sk.Name}  {varTag}", 68, sy + 8f, 17f, slotCol);
-                    Engine.DrawTextLeft($"КД: {sk.Cd} сек.", 455, sy + 10f, 14f, Color.Gold);
-                    if (Engine.DrawButton(new Rectangle(564, (int)sy + 6, 126, 24), "▶ АНИМАЦИЯ",
+                    Raylib.DrawRectangle(px + 14, sy, pw - 28, 146, Rgb(18, 24, 38, 240));
+                    Raylib.DrawRectangle(px + 14, sy, 4, 146, slotCol);
+
+                    // Верхняя строка карточки: клавиша + название выбранного навыка + КД
+                    Engine.DrawTextLeft($"[{bindName}] {sk.Name}", px + 26, sy + 8, 17f, slotCol);
+                    Engine.DrawTextLeft($"КД: {sk.Cd}с", px + 420, sy + 10, 14f, Color.Gold);
+
+                    if (Engine.DrawButton(new Rectangle(px + pw - 96, sy + 6, 74, 24), "▶ 3D",
                         Rgb(34, 62, 104), Rgb(54, 96, 156), Color.Yellow, 12f, slotCol))
                     {
-                        TriggerLobbySkillPreview(_selectedChar, slot, varIdx);
+                        TriggerLobbySkillPreview(_selectedChar, slot, curVar);
                     }
-                    Engine.DrawTextLeft(sk.Desc, 68, sy + 36f, 15f, Color.White);
-                    sy += 106f;
+
+                    // Переключатели вариантов навыка (Обычный / Альтернативный) прямо внутри карточки
+                    if (variants != null && variants.Count > 0)
+                    {
+                        for (int vi = 0; vi < variants.Count; vi++)
+                        {
+                            var vSkill = variants[vi];
+                            bool unlocked = prog.IsSkillUnlocked(_selectedChar, slot, vi);
+                            bool isSel = curVar == vi && unlocked;
+                            int btnW = 272;
+                            Rectangle vRect = new(px + 26 + vi * 280, sy + 36, btnW, 30);
+
+                            string tag = vi == 0 ? "1. СТАНД" : "2. АЛЬТ";
+                            string shortName = vSkill.Name.Length > 22 ? vSkill.Name[..20] + ".." : vSkill.Name;
+                            string btnTxt = unlocked ? $"{tag}: {shortName}" : $"[ЗАКР.] {tag}: ???";
+
+                            Color bgCol = isSel ? Rgb(44, 88, 152) : (unlocked ? Rgb(24, 32, 48) : Rgb(18, 20, 28));
+                            Color brdCol = isSel ? Color.Yellow : (unlocked ? slotCol : Color.Gray);
+
+                            if (Engine.DrawButton(vRect, btnTxt, bgCol, Rgb(62, 112, 182),
+                                unlocked ? (isSel ? Color.Yellow : Color.White) : Color.Gray, 12f, brdCol))
+                            {
+                                if (unlocked)
+                                {
+                                    prog.SetSkillVariant(_selectedChar, slot, vi);
+                                    cfg.SyncLoadout();
+                                    TriggerLobbySkillPreview(_selectedChar, slot, vi);
+                                }
+                                else
+                                {
+                                    SoundManager.Play("ui_error");
+                                    ShowBanner($"НАВЫК ЗАКРЫТ :: {GetSkillUnlockInfo(cfg, vSkill)}", Color.Orange, 3.2f);
+                                }
+                            }
+                        }
+                    }
+
+                    // Читаемое многострочное описание выбранного навыка
+                    DrawWrappedText(sk.Desc, px + 26, sy + 74, 66, 14f, Color.White, maxLines: 3, lineStep: 19f);
+
+                    sy += 154;
                 }
             }
-            else if (_lobbyTab == "loadout")
+            else if (_lobbyTab == "overview")
             {
-                Vector2 mp = Raylib.GetMousePosition();
-                string hoverTitle = "НАВЕДИТЕ КУРСОР НА СПОСОБНОСТЬ ИЛИ СКИН";
-                string hoverSub = "Выберите комбинацию навыков (Loadout) и облик для забега";
-                string hoverDesc = "Все изменения мгновенно сохраняются в профиле и отображаются на 3D-модели.";
-                Color hoverCol = Color.SkyBlue;
+                int cy = py + 66;
+                // 1. Роль и биография
+                Raylib.DrawRectangle(px + 14, cy, pw - 28, 186, Rgb(18, 24, 40, 240));
+                Raylib.DrawRectangle(px + 14, cy, 4, 186, activeSkin.PrimaryColor);
+                Engine.DrawTextLeft($"ДОСЬЕ ВЫЖИВШЕГО :: {cfg.Name}", px + 28, cy + 12, 18f, activeSkin.PrimaryColor);
+                Engine.DrawTextLeft(cfg.Subtitle, px + 28, cy + 38, 14f, Color.Gold);
+                DrawWrappedText(cfg.OverviewLore, px + 28, cy + 66, 64, 15f, Rgb(220, 232, 248), maxLines: 5, lineStep: 22f);
 
-                // 1. ВЫБОР СКИНА (ОБЛИКА)
-                int rowY = 286;
-                Raylib.DrawRectangle(54, rowY, 648, 74, Rgb(18, 24, 40, 235));
-                Raylib.DrawRectangle(54, rowY, 4, 74, Color.Gold);
-                Engine.DrawTextLeft("ОБЛИК ГЕРОЯ:", 66, rowY + 8, 15f, Color.Gold);
-                Engine.DrawTextLeft("(Рескины и 3D-модели)", 66, rowY + 30, 12f, Rgb(165, 185, 210));
+                // 2. Врождённая пассивная особенность
+                cy += 198;
+                Raylib.DrawRectangle(px + 14, cy, pw - 28, 142, Rgb(18, 24, 40, 240));
+                Raylib.DrawRectangle(px + 14, cy, 4, 142, Color.SkyBlue);
+                Engine.DrawTextLeft($"ВРОЖДЁННАЯ ОСОБЕННОСТЬ :: {cfg.PassiveName}", px + 28, cy + 12, 16f, Color.SkyBlue);
+                DrawWrappedText(cfg.PassiveDesc, px + 28, cy + 42, 64, 15f, Color.White, maxLines: 4, lineStep: 22f);
 
-                int curSkinIdx = prog.GetSelectedSkin(_selectedChar);
+                // 3. Подробности об обликах / альтернативных версиях
+                cy += 154;
+                Raylib.DrawRectangle(px + 14, cy, pw - 28, 236, Rgb(18, 24, 40, 240));
+                Raylib.DrawRectangle(px + 14, cy, 4, 236, Color.Gold);
+                Engine.DrawTextLeft("ДОСТУПНЫЕ ОБЛИКИ И ВЕРСИИ ПЕРСОНАЖА:", px + 28, cy + 12, 16f, Color.Gold);
+
+                int curSkin = prog.GetSelectedSkin(_selectedChar);
                 for (int si = 0; si < cfg.Skins.Count; si++)
                 {
                     var skDef = cfg.Skins[si];
                     bool unlocked = prog.IsSkinUnlocked(_selectedChar, si, skDef.UnlockAchievementKey);
-                    bool selected = curSkinIdx == si && unlocked;
-                    Rectangle sRect = new(222 + si * 158, rowY + 10, 150, 54);
+                    bool isSel = curSkin == si && unlocked;
+                    int sy = cy + 42 + si * 62;
+                    Raylib.DrawRectangle(px + 26, sy, pw - 52, 56, isSel ? Rgb(32, 52, 88, 235) : Rgb(14, 18, 30, 220));
+                    Raylib.DrawRectangle(px + 26, sy, 3, 56, unlocked ? skDef.PrimaryColor : Color.Gray);
 
-                    string btnLabel = unlocked
-                        ? (skDef.ChangesModel ? $"★ {skDef.Name}" : skDef.Name)
-                        : $"[ЗАКР.] {skDef.Name}";
-
-                    Color bgCol = selected
-                        ? Rgb(48, 95, 160)
-                        : (unlocked ? Rgb(26, 34, 52) : Rgb(18, 20, 28));
-                    Color borderCol = selected
-                        ? Color.Yellow
-                        : (unlocked ? skDef.PrimaryColor : Color.Gray);
-
-                    if (Raylib.CheckCollisionPointRec(mp, sRect))
-                    {
-                        hoverCol = unlocked ? (skDef.ChangesModel ? Color.Gold : skDef.PrimaryColor) : Color.Red;
-                        string modelType = skDef.ChangesModel ? "ОСОБАЯ 3D-МОДЕЛЬ МАСТЕРА" : (si == 0 ? "КЛАССИЧЕСКИЙ ОБЛИК" : "РЕСКИН ЗА ДОСТИЖЕНИЕ");
-                        hoverTitle = $"{skDef.Name}  [{modelType}]";
-                        hoverSub = unlocked
-                            ? $"Статус: ОТКРЫТО ✓ ({skDef.UnlockConditionText})"
-                            : $"ЗАБЛОКИРОВАНО — Требуется: {skDef.UnlockConditionText}";
-                        hoverDesc = skDef.Desc;
-                    }
-
-                    if (Engine.DrawButton(sRect, btnLabel, bgCol, Rgb(65, 115, 185),
-                        unlocked ? (selected ? Color.Yellow : Color.White) : Color.Gray, 13f, borderCol))
-                    {
-                        if (unlocked)
-                        {
-                            prog.SetSelectedSkin(_selectedChar, si);
-                            SelectCharacter(_selectedChar);
-                        }
-                        else
-                        {
-                            ShowBanner($"СКИН ЗАКРЫТ! УСЛОВИЕ: {skDef.UnlockConditionText}", Color.Red, 2.8f);
-                        }
-                    }
+                    string status = unlocked ? (isSel ? "[АКТИВЕН ✓]" : "[ОТКРЫТ]") : "[ЗАКРЫТ]";
+                    Engine.DrawTextLeft($"{si + 1}. {skDef.Name}  {status}", px + 38, sy + 6, 15f, isSel ? Color.Yellow : (unlocked ? skDef.PrimaryColor : Color.Gray));
+                    string skinLine = unlocked ? skDef.Desc : GetSkinUnlockInfo(cfg, si);
+                    DrawWrappedText(skinLine, px + 38, sy + 28, 62, 13f, unlocked ? Rgb(195, 210, 232) : Color.Orange, maxLines: 1, lineStep: 18f);
                 }
 
-                // 2. 4 СТРОКИ ВЫБОРА СПОСОБНОСТЕЙ (ЛКМ, ПКМ, SHIFT, R)
-                (string slot, string slotLabel, Color slotCol)[] loadoutRows =
+                // 4. Список игроков в коопе (если подключены)
+                cy += 248;
+                Raylib.DrawRectangle(px + 14, cy, pw - 28, 128, Rgb(16, 22, 36, 240));
+                Raylib.DrawRectangle(px + 14, cy, 4, 128, Color.Lime);
+                if (!_net.Connected)
                 {
-                    ("m1", "ЛКМ (ОСНОВНАЯ)", Color.Yellow),
-                    ("m2", "ПКМ (ВТОРИЧНАЯ)", Color.Orange),
-                    ("shift", "SHIFT (УТИЛИТА)", Color.SkyBlue),
-                    ("r", "R (ОСОБАЯ / УЛЬТА)", Color.Magenta)
-                };
-
-                for (int ri = 0; ri < loadoutRows.Length; ri++)
-                {
-                    var (slot, slotLabel, slotCol) = loadoutRows[ri];
-                    int ry = 368 + ri * 70;
-                    Raylib.DrawRectangle(54, ry, 648, 64, Rgb(18, 24, 40, 235));
-                    Raylib.DrawRectangle(54, ry, 4, 64, slotCol);
-                    Engine.DrawTextLeft(slotLabel, 66, ry + 22, 15f, slotCol);
-
-                    if (!cfg.SkillVariants.TryGetValue(slot, out var variants)) continue;
-                    int curVar = prog.GetSkillVariant(_selectedChar, slot);
-
-                    for (int vi = 0; vi < variants.Count; vi++)
-                    {
-                        var vSkill = variants[vi];
-                        bool unlocked = prog.IsSkillUnlocked(_selectedChar, slot, vi);
-                        bool isSel = curVar == vi && unlocked;
-                        Rectangle vRect = new(222 + vi * 238, ry + 8, 230, 48);
-
-                        string btnText = unlocked ? vSkill.Name : $"[ЗАКР.] {vSkill.Name}";
-                        Color bgCol = isSel
-                            ? Rgb(42, 88, 150)
-                            : (unlocked ? Rgb(24, 30, 46) : Rgb(18, 20, 28));
-                        Color borderCol = isSel
-                            ? Color.Yellow
-                            : (unlocked ? slotCol : Color.Gray);
-
-                        if (Raylib.CheckCollisionPointRec(mp, vRect))
-                        {
-                            hoverCol = unlocked ? slotCol : Color.Red;
-                            hoverTitle = $"[{slotLabel}]  {vSkill.Name}";
-                            hoverSub = unlocked
-                                ? $"Перезарядка: {vSkill.Cd} сек.   |   Статус: ОТКРЫТО ✓ ({vSkill.UnlockReqText})"
-                                : $"ЗАБЛОКИРОВАНО — {vSkill.UnlockReqText}";
-                            hoverDesc = vSkill.Desc;
-                        }
-
-                        if (Engine.DrawButton(vRect, btnText, bgCol, Rgb(62, 115, 185),
-                            unlocked ? (isSel ? Color.Yellow : Color.White) : Color.Gray, 13f, borderCol))
-                        {
-                            if (unlocked)
-                            {
-                                prog.SetSkillVariant(_selectedChar, slot, vi);
-                                cfg.SyncLoadout();
-                                TriggerLobbySkillPreview(_selectedChar, slot, vi);
-                            }
-                            else
-                            {
-                                ShowBanner($"НАВЫК ЗАКРЫТ! {vSkill.UnlockReqText}", Color.Red, 2.8f);
-                            }
-                        }
-                    }
+                    Engine.DrawTextLeft("СТАТУС ОТРЯДА: ОДИНОЧНЫЙ ЗАБЕГ", px + 28, cy + 14, 15f, Color.SkyBlue);
+                    Engine.DrawTextLeft("Для игры с друзьями откройте «Сетевая игра» в Главном меню.", px + 28, cy + 42, 14f, Rgb(185, 205, 230));
                 }
-
-                // 3. НИЖНЕЕ ОКНО ОПИСАНИЯ ПРИ НАВЕДЕНИИ + КНОПКА РАЗБЛОКИРОВКИ СКИНОВ ДЛЯ ТЕСТА
-                Raylib.DrawRectangle(54, 652, 648, 154, Rgb(14, 20, 34, 248));
-                Raylib.DrawRectangle(54, 652, 648, 3, hoverCol);
-                Engine.DrawTextLeft(hoverTitle, 68, 662, 18f, hoverCol);
-                Engine.DrawTextLeft(hoverSub, 68, 688, 14f, Color.Gold);
-                Engine.DrawTextLeft(hoverDesc, 68, 714, 15f, Color.White);
-
-                if (Engine.DrawButton(new Rectangle(468, 768, 224, 30), "ОТКРЫТЬ ВСЕ СКИНЫ",
-                    Rgb(75, 55, 25), Rgb(115, 85, 35), Color.Gold, 13f, Color.Gold))
+                else
                 {
-                    prog.UnlockAll();
-                    SelectCharacter(_selectedChar);
-                    ShowBanner("ВСЕ ДОСТИЖЕНИЯ, АРТЕФАКТЫ И СКИНЫ РАЗБЛОКИРОВАНЫ!", Color.Gold, 3.0f);
+                    Engine.DrawTextLeft($"ОТРЯД В КОМНАТЕ {_net.RoomCode}:", px + 28, cy + 10, 15f, Color.Lime);
+                    int ly = cy + 34;
+                    Engine.DrawTextLeft($"• ВЫ [{_net.MyId.ToUpper()}]: {cfg.Name} — [{(_myReady ? "ГОТОВ ✓" : "ВЫБИРАЕТ")}]", px + 28, ly, 14f, Color.White);
+                    foreach (var kv in _lobbyPlayers)
+                    {
+                        ly += 22;
+                        string cName = SurvivorDatabase.Classes.TryGetValue(kv.Value.CharKey, out var sc) ? sc.Name : "COMMANDO";
+                        Engine.DrawTextLeft($"• ИГРОК [{kv.Key.ToUpper()}]: {cName} — [{(kv.Value.Ready ? "ГОТОВ ✓" : "ВЫБИРАЕТ")}]", px + 28, ly, 14f, Color.SkyBlue);
+                    }
                 }
             }
             else if (_lobbyTab == "modifiers")
@@ -2321,18 +2859,19 @@ namespace RiskOfCSharp2
                 bool canEditMods = !_net.Connected || _net.Mode == "host";
 
                 // 1. ВЫБОР РЕЖИМА СЛОЖНОСТИ (4 РЕЖИМА)
-                Raylib.DrawRectangle(54, 284, 648, 114, Rgb(18, 24, 40, 238));
-                Raylib.DrawRectangle(54, 284, 4, 114, curDiff.Color);
-                Engine.DrawTextLeft("РЕЖИМ СЛОЖНОСТИ ЗАБЕГА (4 УРОВНЯ):", 68, 292, 15f, curDiff.Color);
+                int dy = py + 64;
+                Raylib.DrawRectangle(px + 14, dy, pw - 28, 122, Rgb(18, 24, 40, 238));
+                Raylib.DrawRectangle(px + 14, dy, 4, 122, curDiff.Color);
+                Engine.DrawTextLeft("РЕЖИМ СЛОЖНОСТИ ЗАБЕГА (4 УРОВНЯ):", px + 28, dy + 10, 15f, curDiff.Color);
                 if (!canEditMods)
-                    Engine.DrawTextLeft("[Управляется хостом комнаты]", 445, 292, 13f, Color.Orange);
+                    Engine.DrawTextLeft("[Управляется хостом]", px + 380, dy + 10, 13f, Color.Orange);
 
                 for (int di = 0; di < GameData.OrderedDifficultyKeys.Length; di++)
                 {
                     string dKey = GameData.OrderedDifficultyKeys[di];
                     var dDef = GameData.Difficulties[dKey];
                     bool isSel = GameData.SelectedDifficulty == dKey;
-                    Rectangle dRect = new(66 + di * 158, 318, 150, 68);
+                    Rectangle dRect = new(px + 26 + di * 138, dy + 38, 132, 72);
 
                     if (Raylib.CheckCollisionPointRec(mp, dRect))
                     {
@@ -2346,7 +2885,7 @@ namespace RiskOfCSharp2
                     if (Engine.DrawButton(dRect, dBtnTxt,
                         isSel ? Rgb(44, 78, 132) : Rgb(24, 30, 46),
                         Rgb(62, 105, 170),
-                        isSel ? Color.Yellow : dDef.Color, 14f,
+                        isSel ? Color.Yellow : dDef.Color, 13f,
                         isSel ? Color.Yellow : dDef.Color) && canEditMods)
                     {
                         GameData.SelectedDifficulty = dKey;
@@ -2356,20 +2895,21 @@ namespace RiskOfCSharp2
                 }
 
                 // 2. СЕТКА 10 АРТЕФАКТОВ ЗАБЕГА (5x2)
-                Raylib.DrawRectangle(54, 408, 648, 232, Rgb(18, 24, 40, 238));
-                Raylib.DrawRectangle(54, 408, 4, 232, Color.Gold);
-                Engine.DrawTextLeft($"АРТЕФАКТЫ ЗАБЕГА :: АКТИВНО {GameData.ActiveArtifacts.Count} ИЗ 10", 68, 416, 15f, Color.Gold);
+                int ay = dy + 134;
+                Raylib.DrawRectangle(px + 14, ay, pw - 28, 246, Rgb(18, 24, 40, 238));
+                Raylib.DrawRectangle(px + 14, ay, 4, 246, Color.Gold);
+                Engine.DrawTextLeft($"АРТЕФАКТЫ ЗАБЕГА ({GameData.ActiveArtifacts.Count}/10):", px + 28, ay + 10, 15f, Color.Gold);
 
                 if (canEditMods)
                 {
-                    if (Engine.DrawButton(new Rectangle(430, 414, 128, 26), "ВКЛЮЧИТЬ ВСЕ",
+                    if (Engine.DrawButton(new Rectangle(px + 332, ay + 8, 118, 26), "ВКЛЮЧИТЬ ВСЕ",
                         Rgb(42, 72, 48), Rgb(62, 110, 72), Color.Lime, 12f, Color.Lime))
                     {
                         foreach (var ak in GameData.OrderedArtifactKeys) GameData.ActiveArtifacts.Add(ak);
                         prog.Save();
                         BroadcastLobbyState();
                     }
-                    if (Engine.DrawButton(new Rectangle(564, 414, 126, 26), "СБРОСИТЬ ВСЕ",
+                    if (Engine.DrawButton(new Rectangle(px + 458, ay + 8, 118, 26), "СБРОСИТЬ ВСЕ",
                         Rgb(78, 38, 44), Rgb(115, 55, 65), Color.White, 12f, Color.Red))
                     {
                         GameData.ActiveArtifacts.Clear();
@@ -2384,7 +2924,7 @@ namespace RiskOfCSharp2
                     var aDef = GameData.RunArtifacts[aKey];
                     bool enabled = GameData.HasArtifact(aKey);
                     int r = ai / 5, c = ai % 5;
-                    Rectangle aRect = new(66 + c * 126, 448 + r * 90, 120, 80);
+                    Rectangle aRect = new(px + 26 + c * 110, ay + 44 + r * 94, 104, 84);
 
                     if (Raylib.CheckCollisionPointRec(mp, aRect))
                     {
@@ -2395,11 +2935,11 @@ namespace RiskOfCSharp2
                     }
 
                     string shortTitle = aDef.Name.Replace("Артефакт ", "");
-                    string aBtnTxt = $"{(enabled ? "★ ВКЛ" : "ВЫКЛ")} [{aDef.Short}]\n{shortTitle}";
+                    string aBtnTxt = $"{(enabled ? "★ ВКЛ" : "ВЫКЛ")}\n{shortTitle}";
                     if (Engine.DrawButton(aRect, aBtnTxt,
                         enabled ? Rgb(48, 82, 138) : Rgb(22, 26, 38),
                         Rgb(65, 108, 175),
-                        enabled ? Color.Yellow : Rgb(175, 190, 215), 13f,
+                        enabled ? Color.Yellow : Rgb(175, 190, 215), 12f,
                         enabled ? Color.Yellow : aDef.Color) && canEditMods)
                     {
                         if (enabled) GameData.ActiveArtifacts.Remove(aKey);
@@ -2410,18 +2950,24 @@ namespace RiskOfCSharp2
                 }
 
                 // 3. ОКНО ПОДРОБНОГО ОПИСАНИЯ ВЫБРАННОГО МОДИФИКАТОРА
-                Raylib.DrawRectangle(54, 650, 648, 156, Rgb(14, 20, 34, 248));
-                Raylib.DrawRectangle(54, 650, 648, 3, hoverCol);
-                Engine.DrawTextLeft(hoverTitle, 68, 662, 18f, hoverCol);
-                Engine.DrawTextLeft(hoverSub, 68, 690, 14f, Color.Gold);
-                Engine.DrawTextLeft(hoverDesc, 68, 718, 15f, Color.White);
+                int descY = ay + 258;
+                Raylib.DrawRectangle(px + 14, descY, pw - 28, 180, Rgb(14, 20, 34, 248));
+                Raylib.DrawRectangle(px + 14, descY, pw - 28, 3, hoverCol);
+                Engine.DrawTextLeft(hoverTitle, px + 28, descY + 14, 18f, hoverCol);
+                Engine.DrawTextLeft(hoverSub, px + 28, descY + 42, 14f, Color.Gold);
+                DrawWrappedText(hoverDesc, px + 28, descY + 72, 64, 15f, Color.White, maxLines: 4, lineStep: 22f);
             }
         }
 
         public static void StartRun(string charKey, int? seed = null, bool fromNetwork = false, int startStage = 1)
         {
+            if (!SurvivorDatabase.Classes.ContainsKey(charKey) || !ProgressData.Instance.IsCharacterUnlocked(charKey))
+                charKey = "commando";
+            _selectedChar = charKey;
+
             _screen = "in_game";
             _paused = false;
+            _workbenchOpen = false;
             _mainPedestal.Enabled = false;
             _menuCrystal.Enabled = false;
             if (SurvivorDatabase.IsMobaCharacter(charKey) || charKey == "mindustry") Raylib.EnableCursor();
@@ -2433,7 +2979,15 @@ namespace RiskOfCSharp2
             RunGoldEarned = 0;
             _deadCoopPlayers.Clear();
             _commandPickerQueue.Clear();
-            _run = new GameRunContext { CharKey = charKey };
+            _dialogueOpen = false;
+            _rpsOpen = false;
+            _emoteWheelOpen = false;
+            _safeTravelsWardrobeOpen = false;
+            _run = new GameRunContext
+            {
+                CharKey = charKey,
+                LunarCoins = Math.Max(2, ProgressData.Instance.LunarCoins)
+            };
             foreach (var k in GameData.ItemPool.Keys) _run.Items[k] = 0;
             WorldContext.Game = _run;
 
@@ -2462,38 +3016,6 @@ namespace RiskOfCSharp2
             }
         }
 
-        private static void SpawnTestEnemiesWave(int count = 6)
-        {
-            if (_run == null) return;
-            string[] types = { "lemurian", "wisp", "beetle", "jellyfish", "bison", "brass_contraption", "golem", "imp", "greater_wisp", "parent", "elder_lemurian" };
-            var rng = new Random();
-            for (int i = 0; i < count; i++)
-            {
-                float ang = (i / (float)count) * MathF.PI * 2f + (float)rng.NextDouble() * 0.4f;
-                float dist = 14f + (float)rng.NextDouble() * 14f;
-                float ex = Math.Clamp(_run.PlayerPos.X + MathF.Cos(ang) * dist, -Physics.WorldBound + 4f, Physics.WorldBound - 4f);
-                float ez = Math.Clamp(_run.PlayerPos.Z + MathF.Sin(ang) * dist, -Physics.WorldBound + 4f, Physics.WorldBound - 4f);
-                float ey = Physics.GetSurfaceHeight(ex, ez, _run.PlayerPos.Y);
-                string t = types[rng.Next(types.Length)];
-                var enemy = new CombatTarget(new Vector3(ex, ey, ez), t, _run.DifficultyCoeff);
-                CombatManager.Enemies.Add(enemy);
-                _run.StageEntities.Add(enemy);
-
-                if (_net.Connected)
-                {
-                    _net.Broadcast(new System.Text.Json.Nodes.JsonObject
-                    {
-                        ["type"] = "enemy_spawn",
-                        ["id"] = enemy.NetId,
-                        ["et"] = t,
-                        ["coeff"] = MathF.Round(_run.DifficultyCoeff, 3),
-                        ["pos"] = new System.Text.Json.Nodes.JsonArray(MathF.Round(ex, 2), MathF.Round(ey, 2), MathF.Round(ez, 2)),
-                        ["boss"] = false
-                    });
-                }
-            }
-        }
-
         public static void LoadStage(int stageNum, string? specialMode, int? fixedSeed = null, bool fromNetwork = false)
         {
             if (_run == null) return;
@@ -2506,6 +3028,9 @@ namespace RiskOfCSharp2
 
             int coopCount = 1 + (_net.Connected ? Math.Max(_remotePlayers.Count, _lobbyPlayers.Count) : 0);
             _run.Stage = stageNum;
+            _run.StageElapsedTime = 0f;
+            _run.TeleporterChargingNow = false;
+            _run.TeleporterActiveTimer = 0f;
             _run.Gold = (stageNum == 1 && specialMode == null) ? 15 : 0;
             _run.Combat.MindustryCopper = specialMode == "bazaar" ? 0f : 65f;
             _run.Combat.MindustrySilicon = specialMode == "bazaar" ? 0f : 30f;
@@ -2525,6 +3050,13 @@ namespace RiskOfCSharp2
             int seed = fixedSeed ?? (Environment.TickCount & 0x7FFFFFFF);
             var (ents, tpOrPad, pal) = StageBuilder.BuildStageWorld(stageNum, seed, specialMode);
             _run.StageEntities.AddRange(ents);
+            if (!string.IsNullOrEmpty(pal.Id) && pal.Id != "pvp")
+            {
+                ProgressData.Instance.DiscoveredStages.Add(pal.Id);
+                if (pal.Id == "rallypoint")
+                    _run.UnlockAchievement("ach_blizzard");
+                ProgressData.Instance.Save();
+            }
             _deadCoopPlayers.Clear();
             _commandPickerQueue.Clear();
             _isSpectating = false;
@@ -2534,7 +3066,7 @@ namespace RiskOfCSharp2
             _run.VengeanceTimer = 85.0f;
             if (GameData.HasArtifact("kin") && specialMode == null)
             {
-                string[] kinPool = { "beetle", "lemurian", "jellyfish", "wisp", "imp", "bison", "brass_contraption", "greater_wisp", "golem", "parent", "elder_lemurian" };
+                string[] kinPool = { "beetle", "lemurian", "jellyfish", "wisp", "hell_drone", "combine_soldier", "sarkaz_mercenary", "imp", "hollow_shadow", "bison", "nether_blaze", "brass_contraption", "greater_wisp", "golem", "parent", "elder_lemurian" };
                 _run.StageKinType = kinPool[Math.Abs(seed + stageNum * 17) % kinPool.Length];
             }
             else
@@ -2552,12 +3084,16 @@ namespace RiskOfCSharp2
                 float spawnSide = _net.MyId == "host" ? -28f : 28f;
                 _run.PlayerPos = new Vector3(spawnSide, 1f, spawnSide);
             }
+            else if (specialMode == "safe_travels") _run.PlayerPos = new Vector3(0f, 1f, -6f);
             else if (specialMode == "bazaar") _run.PlayerPos = new Vector3(0, 1f, -2f);
             else if (specialMode == "moon") _run.PlayerPos = new Vector3(0, 1f, -16f);
             else _run.PlayerPos = new Vector3(0, 1f, 0f);
             _run.PlayerVelY = 0f;
+            // Новый этап: трассировка движения начинается заново с точки высадки (без «протаскивания» с прошлой карты)
+            _playerSweepValid = false;
+            _lastResolvedPlayerPos = _run.PlayerPos;
 
-            if (_run.CharKey == "mindustry" && specialMode != "bazaar")
+            if (_run.CharKey == "mindustry" && specialMode is not "bazaar" and not "safe_travels")
                 _run.Combat.SpawnMindustryMainCore(_run.PlayerPos);
 
             if (_net.Connected && !fromNetwork)
@@ -2573,17 +3109,35 @@ namespace RiskOfCSharp2
 
             if (specialMode == "pvp")
                 ShowBanner("КОЛИЗЕЙ РАЗДОРА (PvP) :: ВЫБИВАЙТЕ ПРЕДМЕТЫ ИЗ МОНСТРОВ И СОКРУШИТЕ СОПЕРНИКА!", Color.Red, 4.5f);
+            else if (specialMode == "safe_travels")
+                ShowBanner("КОРАБЛЬ UES «SAFE TRAVELS» :: КАЮТ-КОМПАНИЯ, МОСТИК, КАЮТЫ И БОЕВОЙ ПОЛИГОН", Rgb(85, 225, 255), 4.5f);
             else if (specialMode == "bazaar")
                 ShowBanner("БАЗАР МЕЖДУ ВРЕМЕНЕМ :: ТОРГОВЛЯ С ТРИТОНОМ", Rgb(80, 215, 255), 3.5f);
+            else if (specialMode == "pizzeria")
+                ShowBanner("ПИЦЦЕРИЯ ФАЗБЕРА :: ПОДДЕРЖИВАЙТЕ ГЕНЕРАТОР МУЗЫКАЛЬНОЙ ШКАТУЛКИ!", Rgb(235, 165, 50), 4.5f);
+            else if (specialMode == "black_mesa")
+                ShowBanner("СЕКТОР ЧЁРНАЯ МЕЗА :: ПРОНЕСИТЕ КРИСТАЛЛ GG-3883 В АНТИМАСС-СПЕКТРОМЕТР!", Rgb(255, 145, 35), 4.5f);
+            else if (specialMode == "qliphoth")
+                ShowBanner("ВЕРШИНА ДРЕВА КЛИФОТ :: ПОБЕДИТЕ ДЕМОНИЧЕСКОГО СТРАЖА ВЕРГИЛИЯ!", Rgb(185, 65, 245), 4.5f);
+            else if (specialMode == "hell_cybergrind")
+                ShowBanner("ПРЕДЕЛ АДА (КИБЕР-ГРАЙНД) :: СОКРУШИТЕ ВОЛНЫ АДСКИХ МАШИН!", Rgb(255, 65, 75), 4.5f);
+            else if (specialMode == "tartarus")
+                ShowBanner("БАШНЯ ТАРТАР (ТЁМНЫЙ ЧАС) :: ОДОЛЕЙТЕ ТЕНЕЙ И ЖНЕЦА ТАРТАРА!", Rgb(85, 255, 165), 4.5f);
+            else if (specialMode == "hakurei_shrine")
+                ShowBanner("ХРАМ ХАКУРЕЙ (ГЕНСОКЁ) :: ВЫДЕРЖИТЕ ДАНМАКУ И ЗАПЕЧАТАЙТЕ РАЗЛОМ!", Rgb(255, 145, 195), 4.5f);
+            else if (specialMode == "tracen_derby")
+                ShowBanner("ИППОДРОМ ТРЕЙСЕН :: ПРОЙДИТЕ ЧЕКПОЙНТЫ ФИНАЛЬНОГО ДЕРБИ!", Rgb(255, 210, 75), 4.5f);
             else if (specialMode == "moon")
                 ShowBanner("НАЧАЛО (ЛУНА) :: ЗАРЯДИТЕ ВСЕ 4 СТОЛПА ЛУНЫ НА БАСТИОНАХ!", Rgb(100, 225, 255), 4.5f);
             else
-                {
-                    string kinNote = (!string.IsNullOrEmpty(_run.StageKinType) && GameData.MonsterLog.TryGetValue(_run.StageKinType, out var km))
-                        ? $"  [РОДСТВО: {km.Name.ToUpper()}]"
-                        : "";
-                    ShowBanner($"ЭТАП {stageNum}: {pal.Name.ToUpper()}{kinNote}", Color.Yellow, 3.5f);
-                }
+            {
+                string layerTag = GameData.GetStagePoolLayerLabel(stageNum);
+                string kinNote = (!string.IsNullOrEmpty(_run.StageKinType) && GameData.MonsterLog.TryGetValue(_run.StageKinType, out var km))
+                    ? $"  [РОДСТВО: {km.Name.ToUpper()}]"
+                    : "";
+                ShowBanner($"ЭТАП {stageNum} ({layerTag}): {pal.Name.ToUpper()}{kinNote}", Color.Yellow, 3.8f);
+            }
+            SoundManager.Play("run_start");
         }
 
         private static void FinishRunWithSummary(bool victory)
@@ -2597,6 +3151,24 @@ namespace RiskOfCSharp2
                 foreach (var k in _run.ItemOrder)
                     if (_run.Items.TryGetValue(k, out int cnt) && cnt > 0)
                         _lastRunItems.Add((k, cnt));
+
+                if (!_run.IsSafeTravels)
+                {
+                    var prog = ProgressData.Instance;
+                    prog.Kills += RunKills;
+                    prog.BossKills += RunBossKills;
+                    prog.MaxStage = Math.Max(prog.MaxStage, _run.Stage);
+                    prog.LunarCoins = Math.Max(prog.LunarCoins, _run.LunarCoins);
+                    if (victory)
+                    {
+                        prog.MithrixDefeated = true;
+                        prog.Victories++;
+                        prog.LunarCoins += 10;
+                        _run.UnlockAchievement("ach_safe_travels");
+                        _run.UnlockAchievement("ach_stage4");
+                    }
+                    prog.Save();
+                }
             }
             QuitRunToLobby(toMainMenu: false);
             _screen = "run_summary";
@@ -2613,6 +3185,7 @@ namespace RiskOfCSharp2
 
         public static void OnPlayerDefeated()
         {
+            SoundManager.Play("player_death");
             if (Physics.SpecialMode == "pvp" && _net.Connected)
             {
                 _net.Broadcast(new System.Text.Json.Nodes.JsonObject
@@ -2668,6 +3241,7 @@ namespace RiskOfCSharp2
 
         public static void OnVictory()
         {
+            SoundManager.Play("victory");
             if (_net.Connected)
                 _net.Broadcast(new System.Text.Json.Nodes.JsonObject { ["type"] = "run_victory" });
             FinishRunWithSummary(victory: true);
@@ -2677,6 +3251,12 @@ namespace RiskOfCSharp2
         private static void QuitRunToLobby(bool toMainMenu = false)
         {
             _paused = false;
+            CloseSafeTravelsDialogueModal();
+            _rpsOpen = false;
+            _emoteWheelOpen = false;
+            _safeTravelsWardrobeOpen = false;
+            StopCharacterUnlockCutscene();
+            EnsureLocalChairProp(false);
             if (_run != null)
             {
                 foreach (var e in CombatManager.Enemies.ToArray()) Destroy(e);
@@ -2705,17 +3285,82 @@ namespace RiskOfCSharp2
             else
             {
                 _screen = "lobby";
-                SelectCharacter(_selectedChar);
                 BroadcastLobbyState();
             }
+            if (!ProgressData.Instance.IsCharacterUnlocked(_selectedChar))
+                _selectedChar = "commando";
             SelectCharacter(_selectedChar);
+        }
+
+        private static void RecordSkillCast(string slot)
+        {
+            if (_run == null) return;
+            if (!string.IsNullOrEmpty(_run.Parts.ActiveEmote) && !_rpsOpen)
+                SetLocalPlayerEmote("");
+
+            if (_run.IsSafeTravels && _run.ZeroCooldownSandbox && _run.Combat != null)
+            {
+                _run.Combat.M1Cd = MathF.Min(_run.Combat.M1Cd, 0.08f);
+                _run.Combat.M2Cd = 0f;
+                _run.Combat.ShiftCd = 0f;
+                _run.Combat.RCd = 0f;
+            }
+            if (_run.IsSafeTravels) return;
+
+            if (slot == "m1") _run.M1CastCount++;
+            else if (slot == "m2") _run.M2CastCount++;
+            else if (slot == "shift") _run.ShiftCastCount++;
+            else if (slot == "r") _run.RCastCount++;
+
+            if (_run.M1CastCount >= 35) _run.UnlockAchievement("ach_bleeder");
+            if (_run.M1CastCount >= 75) _run.UnlockAchievement("ach_lightning_strike");
+            if (_run.M2CastCount >= 15) _run.UnlockAchievement("ach_secondary_master");
+            if (_run.ShiftCastCount >= 12) _run.UnlockAchievement("ach_combat_dash");
+            if (_run.RCastCount >= 5) _run.UnlockAchievement("ach_skill_spam");
+            int totalCasts = _run.M1CastCount + _run.M2CastCount + _run.ShiftCastCount + _run.RCastCount;
+            if (totalCasts >= 30) _run.UnlockAchievement("ach_arcane_burst");
+            if (totalCasts >= 60) _run.UnlockAchievement("ach_cosmic_mind");
         }
 
         private static void UpdateInGame(float dt)
         {
             if (_run == null) return;
 
+            if (UpdateCharacterUnlockCutscene(dt))
+                return;
+            TickPostCutsceneGrace(dt);
+
+            if (_run.IsSafeTravels && Raylib.IsKeyPressed(KeyboardKey.H) && !_dialogueOpen && !_rpsOpen && !_emoteWheelOpen)
+            {
+                _safeTravelsWardrobeOpen = !_safeTravelsWardrobeOpen;
+                SoundManager.Play("ui_click");
+                RestoreInGameCursorIfNeeded();
+            }
+
+            UpdateSafeTravelsDialogue(dt);
+            UpdateRpsMiniGame(dt);
+            UpdateEmoteWheelAndActiveEmote(dt);
+
             _run.ElapsedTime += dt;
+            if (!_run.IsSafeTravels)
+            {
+                _run.StageElapsedTime += dt;
+                if (_run.ElapsedTime >= 300f) _run.UnlockAchievement("ach_time_keeper");
+                if (_run.PlayerMaxHp >= 180f) _run.UnlockAchievement("ach_bison_hunt");
+                if (_run.PlayerMaxHp >= 260f) _run.UnlockAchievement("ach_immortal_titan");
+                if (_run.PlayerHp <= _run.PlayerMaxHp * 0.40f) _run.DroppedLowHp = true;
+                if (_run.BlueOrbSpawned) _run.UnlockAchievement("ach_lunar_stone");
+                if (_run.MultiKillWindowTimer > 0f) _run.MultiKillWindowTimer -= dt;
+                if (_run.FrenzyWindowTimer > 0f) _run.FrenzyWindowTimer -= dt;
+                if (_run.PostHitTimer > 0f) _run.PostHitTimer -= dt;
+                if (_run.TeleporterChargingNow) _run.TeleporterActiveTimer += dt;
+                if (CombatManager.Enemies.Count > 0)
+                {
+                    _run.UntouchedCombatTimer += dt;
+                    if (_run.UntouchedCombatTimer >= 35f) _run.UnlockAchievement("ach_untouched");
+                }
+            }
+
             float coeff = _run.DifficultyCoeff;
             CombatManager.Enemies.RemoveAll(e => !IsValid(e));
 
@@ -2734,7 +3379,7 @@ namespace RiskOfCSharp2
 
             // ИИ-Режиссёр: спавнит мобов до полной зарядки Телепорта, а после зарядки ("ready") останавливается для передышки
             bool tpActivated = _run.ActiveTeleporterOrPad is Teleporter tpCheck && tpCheck.State == "ready";
-            if (_net.Mode != "client" && Physics.SpecialMode != "bazaar" && !_run.MithrixSpawned && !tpActivated)
+            if (_net.Mode != "client" && Physics.SpecialMode is not "bazaar" and not "safe_travels" && !_run.MithrixSpawned && !tpActivated)
             {
                 int playerCount = 1 + _remotePlayers.Count;
                 float playerMult = 1.0f + 0.55f * (playerCount - 1);
@@ -2749,9 +3394,9 @@ namespace RiskOfCSharp2
                         _run.VengeanceTimer = 85.0f;
                         var rngV = new Random();
                         float vang = (float)rngV.NextDouble() * MathF.PI * 2f;
-                        float vx = Math.Clamp(_run.PlayerPos.X + MathF.Cos(vang) * 16f, -Physics.WorldBound + 5f, Physics.WorldBound - 5f);
-                        float vz = Math.Clamp(_run.PlayerPos.Z + MathF.Sin(vang) * 16f, -Physics.WorldBound + 5f, Physics.WorldBound - 5f);
-                        float vy = Physics.GetSurfaceHeight(vx, vz, _run.PlayerPos.Y);
+                        Vector3 vPos = Physics.FindFreeActorPos(new Vector3(
+                            _run.PlayerPos.X + MathF.Cos(vang) * 16f, _run.PlayerPos.Y, _run.PlayerPos.Z + MathF.Sin(vang) * 16f), 0.9f, 10f, 5f);
+                        float vx = vPos.X, vy = vPos.Y, vz = vPos.Z;
                         var doppel = new CombatTarget(new Vector3(vx, vy, vz), "imp", coeff * 1.15f);
                         doppel.MakeDoppelganger();
                         CombatManager.Enemies.Add(doppel);
@@ -2780,14 +3425,32 @@ namespace RiskOfCSharp2
                 {
                     var rng = new Random();
                     _run.SpawnTimer = (0.9f + (float)rng.NextDouble() * 0.9f) / MathF.Sqrt(playerCount);
-                    (string et, float cost)[] table = Physics.SpecialMode == "moon"
-                        ? new[] { ("lunar_chimera", 18f), ("brass_contraption", 22f), ("greater_wisp", 26f), ("golem", 28f), ("parent", 34f) }
-                        : new[]
-                        {
-                            ("beetle", 10f), ("lemurian", 12f), ("jellyfish", 14f), ("wisp", 16f),
-                            ("imp", 22f), ("bison", 24f), ("brass_contraption", 26f),
-                            ("greater_wisp", 30f), ("golem", 34f), ("parent", 40f), ("elder_lemurian", 45f)
-                        };
+                    (string et, float cost)[] table = Physics.SpecialMode switch
+                    {
+                        "moon" => new[] { ("lunar_chimera", 18f), ("brass_contraption", 22f), ("greater_wisp", 26f), ("golem", 28f), ("parent", 34f) },
+                        "hell_cybergrind" => new[] { ("hell_drone", 15f), ("wisp", 16f), ("imp", 20f), ("nether_blaze", 24f), ("greater_wisp", 28f) },
+                        "black_mesa" => new[] { ("combine_soldier", 18f), ("hell_drone", 16f), ("brass_contraption", 24f), ("golem", 30f) },
+                        "qliphoth" => new[] { ("hollow_shadow", 17f), ("imp", 20f), ("sarkaz_mercenary", 22f), ("elder_lemurian", 40f) },
+                        "tartarus" => new[] { ("hollow_shadow", 16f), ("wisp", 16f), ("lunar_chimera", 22f), ("parent", 36f) },
+                        "hakurei_shrine" => new[] { ("wisp", 14f), ("hollow_shadow", 18f), ("greater_wisp", 26f), ("nether_blaze", 24f) },
+                        "tracen_derby" => new[] { ("bison", 20f), ("sarkaz_mercenary", 20f), ("lemurian", 14f), ("golem", 32f) },
+                        "pizzeria" => new[] { ("hollow_shadow", 16f), ("combine_soldier", 18f), ("brass_contraption", 24f) },
+                        _ => _run.Stage >= 4
+                            ? new[]
+                            {
+                                ("beetle", 10f), ("lemurian", 12f), ("jellyfish", 14f), ("wisp", 16f),
+                                ("hell_drone", 18f), ("combine_soldier", 20f), ("sarkaz_mercenary", 21f),
+                                ("imp", 22f), ("hollow_shadow", 23f), ("bison", 24f), ("nether_blaze", 25f),
+                                ("brass_contraption", 26f), ("greater_wisp", 30f), ("golem", 34f),
+                                ("parent", 40f), ("elder_lemurian", 45f)
+                            }
+                            : new[]
+                            {
+                                ("beetle", 10f), ("lemurian", 12f), ("jellyfish", 14f), ("wisp", 16f),
+                                ("imp", 22f), ("bison", 24f), ("brass_contraption", 26f),
+                                ("greater_wisp", 30f), ("golem", 34f), ("parent", 40f), ("elder_lemurian", 45f)
+                            }
+                    };
 
                     int packLimit = rng.Next(playerCount, 4 + playerCount * 2); // Размер пачки растёт от числа игроков
                     if (GameData.HasArtifact("dissonance"))
@@ -2795,7 +3458,9 @@ namespace RiskOfCSharp2
                         table = new[]
                         {
                             ("beetle", 10f), ("lemurian", 12f), ("jellyfish", 14f), ("wisp", 16f),
-                            ("lunar_chimera", 18f), ("imp", 22f), ("bison", 24f), ("brass_contraption", 26f),
+                            ("lunar_chimera", 18f), ("hell_drone", 18f), ("combine_soldier", 20f),
+                            ("sarkaz_mercenary", 21f), ("imp", 22f), ("hollow_shadow", 23f),
+                            ("bison", 24f), ("nether_blaze", 25f), ("brass_contraption", 26f),
                             ("greater_wisp", 30f), ("golem", 34f), ("parent", 40f), ("elder_lemurian", 45f)
                         };
                     }
@@ -2826,16 +3491,16 @@ namespace RiskOfCSharp2
 
                         float ang = (float)rng.NextDouble() * MathF.PI * 2f;
                         float dist = 15.0f + (float)rng.NextDouble() * 13.0f;
-                        float maxB = Physics.WorldBound - 4.0f;
-                        float sx = Math.Clamp(anchorPos.X + MathF.Cos(ang) * dist, -maxB, maxB);
-                        float sz = Math.Clamp(anchorPos.Z + MathF.Sin(ang) * dist, -maxB, maxB);
-                        float sy = Physics.GetSurfaceHeight(sx, sz, anchorPos.Y);
+                        // Монстры появляются только на свободной земле: не внутри скал, колонн, стен, мебели и за внешней оградой
+                        Vector3 spawnBase = Physics.FindFreeActorPos(new Vector3(
+                            anchorPos.X + MathF.Cos(ang) * dist, anchorPos.Y, anchorPos.Z + MathF.Sin(ang) * dist), 1.0f, 10f, 4f);
+                        float sy = spawnBase.Y;
                         int swarmSpawnCount = GameData.HasArtifact("swarm") ? 2 : 1;
                         for (int swi = 0; swi < swarmSpawnCount && CombatManager.Enemies.Count < maxEnemies; swi++)
                         {
-                            float osx = Math.Clamp(sx + swi * 1.6f, -maxB, maxB);
-                            float osz = Math.Clamp(sz - swi * 1.6f, -maxB, maxB);
-                            float osy = Physics.GetSurfaceHeight(osx, osz, sy);
+                            Vector3 swPos = swi == 0 ? spawnBase
+                                : Physics.FindFreeActorPos(spawnBase + new Vector3(swi * 1.6f, 0f, -swi * 1.6f), 1.0f, 6f, 4f);
+                            float osx = swPos.X, osy = swPos.Y, osz = swPos.Z;
                             var ne = new CombatTarget(new Vector3(osx, osy, osz), chosen.et, coeff);
                             CombatManager.Enemies.Add(ne);
                             _run.StageEntities.Add(ne);
@@ -2853,28 +3518,6 @@ namespace RiskOfCSharp2
                                     ["elite"] = ne.IsElite
                                 });
                             }
-                        }
-                    }
-                    bool _unusedDir = false;
-                    if (_unusedDir)
-                    {
-                        (string et, float cost) chosen = ("lemurian", 10f);
-                        float sx = 0f, sy = 0f, sz = 0f;
-                        var ne = new CombatTarget(new Vector3(sx, sy, sz), chosen.et, coeff);
-                        CombatManager.Enemies.Add(ne);
-                        _run.StageEntities.Add(ne);
-
-                        if (_net.Connected)
-                        {
-                            _net.Broadcast(new System.Text.Json.Nodes.JsonObject
-                            {
-                                ["type"] = "enemy_spawn",
-                                ["id"] = ne.NetId,
-                                ["et"] = chosen.et,
-                                ["coeff"] = MathF.Round(coeff, 3),
-                                ["pos"] = new System.Text.Json.Nodes.JsonArray(MathF.Round(sx, 2), MathF.Round(sy, 2), MathF.Round(sz, 2)),
-                                ["boss"] = false
-                            });
                         }
                     }
                 }
@@ -2923,6 +3566,8 @@ namespace RiskOfCSharp2
             bool isMoving = false;
             float animStrafe = 0f;
             float animFwd = 0f;
+            bool modalOpen = HasAnyInGameModalOpen();
+            bool nearHubNpc = _run.IsSafeTravels && SafeTravelsNpc.IsPlayerNearAnyHubNpc(_run.PlayerPos);
 
             if (isMoba)
             {
@@ -2932,7 +3577,7 @@ namespace RiskOfCSharp2
                 Ray rlRay = Raylib.GetMouseRay(Raylib.GetMousePosition(), Engine.Camera);
                 Vector3 rayOrig = new(-rlRay.Position.X, rlRay.Position.Y, rlRay.Position.Z);
                 Vector3 rayDir = new(-rlRay.Direction.X, rlRay.Direction.Y, rlRay.Direction.Z);
-                if (MathF.Abs(rayDir.Y) > 0.001f)
+                if (!modalOpen && MathF.Abs(rayDir.Y) > 0.001f)
                 {
                     float tHit = (p.Y - rayOrig.Y) / rayDir.Y;
                     if (tHit > 0f && tHit < 220f)
@@ -2947,7 +3592,7 @@ namespace RiskOfCSharp2
                     }
                 }
 
-                if (Raylib.IsMouseButtonPressed(MouseButton.Right))
+                if (!modalOpen && Raylib.IsMouseButtonPressed(MouseButton.Right))
                 {
                     CombatTarget? clickedEnemy = null;
                     float bestD = 2.6f;
@@ -2972,9 +3617,15 @@ namespace RiskOfCSharp2
                         new VisualFX(c.MobaCursorPos + new Vector3(0, 0.15f, 0), Color.Lime, 1.3f, 0.20f);
                     }
                 }
-                else if (Raylib.IsMouseButtonDown(MouseButton.Right) && c.MobaAttackTarget == null)
+                else if (!modalOpen && Raylib.IsMouseButtonDown(MouseButton.Right) && c.MobaAttackTarget == null)
                 {
                     c.MobaMoveTarget = c.MobaCursorPos;
+                }
+
+                if (modalOpen)
+                {
+                    c.MobaMoveTarget = null;
+                    c.MobaAttackTarget = null;
                 }
 
                 Vector3 moveDir = Vector3.Zero;
@@ -2987,7 +3638,7 @@ namespace RiskOfCSharp2
                     else
                     {
                         p.LookAt2D(c.MobaAttackTarget.Position);
-                        if (c.M1Cd <= 0f) c.UseM1Skill();
+                        if (c.M1Cd <= 0f) { c.UseM1Skill(); RecordSkillCast("m1"); }
                     }
                 }
                 else if (c.MobaMoveTarget.HasValue)
@@ -3008,34 +3659,47 @@ namespace RiskOfCSharp2
                 }
 
                 c.Update(dt, isMoving);
-                if ((Raylib.IsMouseButtonDown(MouseButton.Left) || Raylib.IsKeyDown(KeyboardKey.Q)) && c.M1Cd <= 0f)
+                if (!modalOpen)
                 {
-                    p.LookAt2D(c.MobaCursorPos);
-                    c.UseM1Skill();
-                }
-                if ((Raylib.IsKeyPressed(KeyboardKey.W) || Raylib.IsMouseButtonPressed(MouseButton.Middle)) && c.M2Cd <= 0f)
-                {
-                    p.LookAt2D(c.MobaCursorPos);
-                    c.UseM2Skill();
-                }
-                if (Raylib.IsKeyPressed(KeyboardKey.LeftShift) && c.ShiftCd <= 0f)
-                {
-                    c.MobaMoveTarget = null;
-                    p.LookAt2D(c.MobaCursorPos);
-                    c.UseShiftSkill();
-                }
-                if (Raylib.IsKeyPressed(KeyboardKey.R) && c.RCd <= 0f)
-                {
-                    p.LookAt2D(c.MobaCursorPos);
-                    c.UseRSkill();
+                    if ((Raylib.IsMouseButtonDown(MouseButton.Left) || Raylib.IsKeyDown(KeyboardKey.Q)) && c.M1Cd <= 0f)
+                    {
+                        p.LookAt2D(c.MobaCursorPos);
+                        c.UseM1Skill();
+                        RecordSkillCast("m1");
+                    }
+                    if ((Raylib.IsKeyPressed(KeyboardKey.W) || Raylib.IsMouseButtonPressed(MouseButton.Middle)) && c.M2Cd <= 0f)
+                    {
+                        p.LookAt2D(c.MobaCursorPos);
+                        c.UseM2Skill();
+                        RecordSkillCast("m2");
+                    }
+                    if (Raylib.IsKeyPressed(KeyboardKey.LeftShift) && c.ShiftCd <= 0f)
+                    {
+                        c.MobaMoveTarget = null;
+                        p.LookAt2D(c.MobaCursorPos);
+                        c.UseShiftSkill();
+                        RecordSkillCast("shift");
+                    }
+                    if (!nearHubNpc && Raylib.IsKeyPressed(KeyboardKey.R) && c.RCd <= 0f)
+                    {
+                        p.LookAt2D(c.MobaCursorPos);
+                        c.UseRSkill();
+                        RecordSkillCast("r");
+                    }
                 }
             }
             else
             {
-                Vector2 md = _commandPickerQueue.Count > 0 ? Vector2.Zero : Raylib.GetMouseDelta();
-                if (c.MedicTauntTimer <= 0f && _commandPickerQueue.Count == 0)
-                    p.RotationY += md.X * _mouseSens;
-                bool isFp = SurvivorCombatController.IsFirstPersonCharacter(_run.CharKey) && c.MedicTauntTimer <= 0f;
+                Vector2 md = modalOpen ? Vector2.Zero : Raylib.GetMouseDelta();
+                bool emotingFreeCam = !string.IsNullOrEmpty(_run.Parts.ActiveEmote) && !_rpsOpen && !_dialogueOpen;
+                if (c.MedicTauntTimer <= 0f && !modalOpen)
+                {
+                    if (emotingFreeCam)
+                        _emoteCamYawOffset += md.X * _mouseSens;
+                    else
+                        p.RotationY += md.X * _mouseSens;
+                }
+                bool isFp = SurvivorCombatController.IsFirstPersonCharacter(_run.CharKey) && c.MedicTauntTimer <= 0f && string.IsNullOrEmpty(_run.Parts.ActiveEmote) && !_dialogueOpen;
                 float maxPitch = isFp ? 82f : 48f;
                 float minPitch = isFp ? -82f : -42f;
                 _run.CamPitch = Math.Clamp(_run.CamPitch + md.Y * _mouseSens, minPitch, maxPitch);
@@ -3044,7 +3708,7 @@ namespace RiskOfCSharp2
                 float inZ = (Raylib.IsKeyDown(KeyboardKey.W) ? 1f : 0f) - (Raylib.IsKeyDown(KeyboardKey.S) ? 1f : 0f);
                 animStrafe = inX;
                 animFwd = inZ;
-                isMoving = (MathF.Abs(inX) > 0.01f || MathF.Abs(inZ) > 0.01f) && c.MedicTauntTimer <= 0f;
+                isMoving = !modalOpen && (MathF.Abs(inX) > 0.01f || MathF.Abs(inZ) > 0.01f) && c.MedicTauntTimer <= 0f;
 
                 if (isMoving && !c.GrappleActive)
                 {
@@ -3055,7 +3719,7 @@ namespace RiskOfCSharp2
                 }
 
                 c.Update(dt, isMoving);
-                if (c.MedicTauntTimer <= 0f && _commandPickerQueue.Count == 0)
+                if (c.MedicTauntTimer <= 0f && !modalOpen)
                 {
                     bool mouseOverBuildMenu = _run.CharKey == "mindustry" &&
                         Raylib.GetMouseX() >= Raylib.GetScreenWidth() - 525 &&
@@ -3066,13 +3730,39 @@ namespace RiskOfCSharp2
                         : Raylib.IsMouseButtonDown(MouseButton.Left)) && c.M1Cd <= 0f)
                     {
                         c.UseM1Skill();
+                        RecordSkillCast("m1");
                     }
                     if ((_run.CharKey is "sol" or "mindustry" or "freeman" ? Raylib.IsMouseButtonPressed(MouseButton.Right) : Raylib.IsMouseButtonDown(MouseButton.Right)) && c.M2Cd <= 0f)
+                    {
                         c.UseM2Skill();
-                    if (Raylib.IsKeyPressed(KeyboardKey.LeftShift) && c.ShiftCd <= 0f) c.UseShiftSkill();
-                    if (Raylib.IsKeyPressed(KeyboardKey.R) && c.RCd <= 0f) c.UseRSkill();
+                        RecordSkillCast("m2");
+                    }
+                    if (Raylib.IsKeyPressed(KeyboardKey.LeftShift) && c.ShiftCd <= 0f)
+                    {
+                        c.UseShiftSkill();
+                        RecordSkillCast("shift");
+                    }
+                    if (!nearHubNpc && Raylib.IsKeyPressed(KeyboardKey.R) && c.RCd <= 0f)
+                    {
+                        c.UseRSkill();
+                        RecordSkillCast("r");
+                    }
                 }
             }
+
+            if (isMoving || c.GrappleActive)
+            {
+                if (!string.IsNullOrEmpty(_run.Parts.ActiveEmote) && !_rpsOpen)
+                    SetLocalPlayerEmote("");
+                _run.MoveStreakTimer += dt;
+                if (!_run.IsSafeTravels && _run.MoveStreakTimer >= 20f) _run.UnlockAchievement("ach_marathon");
+            }
+            else
+            {
+                _run.MoveStreakTimer = 0f;
+            }
+            if (!_run.IsSafeTravels && c.StationaryTimer >= 12f) _run.UnlockAchievement("ach_stationary");
+            if (!_run.IsSafeTravels && c.MoveSpeed >= c.Cfg.Speed * 1.65f) _run.UnlockAchievement("ach_supersonic");
 
             float floorH = Physics.GetSurfaceHeight(p.X, p.Z, p.Y, prevY);
 
@@ -3126,8 +3816,11 @@ namespace RiskOfCSharp2
                     _run.DashTimer -= dt;
                 }
 
-                if (Raylib.IsKeyPressed(KeyboardKey.Space) && _run.PlayerJumpsLeft > 0)
+                if (!HasAnyInGameModalOpen() && Raylib.IsKeyPressed(KeyboardKey.Space) && _run.PlayerJumpsLeft > 0)
                 {
+                    if (!string.IsNullOrEmpty(_run.Parts.ActiveEmote))
+                        SetLocalPlayerEmote("");
+                    SoundManager.Play(_run.PlayerGrounded ? "jump" : "double_jump");
                     _run.PlayerVelY = 12.0f;
                     _run.PlayerGrounded = false;
                     _run.PlayerJumpsLeft--;
@@ -3135,6 +3828,11 @@ namespace RiskOfCSharp2
                     if (quill > 0 && isMoving)
                         _run.ApplyDash(p.Forward * (14.0f + 4.0f * quill), 0.16f);
                     new VisualFX(p.Position, Color.SkyBlue, 1.8f, 0.22f);
+                }
+
+                if (isMoving && _run.PlayerGrounded)
+                {
+                    SoundManager.Play("footstep", 0.50f);
                 }
 
                 if (_run.CharKey == "reimu" && !_run.PlayerGrounded && !c.ReimuFlightBroken && c.ReimuFlightFuel > 0f && Raylib.IsKeyDown(KeyboardKey.Space) && _run.PlayerVelY <= 4.0f)
@@ -3172,10 +3870,21 @@ namespace RiskOfCSharp2
                     c.ShieldStance, c.ReimuIsFlying, c.OrgiaTimer > 0f);
             }
 
-            Vector3 resolved = Physics.ResolveHorizontalCollision(p.Position, 0.72f, p.Y);
+            // Пошаговая трассировка от позиции прошлого кадра: рывки, блинки, крюки и скоростные навыки больше не
+            // «просачиваются» сквозь стены, утёсы и колонны. Явные телепорты (смена этапа, лунный трамплин, возрождение)
+            // распознаются по большому скачку и не трассируются.
+            Vector3 resolved;
+            Vector3 sweepDelta = p.Position - _lastResolvedPlayerPos;
+            float sweepDist2D = MathF.Sqrt(sweepDelta.X * sweepDelta.X + sweepDelta.Z * sweepDelta.Z);
+            if (_playerSweepValid && sweepDist2D <= 40f && MathF.Abs(sweepDelta.Y) <= 10f)
+                resolved = Physics.SweepPlayerMovement(_lastResolvedPlayerPos, p.Position, 0.72f, p.Y);
+            else
+                resolved = Physics.ResolveHorizontalCollision(p.Position, 0.72f, p.Y);
             float b = Physics.WorldBound;
             p.X = Math.Clamp(resolved.X, -b, b);
             p.Z = Math.Clamp(resolved.Z, -b, b);
+            _lastResolvedPlayerPos = p.Position;
+            _playerSweepValid = true;
 
             if (Physics.SpecialMode == "moon" && _run.MithrixSpawned && _run.IsBossAlive && p.Y >= 105.0f)
             {
@@ -3216,6 +3925,7 @@ namespace RiskOfCSharp2
                         ["grounded"] = _run.PlayerGrounded,
                         ["vel_y"] = MathF.Round(_run.PlayerVelY, 1),
                         ["shield_stance"] = c.ShieldStance,
+                        ["emote"] = _run.Parts.ActiveEmote,
                         ["anim_slot"] = _run.Parts.ActiveAnim,
                         ["anim_step"] = _run.Parts.AnimStep
                     });
@@ -3257,7 +3967,28 @@ namespace RiskOfCSharp2
 
             Engine.Camera.FovY = _fov;
             Vector3 camLookDir = c.GetAimDirection();
-            if (_run.CharKey == "mindustry")
+            bool isEmotingNow = !string.IsNullOrEmpty(_run.Parts.ActiveEmote);
+            bool inSideShotScene = (_dialogueOpen && IsValid(_dialogueNpcEntity)) || (_rpsOpen && IsValid(_rpsOppEntity));
+
+            if (inSideShotScene)
+            {
+                // Диалоговая / дуэльная КНБ камера плавно обновляется в UpdateSafeTravelsDialogue / UpdateRpsMiniGame
+            }
+            else if (isEmotingNow)
+            {
+                // Во время любой эмоции включаем обзор от 3-го лица спереди-сбоку с вращением мышью (даже для V1, Фримана и Mindustry)
+                float yawRad = (p.RotationY + 12f + _emoteCamYawOffset) * (MathF.PI / 180f);
+                Vector3 orbitDir = new(MathF.Sin(yawRad), 0f, MathF.Cos(yawRad));
+                Vector3 pivot = p.Position + new Vector3(0f, _run.CharKey == "mindustry" ? 0.85f : 1.50f, 0f);
+                float dist = _run.CharKey == "mindustry" ? 6.8f : 4.6f;
+                Vector3 desired = pivot + orbitDir * dist + new Vector3(0f, 1.05f, 0f);
+                Vector3 camPos = Physics.ResolveCameraCollision(pivot, pivot, desired, 0.42f);
+                float camFloor = Physics.GetSurfaceHeight(camPos.X, camPos.Z, camPos.Y) + 0.45f;
+                if (camPos.Y < camFloor) camPos.Y = camFloor;
+                Engine.Camera.Position = new Vector3(-camPos.X, camPos.Y, camPos.Z);
+                Engine.Camera.Target = new Vector3(-pivot.X, pivot.Y, pivot.Z);
+            }
+            else if (_run.CharKey == "mindustry")
             {
                 // Полный вид сверху вниз (как в Mindustry)
                 float camHeight = c.MindustryBuildMode ? 38.0f : 28.0f;
@@ -3269,7 +4000,7 @@ namespace RiskOfCSharp2
             else if (isMoba)
             {
                 Vector3 camPos = p.Position + new Vector3(0f, 22.0f, -14.5f);
-                Vector3 target = p.Position + new Vector3(0f, 0.8f, 1.5f);
+                Vector3 target = p.Position + new Vector3(0f, 1.0f, 1.5f);
                 Engine.Camera.Position = new Vector3(-camPos.X, camPos.Y, camPos.Z);
                 Engine.Camera.Target = new Vector3(-target.X, target.Y, target.Z);
             }
@@ -3302,24 +4033,31 @@ namespace RiskOfCSharp2
         {
             int sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();
             Raylib.DrawRectangle(0, 0, sw, sh, Rgb(6, 8, 14, 150));
-            int pw = 420, ph = 330, px = (sw - pw) / 2, py = (sh - ph) / 2;
+            int pw = 440, ph = 420, px = (sw - pw) / 2, py = (sh - ph) / 2;
             Raylib.DrawRectangle(px, py, pw, ph, Rgb(14, 18, 30, 245));
             Raylib.DrawRectangle(px, py, pw, 4, Color.SkyBlue);
-            Engine.DrawTextCentered("ПАУЗА", sw * 0.5f, py + 38f, 26f, Color.SkyBlue);
+            Engine.DrawTextCentered("ПАУЗА", sw * 0.5f, py + 34f, 26f, Color.SkyBlue);
 
-            if (Engine.DrawButton(new Rectangle(px + 40, py + 82, pw - 80, 52), "ПРОДОЛЖИТЬ ИГРУ [ESC]", Rgb(38, 110, 70), Rgb(55, 155, 95), Color.White, 18f))
+            if (Engine.DrawButton(new Rectangle(px + 40, py + 72, pw - 80, 50), "ПРОДОЛЖИТЬ ИГРУ [ESC]", Rgb(38, 110, 70), Rgb(55, 155, 95), Color.White, 18f))
             {
                 _paused = false;
-                if (_run != null && SurvivorDatabase.IsMobaCharacter(_run.CharKey))
-                    Raylib.EnableCursor();
-                else
-                    Raylib.DisableCursor();
+                RestoreInGameCursorIfNeeded();
             }
-            if (Engine.DrawButton(new Rectangle(px + 40, py + 150, pw - 80, 52), "ВЫЙТИ В ЛОББИ ПЕРСОНАЖЕЙ", Rgb(55, 75, 115), Rgb(80, 105, 155), Color.White, 18f))
+
+            Engine.DrawTextLeft($"Громкость звука: {(SoundManager.Muted ? "ВЫКЛ" : $"{(int)MathF.Round(SoundManager.MasterVolume * 100f)}%")}", px + 42, py + 144, 16f, Color.SkyBlue);
+            if (Engine.DrawButton(new Rectangle(px + 256, py + 136, 42, 34), "-", Rgb(42, 52, 74), Rgb(65, 80, 110), Color.White, 18f))
+                SoundManager.SetMasterVolume(SoundManager.MasterVolume - 0.10f);
+            if (Engine.DrawButton(new Rectangle(px + 304, py + 136, 42, 34), "+", Rgb(42, 52, 74), Rgb(65, 80, 110), Color.White, 18f))
+                SoundManager.SetMasterVolume(SoundManager.MasterVolume + 0.10f);
+            if (Engine.DrawButton(new Rectangle(px + 352, py + 136, 48, 34), SoundManager.Muted ? "ВКЛ" : "MUTE",
+                SoundManager.Muted ? Rgb(115, 42, 48) : Rgb(42, 65, 92), Rgb(75, 100, 138), Color.White, 12f))
+                SoundManager.ToggleMute();
+
+            if (Engine.DrawButton(new Rectangle(px + 40, py + 190, pw - 80, 50), "ВЫЙТИ В ЛОББИ ПЕРСОНАЖЕЙ", Rgb(55, 75, 115), Rgb(80, 105, 155), Color.White, 18f))
             {
                 QuitRunToLobby(toMainMenu: false);
             }
-            if (Engine.DrawButton(new Rectangle(px + 40, py + 218, pw - 80, 52), "ВЫЙТИ В ГЛАВНОЕ МЕНЮ", Rgb(135, 40, 48), Rgb(185, 60, 68), Color.White, 18f))
+            if (Engine.DrawButton(new Rectangle(px + 40, py + 256, pw - 80, 50), "ВЫЙТИ В ГЛАВНОЕ МЕНЮ", Rgb(135, 40, 48), Rgb(185, 60, 68), Color.White, 18f))
             {
                 QuitRunToLobby(toMainMenu: true);
             }
@@ -3330,6 +4068,12 @@ namespace RiskOfCSharp2
             if (_run == null) return;
             int sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();
             var c = _run.Combat;
+
+            if (_cutsceneTimer > 0f)
+            {
+                DrawCharacterUnlockCutsceneOverlay(sw, sh);
+                return;
+            }
 
             // Красная виньетка по краям экрана при получении урона (в стиле CS)
             if (_damageFlashTimer > 0f)
@@ -3344,7 +4088,7 @@ namespace RiskOfCSharp2
 
             // Лаконичный аккуратный прицел в центре + Хитмаркер (CS-style) + Шкала заряда Тау-пушки Фримана
             int cx = sw / 2, cy = sh / 2;
-            if (!SurvivorDatabase.IsMobaCharacter(_run.CharKey) && _run.CharKey != "mindustry")
+            if (!SurvivorDatabase.IsMobaCharacter(_run.CharKey) && _run.CharKey != "mindustry" && !HasAnyInGameModalOpen())
             {
                 Raylib.DrawCircleLines(cx, cy, 4f, Rgb(90, 230, 255, 180));
                 Raylib.DrawPixel(cx, cy, Color.White);
@@ -3439,12 +4183,21 @@ namespace RiskOfCSharp2
                 Engine.DrawTextCentered($"{(int)MathF.Max(0, boss.Hp)} / {(int)boss.MaxHp}", sw * 0.5f, by + 7f, 13f, Color.White);
             }
 
-            // 4. КОМПАКТНЫЙ БЛОК ЗДОРОВЬЯ И ВАЛЮТ СЛЕВА ВНИЗУ (300x60)
+            // 4. КОМПАКТНЫЙ БЛОК ЗДОРОВЬЯ И ВАЛЮТ СЛЕВА ВНИЗУ (300x60) + БЕЙДЖ КОЛЕСА ЭМОЦИЙ [L]
             int hx = 20, hy = sh - 78;
+            bool emoteActive = !string.IsNullOrEmpty(_run.Parts.ActiveEmote);
+            string emoteBadge = emoteActive ? "[L] Эмоции  |  [Space/WASD] Стоп" : "[L] Колесо эмоций";
+            int ebW = emoteActive ? 248 : 154;
+            Raylib.DrawRectangle(hx, hy - 24, ebW, 21, Rgb(12, 16, 26, 185));
+            Engine.DrawTextLeft(emoteBadge, hx + 8, hy - 20, 12f, emoteActive ? Color.Lime : Color.Gold);
+
             Raylib.DrawRectangle(hx, hy, 300, 58, Rgb(12, 16, 26, 190));
             Engine.DrawTextLeft($"${_run.Gold}", hx + 12, hy + 7, 18f, Color.Gold);
             Engine.DrawTextLeft($"{_run.LunarCoins}М", hx + 95, hy + 7, 17f, Color.SkyBlue);
-            Engine.DrawTextLeft(SurvivorDatabase.Classes[_run.CharKey].Name, hx + 155, hy + 8, 15f, Rgb(190, 210, 235));
+            var activeSurvCfg = SurvivorDatabase.Classes[_run.CharKey];
+            var activeSurvSkin = activeSurvCfg.GetActiveSkin();
+            string hudHeroName = activeSurvSkin.CustomSkillVariants != null ? activeSurvSkin.Name : activeSurvCfg.Name;
+            Engine.DrawTextLeft(hudHeroName, hx + 155, hy + 8, 15f, Rgb(190, 210, 235));
 
             float hpRatio = Math.Clamp(_run.PlayerHp / _run.PlayerMaxHp, 0f, 1f);
             float shRatio = Math.Clamp(c.Shield / _run.PlayerMaxHp, 0f, 1f);
@@ -3576,6 +4329,104 @@ namespace RiskOfCSharp2
             {
                 string ahriTxt = $"КРАЖА СУЩНОСТИ: {c.AhriEssenceStacks}/9  |  ПРИЗРАЧНЫЙ РЫВОК [Shift]: {c.AhriDashCharges}/3";
                 Engine.DrawTextLeft(ahriTxt, sw - 540, sh - 116, 14f, Rgb(105, 235, 255));
+            }
+            else if (_run.CharKey == "steve")
+            {
+                int sx = sw - 560, sy = sh - 134;
+                Raylib.DrawRectangle(sx, sy, 544, 52, Rgb(12, 18, 28, 225));
+                Raylib.DrawRectangle(sx, sy, 544, 3, Color.SkyBlue);
+                string gearStr = $"Меч: {(c.SteveSwordTier >= 2 ? "Незерит" : (c.SteveSwordTier == 1 ? "Алмаз" : "Баз."))} | Броня: {(c.SteveArmorTier >= 3 ? "Незерит" : (c.SteveArmorTier >= 1 ? "Железо" : "Нет"))}{(c.SteveHasTotem ? " | ★ТОТЕМ" : "")}";
+                Engine.DrawTextLeft($"ДЕРЕВО: {c.SteveWood}  |  КАМЕНЬ: {c.SteveStone}  |  ЖЕЛЕЗО: {c.SteveIron}  |  АЛМАЗЫ: {c.SteveDiamond}   ({gearStr})",
+                    sx + 10, sy + 7, 13f, Color.SkyBlue);
+                Engine.DrawTextLeft("ЛКМ вниз / ПКМ — ломать пол (ямы!), стены и алтари  |  [R] или [E] у Верстака — Крафт",
+                    sx + 10, sy + 29, 12f, Color.Gold);
+            }
+            else if (_run.CharKey == "gold_ship")
+            {
+                int gx = sw - 520, gy = sh - 118;
+                float momPct = Math.Clamp(c.GoldShipMomentum, 0f, 1f);
+                Raylib.DrawRectangle(gx, gy, 504, 36, Rgb(14, 18, 30, 225));
+                Raylib.DrawRectangle(gx, gy, (int)(504 * momPct), 4, Color.Gold);
+                string gsTxt = $"РАЗБЕГ ГОЛД ШИП: {(int)(momPct * 100f)}%  |  МНОЖИТЕЛЬ УРОНА ОТ СКОРОСТИ: x{c.GoldShipSpeedScale:F2}{(c.GoldShipSpurtTimer > 0f ? $"  |  ГОЛШИ-ВАРП: {c.GoldShipSpurtTimer:F1}с" : "")}";
+                Engine.DrawTextLeft(gsTxt, gx + 10, gy + 11, 13f, momPct > 0.7f ? Color.Gold : Color.White);
+            }
+            else if (_run.CharKey == "jotaro")
+            {
+                string jTxt = c.ZaWarudoTimer > 0f
+                    ? $"★ STAR PLATINUM: THE WORLD :: ВРЕМЯ ОСТАНОВЛЕНО ({c.ZaWarudoTimer:F1}с) ★"
+                    : "СТЕНД 『STAR PLATINUM』 АКТИВЕН :: [ЛКМ] ORA ORA | [R] Остановка Времени";
+                Engine.DrawTextLeft(jTxt, sw - 560, sh - 104, 14f, c.ZaWarudoTimer > 0f ? Color.Gold : Rgb(195, 130, 255));
+            }
+            else if (_run.CharKey == "sol")
+            {
+                int solSkin = Data.ProgressData.Instance.GetSelectedSkin("sol");
+                if (solSkin == 2 && c.KyStunEdgeCharging)
+                {
+                    int kx = sw - 560, ky = sh - 122;
+                    float chPct = Math.Clamp(c.KyStunEdgeCharge / SurvivorCombatController.KyStunEdgeMaxCharge, 0f, 1f);
+                    Raylib.DrawRectangle(kx, ky, 542, 38, Rgb(12, 18, 32, 236));
+                    Color barCol = chPct >= 0.75f ? Rgb(255, 75, 95) : (chPct >= 0.35f ? Color.Gold : Color.SkyBlue);
+                    Raylib.DrawRectangle(kx, ky, (int)(542 * chPct), 5, barCol);
+                    string chTitle = chPct >= 0.75f ? "★ CHARGED STUN EDGE ГОТОВ!" : "ЗАРЯД STUN EDGE (УДЕРЖИВАЙТЕ ПКМ)";
+                    Engine.DrawTextLeft($"{chTitle} :: {(int)(chPct * 100f)}%  |  Урон x{(2.45f + chPct * 3.45f):F1}", kx + 10, ky + 12, 13f, barCol);
+                }
+                else
+                {
+                    string solTxt = solSkin == 2
+                        ? "★ КАЙ КИСКЕ (THUNDER SEAL) :: [Зажать ПКМ] Заряд Stun Edge | [Shift] Подкат + Разряд"
+                        : "СОЛ БЭДГАЙ (OUTRAGE MK.II) :: Пламенное комбо и Dragon Install";
+                    Engine.DrawTextLeft(solTxt, sw - 560, sh - 104, 13f, solSkin == 2 ? Color.SkyBlue : Color.Orange);
+                }
+            }
+            else if (_run.CharKey == "jack_o")
+            {
+                int jx = sw - 560, jy = sh - 122;
+                int aliveSv = 0;
+                foreach (var sv in c.JackOServants) if (IsValid(sv)) aliveSv++;
+                JackOCommandFlag? activeFl = null;
+                foreach (var fl in c.JackOFlags) if (IsValid(fl)) { activeFl = fl; break; }
+
+                Raylib.DrawRectangle(jx, jy, 542, 38, Rgb(22, 14, 24, 232));
+                Color flCol = activeFl != null
+                    ? (activeFl.BuffMode == "attack" ? Rgb(255, 95, 65) : (activeFl.BuffMode == "defense" ? Color.SkyBlue : Color.Gold))
+                    : Rgb(155, 255, 75);
+                float barRatio = activeFl != null ? Math.Clamp(activeFl.Lifetime / 12.0f, 0f, 1f) : Math.Clamp(aliveSv / 4.0f, 0f, 1f);
+                Raylib.DrawRectangle(jx, jy, (int)(542 * barRatio), 4, flCol);
+
+                string flagStatus = activeFl != null
+                    ? $"★ ФЛАГ ({(activeFl.BuffMode == "attack" ? "+65% УРОН" : (activeFl.BuffMode == "defense" ? "+65% ЗАЩИТА" : "УРОН+ЗАЩИТА"))}): {MathF.Max(0f, activeFl.Lifetime):F1}с"
+                    : $"[Shift] Прыжок с флагом ({(c.JackONextFlagDefense ? "Защита" : "Урон")})";
+                Engine.DrawTextLeft($"ДЖЕК-О :: СЛУГИ: {aliveSv}/4  |  {flagStatus}", jx + 10, jy + 12, 13f, flCol);
+            }
+            else if (_run.CharKey == "dmc_trio")
+            {
+                int skin = Data.ProgressData.Instance.GetSelectedSkin("dmc_trio");
+                string formName = skin == 1 ? $"НЕРО (Exceed: {c.NeroExceedCharges}/3)" : (skin == 2 ? "ВЕРГИЛИЙ (Concentration)" : "ДАНТЕ (SWORDMASTER)");
+                string dtStr = c.DmcDevilTriggerTimer > 0f ? $"  |  ★ DEVIL TRIGGER: {c.DmcDevilTriggerTimer:F1}с" : "";
+                Engine.DrawTextLeft($"ОХОТНИК НА ДЕМОНОВ: {formName}{dtStr}", sw - 520, sh - 104, 14f, c.DmcDevilTriggerTimer > 0f ? Color.Magenta : Color.Gold);
+            }
+            else if (_run.CharKey == "sanabi")
+            {
+                int sx = sw - 535, sy = sh - 122;
+                float momPct = Math.Clamp(c.SanabiMomentum, 0f, 1f);
+                Raylib.DrawRectangle(sx, sy, 518, 38, Rgb(14, 18, 30, 232));
+                Raylib.DrawRectangle(sx, sy, (int)(518 * momPct), 4, Rgb(255, 195, 55));
+                string ovStr = c.SanabiOverdriveTimer > 0f ? $"  |  ★ ПРОТОКОЛ SANABI (МАРИ): {c.SanabiOverdriveTimer:F1}с" : "  |  [ПКМ/Shift] Цепной Захват";
+                string snTxt = $"ИМПУЛЬС ЦЕПИ: {(int)(momPct * 100f)}%  |  УРОН ОТ РАЗГОНА: x{c.SanabiSpeedScale:F2}{ovStr}";
+                Engine.DrawTextLeft(snTxt, sx + 10, sy + 12, 13f, c.SanabiOverdriveTimer > 0f ? Rgb(80, 235, 255) : Color.Gold);
+            }
+            else if (_run.CharKey is "lappland" or "w_arknights" or "pushnoy" or "freddy" or "vyper" or "haze")
+            {
+                string specTxt = _run.CharKey switch
+                {
+                    "lappland" => c.LapplandFormTimer > 0f ? $"★ ЗАТМЕНИЕ БЕЗУМИЯ АКТИВНО: {c.LapplandFormTimer:F1}с" : "ПАССИВКА: Удары накладывают Безмолвие и раскол брони (-30%)",
+                    "w_arknights" => c.WisadelTurretTimer > 0f ? $"★ НАСЛЕДИЕ РЕВЕНАНТА АКТИВНО: {c.WisadelTurretTimer:F1}с" : "ПАССИВКА: Взрывы оглушают цели и дают +35% крит. урона",
+                    "pushnoy" => c.PushnoyRockBuffTimer > 0f ? $"★ МЕГА-РОК СОЛО ГАЛИЛЕО: {c.PushnoyRockBuffTimer:F1}с" : "ЭКСПЕРИМЕНТ ГАЛИЛЕО: Акустический рифф + Научные опыты",
+                    "freddy" => c.FreddyBlackoutTimer > 0f ? $"★ ОТКЛЮЧЕНИЕ СВЕТА (МАРШ ТОРЕАДОРА): {c.FreddyBlackoutTimer:F1}с" : "ПАССИВКА: Ночная Смена (Ночной режим с 00:00 до 06:00)",
+                    "vyper" => c.VyperSlideTimer > 0f ? $"★ СИЛОВОЙ ПОДКЛАД АКТИВЕН ({c.VyperSlideTimer:F1}с): +35% СКОРОСТРЕЛЬНОСТИ" : "ПАССИВКА: Скольжение даёт +35% к скорострельности и броню",
+                    _ => c.HazeDanceTimer > 0f ? $"★ ТАНЕЦ ПУЛЬ (BULLET DANCE): {c.HazeDanceTimer:F1}с" : (c.HazeSmokeTimer > 0f ? $"ДЫМОВАЯ НЕВИДИМОСТЬ: {c.HazeSmokeTimer:F1}с" : "ПАССИВКА: Фиксация (до 20 стаков на цели -> взрыв сновидений)")
+                };
+                Engine.DrawTextLeft(specTxt, sw - 560, sh - 104, 13f, Color.Gold);
             }
 
             // 6. КОМПАКТНЫЙ ULTRAKILL STYLE METER + ПАНЕЛЬ 5 ОРУЖИЙ V1
@@ -3711,20 +4562,277 @@ namespace RiskOfCSharp2
                 Engine.DrawTextLeft(hName, mx + 40, my + mh - 86, 18f, hCol);
                 Engine.DrawTextLeft(hDesc, mx + 40, my + mh - 56, 15f, Color.White);
             }
-            bool _unusedTab = false;
-            if (_unusedTab)
+
+            // 9. ИНТЕРАКТИВНОЕ ОКНО ВЕРСТАКА СТИВА (MINECRAFT WORKBENCH CRAFTING POOL)
+            if (_workbenchOpen && !_paused)
             {
+                DrawWorkbenchModalUI(sw, sh);
+            }
+
+            // 10. ХАБ UES «SAFE TRAVELS», КОЛЕСО ЭМОЦИЙ [L], ДИАЛОГИ ЭКИПАЖА И К-Н-Б
+            if (!_paused)
+            {
+                if (_run.IsSafeTravels)
+                    DrawSafeTravelsHubOverlay(sw, sh);
+
+                DrawSafeTravelsDialogueModal(sw, sh);
+                DrawRpsMiniGameModal(sw, sh);
+                DrawEmoteWheelOverlay(sw, sh);
+            }
+        }
+
+        private static int CountRunItemsByTier(string? tierFilter = null)
+        {
+            if (_run == null) return 0;
+            int total = 0;
+            foreach (var kv in _run.Items)
+            {
+                if (kv.Value <= 0 || kv.Key == "tonic_affliction") continue;
+                if (tierFilter == null || (GameData.ItemPool.TryGetValue(kv.Key, out var inf) && inf.Tier == tierFilter))
+                    total += kv.Value;
+            }
+            return total;
+        }
+
+        private static bool ConsumeRunItems(int count, string? tierFilter = null)
+        {
+            if (_run == null || CountRunItemsByTier(tierFilter) < count) return false;
+            int left = count;
+            for (int i = _run.ItemOrder.Count - 1; i >= 0 && left > 0; i--)
+            {
+                string k = _run.ItemOrder[i];
+                if (k == "tonic_affliction" || !_run.Items.TryGetValue(k, out int have) || have <= 0) continue;
+                if (tierFilter != null && (!GameData.ItemPool.TryGetValue(k, out var inf) || inf.Tier != tierFilter)) continue;
+
+                int take = Math.Min(have, left);
+                _run.Items[k] -= take;
+                left -= take;
+                if (_run.Items[k] <= 0)
                 {
-                    int sy = 0;
-                    sy += 23;
+                    _run.Items[k] = 0;
+                    _run.ItemOrder.RemoveAt(i);
                 }
             }
+            return true;
+        }
+
+        private static void DrawWorkbenchModalUI(int sw, int sh)
+        {
+            if (_run == null) return;
+            if (Raylib.IsCursorHidden()) Raylib.EnableCursor();
+            var c = _run.Combat;
+
+            int mw = 920, mh = 590, mx = (sw - mw) / 2, my = (sh - mh) / 2;
+            Raylib.DrawRectangle(0, 0, sw, sh, Rgb(6, 8, 16, 165));
+            Raylib.DrawRectangle(mx, my, mw, mh, Rgb(14, 18, 30, 250));
+            Raylib.DrawRectangle(mx, my, mw, 4, Rgb(80, 235, 245));
+
+            Engine.DrawTextLeft("⛏ ВЕРСТАК И НАКОВАЛЬНЯ СТИВА :: ПУЛ КРАФТОВ MINECRAFT", mx + 24, my + 16, 20f, Rgb(80, 235, 245));
+            if (Engine.DrawButton(new Rectangle(mx + mw - 184, my + 12, 160, 32), "ЗАКРЫТЬ [ESC]",
+                Rgb(110, 38, 46), Rgb(155, 55, 65), Color.White, 14f, Color.Red))
+            {
+                _workbenchOpen = false;
+                RestoreInGameCursorIfNeeded();
+                return;
+            }
+
+            // Плашка текущих добытых ресурсов с карты и предметов в инвентаре
+            int whiteItems = CountRunItemsByTier("white");
+            int greenItems = CountRunItemsByTier("green");
+            int allItems = CountRunItemsByTier(null);
+            Raylib.DrawRectangle(mx + 24, my + 52, mw - 48, 44, Rgb(20, 28, 44, 240));
+            Raylib.DrawRectangle(mx + 24, my + 52, 4, 44, Color.Gold);
+            Engine.DrawTextLeft(
+                $"РЕСУРСЫ С КАРТЫ:   Дерево: {c.SteveWood}   |   Камень: {c.SteveStone}   |   Железо: {c.SteveIron}   |   Алмазы: {c.SteveDiamond}",
+                mx + 38, my + 58, 15f, Color.SkyBlue);
+            Engine.DrawTextLeft(
+                $"ПРЕДМЕТЫ В ИНВЕНТАРЕ:   Обычные (Белые): {whiteItems}   |   Необычные (Зелёные): {greenItems}   |   Всего предметов: {allItems}",
+                mx + 38, my + 77, 13f, Color.Gold);
+
+            var recipes = new (string Title, string CostText, string Desc, Color Col, bool CanCraft, Action DoCraft)[]
+            {
+                (
+                    "1. Алмазный Меч Остроты V + Очки Творца",
+                    "Цена: 2 Дерева + 3 Алмаза",
+                    "Повышает ранг меча Стива до Алмазного (+35% базового урона навсегда) и создаёт предмет «Очки Творца» (+10% крита).",
+                    Rgb(80, 240, 250),
+                    c.SteveWood >= 2 && c.SteveDiamond >= 3,
+                    () =>
+                    {
+                        c.SteveWood -= 2; c.SteveDiamond -= 3;
+                        c.SteveSwordTier = Math.Max(c.SteveSwordTier, 1);
+                        _run.CollectItem("lens");
+                        ShowBanner("СКРАФЧЕНО: Алмазный Меч Остроты V (+35% урона) + Очки Творца!", Rgb(80, 240, 250), 3.5f);
+                    }
+                ),
+                (
+                    "2. Незеритовый Клинок + Грань Бесконечности",
+                    "Цена: 4 Железа + 5 Алмазов + 1 Белый предмет",
+                    "Максимальный ранг меча Стива (+75% базового урона) + перековывает 1 обычный предмет в «Грань Бесконечности»!",
+                    Rgb(255, 95, 75),
+                    c.SteveIron >= 4 && c.SteveDiamond >= 5 && whiteItems >= 1,
+                    () =>
+                    {
+                        if (!ConsumeRunItems(1, "white")) return;
+                        c.SteveIron -= 4; c.SteveDiamond -= 5;
+                        c.SteveSwordTier = 2;
+                        _run.CollectItem("infinity_edge");
+                        ShowBanner("СКРАФЧЕНО: Незеритовый Клинок (+75% урона) + Грань Бесконечности!", Color.Gold, 4.0f);
+                    }
+                ),
+                (
+                    "3. Железный Доспех Защиты + Бронепластина",
+                    "Цена: 5 Камня + 4 Железа",
+                    "Надевает на Стива Железный Доспех (-22% получаемого урона, +50 Щита) и создаёт предмет «Бронепластина».",
+                    Rgb(215, 225, 240),
+                    c.SteveStone >= 5 && c.SteveIron >= 4,
+                    () =>
+                    {
+                        c.SteveStone -= 5; c.SteveIron -= 4;
+                        c.SteveArmorTier = Math.Max(c.SteveArmorTier, 1);
+                        c.Shield = MathF.Min(_run.PlayerMaxHp, c.Shield + 50f);
+                        _run.CollectItem("repulsion_armor");
+                        ShowBanner("СКРАФЧЕНО: Железный Доспех Защиты + Бронепластина!", Color.SkyBlue, 3.5f);
+                    }
+                ),
+                (
+                    "4. Незеритовый Доспех + Сердце Тарраски",
+                    "Цена: 6 Железа + 6 Алмазов + 1 Предмет",
+                    "Максимальная Незеритовая Броня (-54% получаемого урона, +120 Щита) и легендарное «Сердце Тарраски» (+100 HP и реген)!",
+                    Rgb(195, 90, 255),
+                    c.SteveIron >= 6 && c.SteveDiamond >= 6 && allItems >= 1,
+                    () =>
+                    {
+                        if (!ConsumeRunItems(1, null)) return;
+                        c.SteveIron -= 6; c.SteveDiamond -= 6;
+                        c.SteveArmorTier = 3;
+                        c.Shield = MathF.Min(_run.PlayerMaxHp, c.Shield + 120f);
+                        _run.CollectItem("tarrasque");
+                        ShowBanner("СКРАФЧЕНО: Незеритовый Доспех + Сердце Тарраски!", Color.Magenta, 4.0f);
+                    }
+                ),
+                (
+                    "5. Тотем Бессмертия (Totem of Undying)",
+                    "Цена: 4 Дерева + 3 Железа + 2 Алмаза",
+                    "Даёт Тотем Бессмертия в левую руку: при смертельном ударе спасает жизнь, восстанавливает 65% HP и взрывает врагов!",
+                    Color.Gold,
+                    c.SteveWood >= 4 && c.SteveIron >= 3 && c.SteveDiamond >= 2 && !c.SteveHasTotem,
+                    () =>
+                    {
+                        c.SteveWood -= 4; c.SteveIron -= 3; c.SteveDiamond -= 2;
+                        c.SteveHasTotem = true;
+                        _run.HealPlayer(_run.PlayerMaxHp * 0.50f);
+                        ShowBanner("СКРАФЧЕНО: Тотем Бессмертия экипирован!", Color.Gold, 3.8f);
+                    }
+                ),
+                (
+                    "6. Зачарованное Золотое Яблоко Нотча",
+                    "Цена: 3 Дерева + 2 Камня + 2 Алмаза",
+                    "Мгновенно восстанавливает 100% HP, даёт +80 Щита и создаёт «Копыто Пауля» (+скорость) и «Шприц Солдата» (+атака).",
+                    Rgb(255, 215, 55),
+                    c.SteveWood >= 3 && c.SteveStone >= 2 && c.SteveDiamond >= 2,
+                    () =>
+                    {
+                        c.SteveWood -= 3; c.SteveStone -= 2; c.SteveDiamond -= 2;
+                        _run.HealPlayer(_run.PlayerMaxHp);
+                        c.Shield = MathF.Min(_run.PlayerMaxHp, c.Shield + 80f);
+                        _run.CollectItem("hoof");
+                        _run.CollectItem("syringe");
+                        ShowBanner("СКРАФЧЕНО: Зачарованное Золотое Яблоко (+100% HP, Копыто и Шприц)!", Color.Gold, 3.8f);
+                    }
+                ),
+                (
+                    "7. Шахтёрская Ковка: Необычный Предмет (Зелёный)",
+                    "Цена: 4 Дерева + 4 Камня + 2 Железа",
+                    "Выковывает из добытой руды случайный зелёный предмет (Ракета AT-G, Укулеле, Кольцо Кьяро/Рунальда, Перо Хопу или Коса).",
+                    Rgb(80, 235, 95),
+                    c.SteveWood >= 4 && c.SteveStone >= 4 && c.SteveIron >= 2,
+                    () =>
+                    {
+                        c.SteveWood -= 4; c.SteveStone -= 4; c.SteveIron -= 2;
+                        string[] greenPool = { "atg_missile", "ukulele", "kjaro_band", "runald_band", "harvester_scythe", "feather" };
+                        string rolled = greenPool[Random.Shared.Next(0, greenPool.Length)];
+                        _run.CollectItem(rolled);
+                    }
+                ),
+                (
+                    "8. Перековка на Наковальне: Легендарный Предмет (Красный)",
+                    "Цена: 2 Белых предмета + 4 Камня + 3 Железа + 2 Алмаза",
+                    "Переплавляет 2 обычных предмета из инвентаря и ресурсы карты в случайный Легендарный (Красный) артефакт!",
+                    Rgb(250, 65, 65),
+                    whiteItems >= 2 && c.SteveStone >= 4 && c.SteveIron >= 3 && c.SteveDiamond >= 2,
+                    () =>
+                    {
+                        if (!ConsumeRunItems(2, "white")) return;
+                        c.SteveStone -= 4; c.SteveIron -= 3; c.SteveDiamond -= 2;
+                        string[] redPool = { "clover", "behemoth", "tesla_coil", "alien_head", "rabadons_deathcap", "blade_ruined_king" };
+                        string rolled = redPool[Random.Shared.Next(0, redPool.Length)];
+                        _run.CollectItem(rolled);
+                    }
+                )
+            };
+
+            Vector2 mp = Raylib.GetMousePosition();
+            string hoverTitle = "НАВЕДИТЕ КУРСОР НА РЕЦЕПТ ВЕРСТАКА";
+            string hoverCost = "Ломайте пол (ЛКМ вниз / ПКМ), стены, скалы, сундуки и алтари киркой Стива для добычи ресурсов";
+            string hoverDesc = "После победы над Боссом Телепорта и зарядки портала рядом всегда спавнится Верстак для спокойного крафта!";
+            Color hoverCol = Rgb(80, 235, 245);
+
+            for (int i = 0; i < recipes.Length; i++)
+            {
+                var r = recipes[i];
+                int row = i / 2, col = i % 2;
+                int bx = mx + 24 + col * 442;
+                int by = my + 108 + row * 90;
+                Rectangle rect = new(bx, by, 430, 80);
+
+                if (Raylib.CheckCollisionPointRec(mp, rect))
+                {
+                    hoverTitle = r.Title;
+                    hoverCost = $"{r.CostText}   —   {(r.CanCraft ? "ДОСТУПНО ДЛЯ КРАФТА ✓" : "НЕДОСТАТОЧНО РЕСУРСОВ ИЛИ ПРЕДМЕТОВ")}";
+                    hoverDesc = r.Desc;
+                    hoverCol = r.CanCraft ? r.Col : Color.Red;
+                }
+
+                string btnTxt = $"{r.Title}\n{r.CostText}";
+                Color bgCol = r.CanCraft ? Rgb(24, 38, 58, 245) : Rgb(18, 20, 28, 230);
+                Color brdCol = r.CanCraft ? r.Col : Color.Gray;
+
+                if (Engine.DrawButton(rect, btnTxt, bgCol, Rgb(46, 78, 126),
+                    r.CanCraft ? Color.White : Color.Gray, 13f, brdCol))
+                {
+                    if (r.CanCraft)
+                    {
+                        SoundManager.Play("item_legendary", 0.95f);
+                        r.DoCraft();
+                    }
+                    else
+                    {
+                        SoundManager.Play("ui_error", 0.85f);
+                        ShowBanner($"НЕ ХВАТАЕТ РЕСУРСОВ! ({r.CostText})", Color.Red, 2.5f);
+                    }
+                }
+            }
+
+            // Нижняя карточка подробного описания рецепта
+            int descY = my + mh - 110;
+            Raylib.DrawRectangle(mx + 24, descY, mw - 48, 92, Rgb(18, 24, 40, 248));
+            Raylib.DrawRectangle(mx + 24, descY, 4, 92, hoverCol);
+            Engine.DrawTextLeft(hoverTitle, mx + 38, descY + 10, 17f, hoverCol);
+            Engine.DrawTextLeft(hoverCost, mx + 38, descY + 34, 14f, Color.Gold);
+            DrawWrappedText(hoverDesc, mx + 38, descY + 58, 95, 14f, Color.White, maxLines: 2, lineStep: 18f);
         }
 
         
 
         private static void DrawLogbookUI()
         {
+            if (_logDetailOpen)
+            {
+                UpdateAndDrawLogbookDetailModal();
+                return;
+            }
+
             DrawHeader();
             (string id, string title)[] tabs =
             {
@@ -3747,6 +4855,7 @@ namespace RiskOfCSharp2
             }
 
             Raylib.DrawRectangle(36, 122, 700, 700, Rgb(12, 16, 28, 240));
+            Engine.DrawTextLeft("Двойной клик по ячейке (или Enter) — открыть полную страницу с лором и 3D-моделью!", 54, 126, 12f, Rgb(145, 215, 255));
             var entries = GetLogEntries(_logCategory);
             int perPage = 18;
             int totalPages = Math.Max(1, (entries.Count - 1) / perPage + 1);
@@ -3757,40 +4866,49 @@ namespace RiskOfCSharp2
             {
                 var e = entries[startIdx + i];
                 int r = i / 6, c = i % 6;
-                Rectangle box = new(54 + c * 110, 140 + r * 86, 100, 74);
+                Rectangle box = new(54 + c * 110, 146 + r * 86, 100, 74);
                 bool isSel = e.Key == _logSelectedKey;
-                if (Engine.DrawButton(box, e.Unlocked ? e.Short : "???",
-                    e.Unlocked ? Rgb(24, 32, 48) : Rgb(16, 18, 26), e.Color,
-                    e.Unlocked ? e.Color : Color.Gray, 16f, isSel ? Color.White : e.Color))
+                string tileLabel = _logCategory == "achievements"
+                    ? (e.Unlocked ? "✓ ACH" : "ACH")
+                    : (e.Unlocked ? e.Short : $"[{e.Short}]");
+                if (Engine.DrawButton(box, tileLabel,
+                    e.Unlocked ? Rgb(24, 32, 48) : Rgb(18, 20, 30), e.Color,
+                    e.Unlocked ? e.Color : Rgb(165, 178, 198), 15f, isSel ? Color.Yellow : e.Color))
                 {
                     SelectLogbookEntry(_logCategory, e.Key);
+                    RegisterLogbookTileClick(_logCategory, e.Key);
                 }
             }
 
-            if (Engine.DrawButton(new Rectangle(140, 410, 130, 34), "<- ПРЕД.", Rgb(40, 52, 78), Rgb(65, 85, 120), Color.White, 15f))
+            if (Engine.DrawButton(new Rectangle(140, 412, 130, 34), "<- ПРЕД.", Rgb(40, 52, 78), Rgb(65, 85, 120), Color.White, 15f))
                 _logPage = Math.Clamp(_logPage - 1, 0, totalPages - 1);
-            Engine.DrawTextCentered($"Стр. {_logPage + 1} / {totalPages}", 380, 427, 17f, Color.White);
-            if (Engine.DrawButton(new Rectangle(490, 410, 130, 34), "СЛЕД. ->", Rgb(40, 52, 78), Rgb(65, 85, 120), Color.White, 15f))
+            Engine.DrawTextCentered($"Стр. {_logPage + 1} / {totalPages}", 380, 429, 17f, Color.White);
+            if (Engine.DrawButton(new Rectangle(490, 412, 130, 34), "СЛЕД. ->", Rgb(40, 52, 78), Rgb(65, 85, 120), Color.White, 15f))
                 _logPage = Math.Clamp(_logPage + 1, 0, totalPages - 1);
 
-            if (Engine.DrawButton(new Rectangle(950, 760, 310, 42), "ОТКРЫТЬ ВСЁ В ЖУРНАЛЕ", Rgb(95, 65, 30), Rgb(140, 95, 45), Color.Gold, 16f))
-                Data.ProgressData.Instance.UnlockAll();
-
-            if (Engine.DrawButton(new Rectangle(54, 664, 340, 44), "<- НАЗАД В ГЛАВНОЕ МЕНЮ [ESC]", Rgb(65, 72, 95), Rgb(95, 105, 135), Color.White, 16f))
+            if (Engine.DrawButton(new Rectangle(54, 668, 300, 44), "<- В ГЛАВНОЕ МЕНЮ [ESC]", Rgb(65, 72, 95), Rgb(95, 105, 135), Color.White, 15f))
             {
                 _screen = "main";
                 SelectCharacter(_selectedChar);
             }
 
-            // Нижняя карточка описания выбранной записи
+            // Нижняя карточка описания выбранной записи + кнопка открытия полной страницы с лором и 3D-вращением
             var cur = entries.Find(x => x.Key == _logSelectedKey);
             if (cur.Key != null)
             {
-                Raylib.DrawRectangle(54, 462, 664, 190, Rgb(18, 24, 40, 245));
-                Raylib.DrawRectangle(54, 462, 664, 4, cur.Color);
-                Engine.DrawTextLeft(cur.Title, 72, 478, 24f, cur.Color);
-                Engine.DrawTextLeft(cur.Sub, 72, 512, 17f, Color.Gold);
-                Engine.DrawTextLeft(cur.Desc, 72, 545, 17f, Color.White);
+                if (Engine.DrawButton(new Rectangle(366, 668, 352, 44), "ОТКРЫТЬ СТРАНИЦУ И ЛОР [2x КЛИК / ENTER]",
+                    Rgb(42, 86, 148), Rgb(64, 122, 198), Color.Yellow, 14f, Color.SkyBlue)
+                    || Raylib.IsKeyPressed(KeyboardKey.Enter))
+                {
+                    OpenLogbookDetailPage(_logCategory, cur.Key, 0);
+                    return;
+                }
+
+                Raylib.DrawRectangle(54, 456, 664, 202, Rgb(18, 24, 40, 245));
+                Raylib.DrawRectangle(54, 456, 664, 4, cur.Color);
+                Engine.DrawTextLeft(cur.Title, 70, 468, 21f, cur.Color);
+                Engine.DrawTextLeft(cur.Sub, 70, 498, 15f, Color.Gold);
+                DrawWrappedText(cur.Desc, 70, 524, 72, 15f, Color.White, maxLines: 5, lineStep: 21f);
             }
         }
 
@@ -3867,26 +4985,41 @@ namespace RiskOfCSharp2
             {
                 foreach (var kv in Data.GameData.ItemPool)
                 {
+                    if (kv.Key == "tonic_affliction") continue;
                     var v = kv.Value;
+                    bool unl = prog.UnlockedItems.Contains(kv.Key);
+                    var itemAch = Data.GameData.GetItemUnlockAchievement(kv.Key);
+                    string lockedHow = itemAch != null
+                        ? $"{v.Desc}\nКак открыть: «{itemAch.Name}» — {itemAch.Desc}"
+                        : v.Desc;
                     list.Add(new LogEntryView
                     {
                         Key = kv.Key, Short = v.Short, Color = v.Color,
-                        Unlocked = prog.UnlockedItems.Contains(kv.Key),
-                        Title = v.Name, Sub = $"Редкость: {v.TierName}  |  Код: [{v.Short}]", Desc = v.Desc
+                        Unlocked = unl,
+                        Title = unl ? v.Name : $"{v.Name} [ЗАКРЫТО]",
+                        Sub = unl ? $"Редкость: {v.TierName}  |  Код: [{v.Short}]  |  ОТКРЫТО ✓" : $"Редкость: {v.TierName}  |  Статус: НЕ ОТКРЫТО",
+                        Desc = unl ? v.Desc : lockedHow
                     });
                 }
             }
             else if (cat == "survivors")
             {
-                foreach (var k in SurvivorDatabase.OrderedKeys)
+                foreach (var k in SurvivorDatabase.GetVisibleRosterKeys())
                 {
                     var v = SurvivorDatabase.Classes[k];
+                    bool isUnl = prog.IsCharacterUnlocked(k);
+                    var charAch = Data.GameData.GetCharacterUnlockAchievement(k);
+                    string howTxt = charAch != null ? $"Испытание: {charAch.Desc}\nНаграда: {charAch.RewardText}" : "Секретный персонаж корабля Safe Travels.";
                     list.Add(new LogEntryView
                     {
-                        Key = k, Short = v.Icon, Color = v.BodyColor, Unlocked = true,
-                        Title = $"{v.Name} — {v.Subtitle}",
-                        Sub = $"HP: {v.Hp}  |  Скорость: {v.Speed}  |  Урон: {v.Damage}  |  Атака: {v.FireRate}/с",
-                        Desc = $"{v.Skills["m1"].Name} / {v.Skills["m2"].Name} / {v.Skills["shift"].Name} / {v.Skills["r"].Name}"
+                        Key = k, Short = v.Icon, Color = v.BodyColor, Unlocked = isUnl,
+                        Title = isUnl ? $"{v.Name} — {v.Subtitle}" : $"{v.Name} [ЗАКРЫТО]",
+                        Sub = isUnl
+                            ? $"HP: {v.Hp}  |  Скорость: {v.Speed}  |  Урон: {v.Damage}  |  Атака: {v.FireRate}/с"
+                            : $"Статус: НЕ ОТКРЫТ  |  {v.Subtitle}",
+                        Desc = isUnl
+                            ? $"{v.Skills["m1"].Name} / {v.Skills["m2"].Name} / {v.Skills["shift"].Name} / {v.Skills["r"].Name}"
+                            : howTxt
                     });
                 }
             }
@@ -3894,33 +5027,40 @@ namespace RiskOfCSharp2
             {
                 foreach (var kv in Data.GameData.MonsterLog)
                 {
-                    bool isBoss = Array.IndexOf(Data.GameData.BossTypes, kv.Key) >= 0 || kv.Key == "mithrix";
+                    bool isBoss = Data.GameData.IsKnownBossType(kv.Key);
                     if ((cat == "bosses") != isBoss) continue;
                     var m = kv.Value;
+                    bool isTrialBoss = Array.IndexOf(Data.GameData.TrialBossTypes, kv.Key) >= 0;
+                    string rankTag = kv.Key == "mithrix" ? " [ФИНАЛЬНЫЙ БОСС]" : (isTrialBoss ? " [БОСС ИСПЫТАНИЯ]" : (isBoss ? " [СТРАЖ ТЕЛЕПОРТА]" : ""));
                     list.Add(new LogEntryView
                     {
                         Key = kv.Key, Short = kv.Key[..Math.Min(5, kv.Key.Length)].ToUpper(),
                         Color = kv.Key == "mithrix" ? Color.SkyBlue : (isBoss ? Color.Red : Rgb(255, 140, 60)),
                         Unlocked = true, Title = m.Name,
-                        Sub = $"Базовое HP: {m.Hp}   |   Базовый урон: {m.Damage}", Desc = m.Desc
+                        Sub = $"Базовое HP: {m.Hp}   |   Базовый урон: {m.Damage}{rankTag}", Desc = m.Desc
                     });
                 }
             }
             else if (cat == "stages")
             {
-                var all = new System.Collections.Generic.List<Data.StagePalette>(Data.GameData.StagePalettes)
+                var all = new System.Collections.Generic.List<Data.StagePalette>(Data.GameData.StagePalettes);
+                foreach (var spKey in new[] { "safe_travels", "bazaar", "moon", "pizzeria", "black_mesa", "qliphoth", "hell_cybergrind", "tartarus", "hakurei_shrine", "tracen_derby" })
                 {
-                    Data.GameData.SpecialPalettes["bazaar"],
-                    Data.GameData.SpecialPalettes["moon"]
-                };
+                    if (Data.GameData.SpecialPalettes.TryGetValue(spKey, out var spPal))
+                        all.Add(spPal);
+                }
                 foreach (var st in all)
                 {
-                    bool disc = prog.DiscoveredStages.Contains(st.Id);
+                    bool disc = prog.DiscoveredStages.Contains(st.Id) || (st.Id == "safe_travels" && IsSafeTravelsUnlocked());
+                    int layerNum = Data.GameData.GetStageBiomeLayerNumber(st.Id);
+                    string poolTag = layerNum > 0 ? $"Пул Этапа {layerNum}" : "Внецикловая / Особая";
                     list.Add(new LogEntryView
                     {
                         Key = st.Id, Short = st.Id[..Math.Min(5, st.Id.Length)].ToUpper(),
-                        Color = st.Accent, Unlocked = disc, Title = st.Name,
-                        Sub = disc ? "Статус: ИССЛЕДОВАНА ✓" : "Статус: ЕЩЁ НЕ ПОСЕЩЕНА", Desc = st.Desc
+                        Color = st.Accent, Unlocked = disc,
+                        Title = st.Name,
+                        Sub = $"{poolTag}  |  Статус: {(disc ? "ИССЛЕДОВАНА ✓" : "ЕЩЁ НЕ ПОСЕЩЕНА")}",
+                        Desc = st.Desc
                     });
                 }
             }
@@ -3929,12 +5069,13 @@ namespace RiskOfCSharp2
                 foreach (var kv in Data.GameData.Achievements)
                 {
                     bool unl = prog.UnlockedAchievements.Contains(kv.Key);
+                    string rewSummary = GetAchievementRewardSummary(kv.Value, _selectedChar);
                     list.Add(new LogEntryView
                     {
                         Key = kv.Key, Short = "ACH", Color = unl ? Color.Lime : Color.Orange,
                         Unlocked = unl, Title = kv.Value.Name,
-                        Sub = unl ? "Статус: ВЫПОЛНЕНО ✓" : "Статус: НЕ ВЫПОЛНЕНО",
-                        Desc = $"{kv.Value.Desc} ({kv.Value.RewardText})"
+                        Sub = $"{(unl ? "ВЫПОЛНЕНО ✓" : "НЕ ВЫПОЛНЕНО")}  |  Награда: {rewSummary}",
+                        Desc = $"Как получить: {kv.Value.Desc}\nНаграда: {rewSummary}"
                     });
                 }
             }

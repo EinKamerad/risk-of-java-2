@@ -18,6 +18,21 @@ namespace RiskOfCSharp2.Core
         public static Font GameFont;
         public static bool HasCustomFont = false;
 
+        // Параметры умного просвечивания объектов карты между камерой и игроком
+        public static bool ObstructionFadeEnabled = false;
+        public static Vector3 PlayerWorldPos = Vector3.Zero;
+
+        private struct TransparentDrawItem
+        {
+            public Mesh Mesh;
+            public bool Unlit;
+            public Color Color;
+            public Matrix4x4 RlWorld;
+            public float DistSqToCam;
+        }
+
+        private static readonly List<TransparentDrawItem> _transparentQueue = new(512);
+
         private static Mesh _cubeMesh;
         private static Mesh _sphereMesh;
         private static Mesh _diamondMesh;
@@ -64,6 +79,7 @@ void main() {
             _unlitMaterial = Raylib.LoadMaterialDefault();
 
             LoadCyrillicFont();
+            SoundManager.Init();
 
             Camera = new Camera3D
             {
@@ -103,11 +119,20 @@ void main() {
                 return;
             }
 
-            // Загружаем ASCII + Кириллицу + спецсимволы (•, ✓, —, «, »)
+            // Загружаем ASCII + Latin-1 + Кириллицу + спецсимволы (•, ✓, —, «, », ★, ▶, …, №, °, ×, ±, кавычки и стрелки)
             List<int> codepoints = new();
             for (int i = 32; i <= 126; i++) codepoints.Add(i);
+            for (int i = 0x00A0; i <= 0x017F; i++) codepoints.Add(i);
             for (int i = 0x0400; i <= 0x04FF; i++) codepoints.Add(i);
-            codepoints.AddRange(new[] { 0x2022, 0x2713, 0x2013, 0x2014, 0x00AB, 0x00BB, 0x2588, 0x2591 });
+            codepoints.AddRange(new[]
+            {
+                0x03BB,
+                0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2026,
+                0x2116, 0x2190, 0x2191, 0x2192, 0x2193, 0x21BB, 0x221E, 0x2248,
+                0x2260, 0x2264, 0x2265, 0x23F1, 0x2550, 0x2588, 0x2591, 0x25B2,
+                0x25B6, 0x25BC, 0x25C0, 0x25C6, 0x2605, 0x2606, 0x2620, 0x2665,
+                0x266A, 0x26A0, 0x26A1, 0x26CF, 0x2713, 0x2715, 0x300E, 0x300F
+            });
 
             GameFont = Raylib.LoadFontEx(foundPath, 32, codepoints.ToArray(), codepoints.Count);
             Raylib.SetTextureFilter(GameFont.Texture, TextureFilter.Bilinear);
@@ -153,14 +178,100 @@ void main() {
 
         public static void Draw3D()
         {
+            _transparentQueue.Clear();
+            Vector3 rlCamPos = Camera.Position;
+            Vector3 camUrsina = new(-rlCamPos.X, rlCamPos.Y, rlCamPos.Z);
+            Vector3 playerTarget = PlayerWorldPos + new Vector3(0f, 1.35f, 0f);
+            float dtFade = Math.Clamp(Raylib.GetFrameTime(), 0.001f, 0.1f);
+
             foreach (var root in RootEntities)
             {
-                if (Utils.IsValid(root) && !root.IsUI)
-                    DrawEntityHierarchy(root, Matrix4x4.Identity);
+                if (!Utils.IsValid(root) || root.IsUI || root.IsPreviewIsolated) continue;
+
+                float alphaMul = 1.0f;
+                if (ObstructionFadeEnabled && root.AllowObstructionFade)
+                {
+                    float targetAlpha = ComputeObstructionTargetAlpha(root, camUrsina, playerTarget);
+                    root.ObstructionFadeAlpha = Utils.Lerp(root.ObstructionFadeAlpha, targetAlpha, Math.Clamp(dtFade * 10f, 0f, 1f));
+                    alphaMul = root.ObstructionFadeAlpha;
+                }
+                else
+                {
+                    root.ObstructionFadeAlpha = 1.0f;
+                }
+
+                DrawEntityHierarchy(root, Matrix4x4.Identity, rlCamPos, alphaMul);
             }
+
+            FlushTransparentQueue();
         }
 
-        private static void DrawEntityHierarchy(Entity ent, Matrix4x4 parentWorld)
+        public static void DrawEntityPreviewIsolated(Entity root, Camera3D previewCam)
+        {
+            if (root == null || root.IsDestroyed || !root.Enabled) return;
+            _transparentQueue.Clear();
+            DrawEntityHierarchy(root, Matrix4x4.Identity, previewCam.Position, 1.0f);
+            FlushTransparentQueue();
+        }
+
+        private static float ComputeObstructionTargetAlpha(Entity root, Vector3 camPos, Vector3 playerPos)
+        {
+            Vector3 seg = playerPos - camPos;
+            float segLenSq = seg.LengthSquared();
+            if (segLenSq < 0.25f) return 1.0f;
+
+            Vector3 objCenter = root.Position;
+            // Проекция в плоскости XZ на отрезок Камера -> Игрок
+            Vector2 a = new(camPos.X, camPos.Z);
+            Vector2 b = new(playerPos.X, playerPos.Z);
+            Vector2 ab = b - a;
+            float abLenSq = ab.LengthSquared();
+            if (abLenSq < 0.15f) return 1.0f;
+
+            Vector2 p = new(objCenter.X, objCenter.Z);
+            float t = Math.Clamp(Vector2.Dot(p - a, ab) / abLenSq, 0f, 1f);
+            if (t > 0.94f) return 1.0f; // Объект позади игрока не перекрывает камеру
+
+            Vector2 closestXZ = a + ab * t;
+            float distXZ = Vector2.Distance(p, closestXZ);
+            float checkRadius = MathF.Max(1.8f, root.ObstructionRadius);
+            if (distXZ > checkRadius) return 1.0f;
+
+            float rayY = camPos.Y + (playerPos.Y - camPos.Y) * t;
+            float baseY = objCenter.Y - 1.0f;
+            float topY = objCenter.Y + MathF.Max(3.5f, root.ObstructionHeight);
+            if (rayY < baseY || rayY > topY) return 1.0f;
+
+            float edgeSoft = Math.Clamp(distXZ / checkRadius, 0f, 1f);
+            return Utils.Lerp(0.22f, 0.58f, edgeSoft * edgeSoft);
+        }
+
+        private static void FlushTransparentQueue()
+        {
+            if (_transparentQueue.Count == 0) return;
+
+            _transparentQueue.Sort(static (a, b) => b.DistSqToCam.CompareTo(a.DistSqToCam));
+
+            Rlgl.DrawRenderBatchActive();
+            Rlgl.DisableDepthMask();
+
+            for (int i = 0; i < _transparentQueue.Count; i++)
+            {
+                var item = _transparentQueue[i];
+                Material mat = item.Unlit ? _unlitMaterial : _litMaterial;
+                unsafe
+                {
+                    mat.Maps[(int)MaterialMapIndex.Albedo].Color = item.Color;
+                }
+                Raylib.DrawMesh(item.Mesh, mat, Matrix4x4.Transpose(item.RlWorld));
+            }
+
+            Rlgl.DrawRenderBatchActive();
+            Rlgl.EnableDepthMask();
+            _transparentQueue.Clear();
+        }
+
+        private static void DrawEntityHierarchy(Entity ent, Matrix4x4 parentWorld, Vector3 rlCamPos, float alphaMul)
         {
             if (!ent.Enabled || ent.IsDestroyed) return;
 
@@ -169,26 +280,48 @@ void main() {
 
             if (!string.IsNullOrEmpty(ent.Model))
             {
-                Mesh? mesh = ent.Model switch
+                int finalAlpha = (int)MathF.Round(ent.Color.A * alphaMul);
+                if (finalAlpha > 0)
                 {
-                    "cube" => _cubeMesh,
-                    "sphere" => _sphereMesh,
-                    "diamond" => _diamondMesh,
-                    _ => null
-                };
-
-                if (mesh.HasValue)
-                {
-                    Material mat = ent.Unlit ? _unlitMaterial : _litMaterial;
-                    unsafe
+                    Mesh? mesh = ent.Model switch
                     {
-                        mat.Maps[(int)MaterialMapIndex.Albedo].Color = ent.Color;
-                    }
+                        "cube" => _cubeMesh,
+                        "sphere" => _sphereMesh,
+                        "diamond" => _diamondMesh,
+                        _ => null
+                    };
 
-                    Matrix4x4 mirrorX = Matrix4x4.CreateScale(-1f, 1f, 1f);
-                    Matrix4x4 rlWorld = mirrorX * world * mirrorX;
-                    Raylib.DrawMesh(mesh.Value, mat, Matrix4x4.Transpose(rlWorld));
-                    
+                    if (mesh.HasValue)
+                    {
+                        Matrix4x4 mirrorX = Matrix4x4.CreateScale(-1f, 1f, 1f);
+                        Matrix4x4 rlWorld = mirrorX * world * mirrorX;
+                        Color drawCol = finalAlpha >= 255
+                            ? ent.Color
+                            : new Color(ent.Color.R, ent.Color.G, ent.Color.B, (byte)Math.Clamp(finalAlpha, 1, 254));
+
+                        if (drawCol.A >= 255)
+                        {
+                            Material mat = ent.Unlit ? _unlitMaterial : _litMaterial;
+                            unsafe
+                            {
+                                mat.Maps[(int)MaterialMapIndex.Albedo].Color = drawCol;
+                            }
+                            Raylib.DrawMesh(mesh.Value, mat, Matrix4x4.Transpose(rlWorld));
+                        }
+                        else
+                        {
+                            Vector3 wTrans = rlWorld.Translation;
+                            float distSq = Vector3.DistanceSquared(wTrans, rlCamPos);
+                            _transparentQueue.Add(new TransparentDrawItem
+                            {
+                                Mesh = mesh.Value,
+                                Unlit = ent.Unlit,
+                                Color = drawCol,
+                                RlWorld = rlWorld,
+                                DistSqToCam = distSq
+                            });
+                        }
+                    }
                 }
             }
 
@@ -196,7 +329,7 @@ void main() {
             {
                 var ch = ent.Children[i];
                 if (ch != null && !ch.IsDestroyed && ch.Enabled)
-                    DrawEntityHierarchy(ch, world);
+                    DrawEntityHierarchy(ch, world, rlCamPos, alphaMul);
             }
         }
 
@@ -269,6 +402,59 @@ void main() {
                 Raylib.DrawTextEx(GameFont, lines[i], pos, fontSize, 1f, col);
             }
         }
+        public static List<string> WrapText(string text, float fontSize, float maxWidth)
+        {
+            var result = new List<string>();
+            if (string.IsNullOrEmpty(text)) return result;
+
+            string[] paragraphs = text.Replace("\r\n", "\n").Split('\n');
+            foreach (string para in paragraphs)
+            {
+                if (string.IsNullOrEmpty(para))
+                {
+                    result.Add("");
+                    continue;
+                }
+
+                string[] words = para.Split(' ');
+                string current = "";
+                for (int i = 0; i < words.Length; i++)
+                {
+                    string word = words[i];
+                    string candidate = string.IsNullOrEmpty(current) ? word : $"{current} {word}";
+                    float w = Raylib.MeasureTextEx(GameFont, candidate, fontSize, 1f).X;
+                    if (w <= maxWidth || string.IsNullOrEmpty(current))
+                    {
+                        current = candidate;
+                    }
+                    else
+                    {
+                        result.Add(current);
+                        current = word;
+                    }
+                }
+                if (!string.IsNullOrEmpty(current))
+                    result.Add(current);
+            }
+            return result;
+        }
+
+        public static float DrawTextWrapped(string text, float x, float y, float maxWidth, float fontSize, Color col, float lineSpacing = 4f)
+        {
+            var lines = WrapText(text, fontSize, maxWidth);
+            float step = fontSize + lineSpacing;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (!string.IsNullOrEmpty(lines[i]))
+                {
+                    Vector2 pos = new(x, y + i * step);
+                    Raylib.DrawTextEx(GameFont, lines[i], pos + new Vector2(1, 1), fontSize, 1f, Color.Black);
+                    Raylib.DrawTextEx(GameFont, lines[i], pos, fontSize, 1f, col);
+                }
+            }
+            return lines.Count * step;
+        }
+
         public static bool DrawButton(Rectangle rect, string text, Color bgCol, Color hoverCol, Color textCol, float fontSize = 16f, Color? borderCol = null)
         {
             Vector2 mPos = Raylib.GetMousePosition();
@@ -285,8 +471,15 @@ void main() {
             {
                 DrawTextCentered(text, rect.X + rect.Width * 0.5f, rect.Y + rect.Height * 0.5f, fontSize, textCol);
             }
+            if (clicked)
+            {
+                SoundManager.Play("ui_click");
+            }
             return clicked;
         }
+
+        public static float LerpAngleDeg(float current, float target, float t)
+            => Utils.LerpAngleDeg(current, target, t);
     }
 
     public static class Utils
@@ -339,6 +532,24 @@ void main() {
 
         public static float Lerp(float a, float b, float t) => a + (b - a) * Math.Clamp(t, 0f, 1f);
         public static Vector3 Lerp(Vector3 a, Vector3 b, float t) => Vector3.Lerp(a, b, Math.Clamp(t, 0f, 1f));
+
+        public static float LerpAngleDeg(float a, float b, float t)
+        {
+            float delta = (b - a) % 360f;
+            if (delta > 180f) delta -= 360f;
+            else if (delta < -180f) delta += 360f;
+            return a + delta * Math.Clamp(t, 0f, 1f);
+        }
+
+        public static Vector3 LerpEulerDeg(Vector3 a, Vector3 b, float t)
+        {
+            float ct = Math.Clamp(t, 0f, 1f);
+            return new Vector3(
+                LerpAngleDeg(a.X, b.X, ct),
+                LerpAngleDeg(a.Y, b.Y, ct),
+                LerpAngleDeg(a.Z, b.Z, ct)
+            );
+        }
     }
 
     public class Entity
@@ -374,6 +585,11 @@ void main() {
         public bool IsDestroyed = false;
         public bool IsDead = false;
         public bool IsUI = false;
+        public bool IsPreviewIsolated = false;
+        public bool AllowObstructionFade = false;
+        public float ObstructionRadius = 4.2f;
+        public float ObstructionHeight = 11.0f;
+        public float ObstructionFadeAlpha = 1.0f;
         public string BillboardText = "";
 
         // Удобные свойства-обёртки как в Ursina

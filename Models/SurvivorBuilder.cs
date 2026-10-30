@@ -22,10 +22,15 @@ namespace RiskOfCSharp2.Models
         public string Desc = "";
         public string? UnlockAchKey = null;
         public string UnlockReqText = "Открыт по умолчанию";
+        public bool UnlockedByDefault = false;
         public bool ChangesModel = false;
         public Color BodyColor;
         public Color ArmorColor;
         public Color VisorColor;
+        public string? CustomSubtitle = null;
+        public string? CustomPassiveName = null;
+        public string? CustomPassiveDesc = null;
+        public Dictionary<string, List<SkillDef>>? CustomSkillVariants = null;
         public Color PrimaryColor => BodyColor;
         public Color AccentColor => VisorColor;
         public string? UnlockAchievementKey => UnlockAchKey;
@@ -37,6 +42,7 @@ namespace RiskOfCSharp2.Models
         public string Key = "";
         public string Name = "";
         public string Subtitle = "";
+        public string BaseSubtitle = "";
         public string Icon = "";
         public int Hp;
         public float Speed;
@@ -54,12 +60,33 @@ namespace RiskOfCSharp2.Models
         public string OverviewLore = "";
         public string PassiveName = "";
         public string PassiveDesc = "";
+        public string BasePassiveName = "";
+        public string BasePassiveDesc = "";
         public Dictionary<string, SkillDef> Skills = new();
         public Dictionary<string, List<SkillDef>> SkillVariants = new();
+        public Dictionary<string, List<SkillDef>> BaseSkillVariants = new();
         public List<SkinDef> Skins = new();
 
         public void SyncLoadout()
         {
+            if (Skins.Count > 0)
+            {
+                var skin = GetActiveSkin();
+                if (skin.CustomSkillVariants != null)
+                {
+                    SkillVariants = skin.CustomSkillVariants;
+                    if (!string.IsNullOrEmpty(skin.CustomSubtitle)) Subtitle = skin.CustomSubtitle!;
+                    if (!string.IsNullOrEmpty(skin.CustomPassiveName)) PassiveName = skin.CustomPassiveName!;
+                    if (!string.IsNullOrEmpty(skin.CustomPassiveDesc)) PassiveDesc = skin.CustomPassiveDesc!;
+                }
+                else if (BaseSkillVariants.Count > 0)
+                {
+                    SkillVariants = BaseSkillVariants;
+                    if (!string.IsNullOrEmpty(BaseSubtitle)) Subtitle = BaseSubtitle;
+                    if (!string.IsNullOrEmpty(BasePassiveName)) PassiveName = BasePassiveName;
+                    if (!string.IsNullOrEmpty(BasePassiveDesc)) PassiveDesc = BasePassiveDesc;
+                }
+            }
             foreach (var slot in new[] { "m1", "m2", "shift", "r" })
             {
                 if (SkillVariants.TryGetValue(slot, out var list) && list.Count > 0)
@@ -98,6 +125,7 @@ namespace RiskOfCSharp2.Models
         public readonly List<Entity> NormalFormNodes = new();
         public readonly List<Entity> UltFormNodes = new();
         public bool UltFormActive = false;
+        public bool IsKyKiske = false;
 
         // Базовые координаты и углы сборки конкретной модели (Bind Pose)
         public Vector3 BaseTorsoPos, BaseTorsoRot;
@@ -106,14 +134,34 @@ namespace RiskOfCSharp2.Models
         public Vector3 BaseHeadPos, BaseHeadRot;
         public readonly List<Vector3> BaseTailRots = new();
         private bool _bindPoseCaptured = false;
+        private bool _wasGrounded = true;
+        private bool _emoteSpawnedGena = false;
+        public float LandingSquash = 0f;
 
-        // Состояние процедурной и боевой анимации
+        // Список эмоций Колеса [L] (ID, название, подзаголовок)
+        public static readonly (string Id, string Title, string Subtitle)[] EmoteWheelDefinitions =
+        {
+            ("chair", "Пластиковый стул", "Мотивация Вергилия"),
+            ("fortnite", "Танец Фортнайта", "Стандартный танец"),
+            ("california", "Калифорния гёрлс", "California Gurls"),
+            ("caramelldansen", "Карамеллдансен", "Евробит с ушками"),
+            ("sun", "Восхвали солнце", "Praise the Sun \\[T]/"),
+            ("kazotsky", "Танец вприсядку", "Казачок / Kazotsky"),
+            ("gangnam", "Gangnam Style", "Скачка и лассо"),
+            ("jojo", "JoJo Поза", "Угрожающая аура!"),
+            ("distraction", "Танец Отвлечения", "Henry Stickmin"),
+            ("rps_wait", "Камень-Ножницы-Бумага", "Парная дуэль [E]")
+        };
+
+        // Состояние процедурной и боевой анимации + Колесо эмоций [L]
         public string ActiveAnim = "";
         public float AnimTimer = 0f;
         public float AnimDuration = 0.25f;
         public int AnimStep = 0;
         public float WalkPhase = 0f;
         public float IdleTime = 0f;
+        public string ActiveEmote = "";
+        public float EmoteTime = 0f;
 
         public void CaptureBindPose()
         {
@@ -139,9 +187,22 @@ namespace RiskOfCSharp2.Models
                 "m2" => 0.42f,
                 "shift" => 0.36f,
                 "r" => 0.65f,
+                "ky_charge" => 0.25f,
+                "ky_dipper" => 0.34f,
+                "ky_rtl" => 0.48f,
+                "jack_r_lunge" => 0.30f,
+                "jack_r_rise" => 0.42f,
+                "jack_r_slam" => 0.36f,
                 _ => 0.25f
             };
             AnimTimer = AnimDuration;
+        }
+
+        public void SetEmote(string emoteId)
+        {
+            if (ActiveEmote == emoteId) return;
+            ActiveEmote = emoteId ?? "";
+            EmoteTime = 0f;
         }
 
         public void UpdateAnimations(
@@ -152,51 +213,61 @@ namespace RiskOfCSharp2.Models
             if (!_bindPoseCaptured) CaptureBindPose();
             float t = (float)Raylib.GetTime();
 
+            if (!_wasGrounded && isGrounded)
+                LandingSquash = Math.Clamp(0.08f + MathF.Abs(velY) * 0.011f, 0.08f, 0.24f);
+            _wasGrounded = isGrounded;
+            if (LandingSquash > 0f)
+                LandingSquash = MathF.Max(0f, LandingSquash - dt * 2.5f);
+
             if (AnimTimer > 0f)
                 AnimTimer = MathF.Max(0f, AnimTimer - dt);
 
-            // Вращение нимбов/ореолов (у Данте — с эффектом часового механизма)
+            if (!string.IsNullOrEmpty(ActiveEmote))
+                EmoteTime += dt;
+            else
+                EmoteTime = 0f;
+
+            // Вращение нимбов/ореолов (у Данте — с эффектом часового механизма, у Mindustry — горизонтальный радар)
             if (Halo != null)
             {
+                float haloMul = !string.IsNullOrEmpty(ActiveEmote)
+                    ? (ActiveEmote is "sun" or "praise_the_sun" or "praise_sun" ? 2.8f : 1.5f)
+                    : 1.0f;
                 if (charKey == "dante")
-                    Halo.RotationZ += (35f + MathF.Pow(MathF.Max(0f, MathF.Sin(t * 6.5f)), 6f) * 260f) * dt;
+                {
+                    Halo.RotationZ += (35f + MathF.Pow(MathF.Max(0f, MathF.Sin(t * 6.5f)), 6f) * 260f) * haloMul * dt;
+                }
+                else if (charKey == "mindustry")
+                {
+                    Halo.RotationZ = 0f;
+                    Halo.RotationY += 110f * haloMul * dt;
+                }
                 else
-                    Halo.RotationZ += 95f * dt;
+                {
+                    Halo.RotationZ += 95f * haloMul * dt;
+                }
             }
 
-            // Корабль Ядра «Гамма» (Mindustry) — анимация крена, тангажа и сопел двигателей
+            // Корабль Ядра «Гамма» (Mindustry) — кастомная негуманоидная хореография полёта и всех эмоций Колеса [L]
             if (charKey == "mindustry")
             {
-                float hoverBob = MathF.Sin(t * 3.8f) * 0.08f;
-                Torso.Position = new Vector3(BaseTorsoPos.X, BaseTorsoPos.Y + hoverBob, BaseTorsoPos.Z);
-                Torso.RotationZ = Lerp(Torso.RotationZ, -strafeInput * 16f, dt * 8f);
-                Torso.RotationX = Lerp(Torso.RotationX, forwardInput * 12f, dt * 8f);
-                float enginePulse = isMoving ? MathF.Sin(t * 24f) * 8f : MathF.Sin(t * 6f) * 3f;
-                LeftLeg.RotationX = Lerp(LeftLeg.RotationX, enginePulse, dt * 10f);
-                RightLeg.RotationX = Lerp(RightLeg.RotationX, -enginePulse, dt * 10f);
-                if (AnimTimer > 0f && ActiveAnim == "m1")
-                {
-                    float kick = MathF.Sin((1f - AnimTimer / AnimDuration) * MathF.PI) * -0.14f;
-                    LeftArm.Z = BaseLeftArmPos.Z + (AnimStep % 2 == 0 ? kick : 0f);
-                    RightArm.Z = BaseRightArmPos.Z + (AnimStep % 2 != 0 ? kick : 0f);
-                }
-                else
-                {
-                    LeftArm.Z = Lerp(LeftArm.Z, BaseLeftArmPos.Z, dt * 12f);
-                    RightArm.Z = Lerp(RightArm.Z, BaseRightArmPos.Z, dt * 12f);
-                }
+                UpdateMindustryAnimations(t, dt, isMoving, strafeInput, forwardInput);
                 return;
             }
 
             Vector3 targetTorsoPos = BaseTorsoPos;
             Vector3 targetTorsoRot = BaseTorsoRot;
+            Vector3 targetLArmPos = BaseLeftArmPos;
+            Vector3 targetRArmPos = BaseRightArmPos;
+            Vector3 targetLLegPos = BaseLeftLegPos;
+            Vector3 targetRLegPos = BaseRightLegPos;
             Vector3 targetLArmRot = BaseLeftArmRot;
             Vector3 targetRArmRot = BaseRightArmRot;
             Vector3 targetLLegRot = BaseLeftLegRot;
             Vector3 targetRLegRot = BaseRightLegRot;
 
             // 1. БАЗОВЫЕ СТОЙКИ ПОКОЯ (IDLE), ПЕРЕНОС ВЕСА И ПЕРИОДИЧЕСКИЕ IDLE-ЖЕСТЫ (FLOURISH)
-            if (!isMoving && isGrounded && AnimTimer <= 0f)
+            if (!isMoving && isGrounded && AnimTimer <= 0f && string.IsNullOrEmpty(ActiveEmote))
                 IdleTime += dt;
             else
                 IdleTime = 0f;
@@ -256,23 +327,36 @@ namespace RiskOfCSharp2.Models
                     break;
 
                 case "sol":
-                    float fightBounce = MathF.Abs(MathF.Sin(t * 5.2f));
-                    targetTorsoPos.Y = BaseTorsoPos.Y + fightBounce * 0.068f;
-                    targetLLegRot.X = -8f + MathF.Sin(t * 5.2f) * 6f;
-                    targetRLegRot.X = 8f - MathF.Sin(t * 5.2f) * 6f;
-                    if (UltFormActive)
+                    if (IsKyKiske)
                     {
-                        targetTorsoRot.X = 18f - fWave * 16f;
-                        targetLArmRot = new Vector3(-22f + MathF.Sin(t * 5f) * 8f - fWave * 45f, -10f, 18f + fWave * 16f);
-                        targetRArmRot = new Vector3(-22f - MathF.Sin(t * 5f) * 8f - fWave * 45f, 10f, -18f - fWave * 16f);
+                        // Благородная фехтовальная стойка Короля Кая Киске со шпагой-мечом Thunderseal
+                        targetTorsoPos.Y = BaseTorsoPos.Y + MathF.Sin(t * 2.6f) * 0.035f;
+                        targetTorsoRot.Y = 22f + MathF.Sin(t * 1.8f) * 4f - fWave * 18f;
+                        targetLLegRot.X = -10f;
+                        targetRLegRot.X = 12f;
+                        targetLArmRot = new Vector3(-22f - fWave * 45f, 24f, 12f);
+                        targetRArmRot = new Vector3(-34f - fWave * 62f + fOsc * 14f, -18f + fWave * 28f, -12f);
                     }
                     else
                     {
-                        targetTorsoRot.Y = -12f + MathF.Sin(t * 2.6f) * 5f - fWave * 18f;
-                        targetLArmRot.X = -14f + fightBounce * 9f - fWave * 28f;
-                        // Idle-жест Сола: вскидывает меч Junkyard Dog на плечо и разминает шею
-                        targetRArmRot.X = -18f - fWave * 54f + fOsc * 14f;
-                        targetRArmRot.Y = -fWave * 22f;
+                        float fightBounce = MathF.Abs(MathF.Sin(t * 5.2f));
+                        targetTorsoPos.Y = BaseTorsoPos.Y + fightBounce * 0.068f;
+                        targetLLegRot.X = -8f + MathF.Sin(t * 5.2f) * 6f;
+                        targetRLegRot.X = 8f - MathF.Sin(t * 5.2f) * 6f;
+                        if (UltFormActive)
+                        {
+                            targetTorsoRot.X = 18f - fWave * 16f;
+                            targetLArmRot = new Vector3(-22f + MathF.Sin(t * 5f) * 8f - fWave * 45f, -10f, 18f + fWave * 16f);
+                            targetRArmRot = new Vector3(-22f - MathF.Sin(t * 5f) * 8f - fWave * 45f, 10f, -18f - fWave * 16f);
+                        }
+                        else
+                        {
+                            targetTorsoRot.Y = -12f + MathF.Sin(t * 2.6f) * 5f - fWave * 18f;
+                            targetLArmRot.X = -14f + fightBounce * 9f - fWave * 28f;
+                            // Idle-жест Сола: вскидывает меч Junkyard Dog на плечо и разминает шею
+                            targetRArmRot.X = -18f - fWave * 54f + fOsc * 14f;
+                            targetRArmRot.Y = -fWave * 22f;
+                        }
                     }
                     break;
 
@@ -386,6 +470,95 @@ namespace RiskOfCSharp2.Models
                     // Idle-жест Ари: подносит Сферу Обмана к лицу, любуясь её сиянием, и распушает 9 хвостов
                     targetLArmRot = new Vector3(-16f + MathF.Sin(t * 2.5f) * 6f - fWave * 36f, 14f + fWave * 18f, 12f + fWave * 14f);
                     targetRArmRot = new Vector3(-28f + MathF.Cos(t * 3.1f) * 8f - fWave * 48f, -14f - fWave * 20f, -10f + fOsc * 12f);
+                    break;
+
+                case "lappland":
+                    targetTorsoRot.Y = 12f + MathF.Sin(t * 2.1f) * 4f + fWave * 16f;
+                    // Лаппланд скрещивает парные клинки и ухмыляется
+                    targetLArmRot = new Vector3(-18f - fWave * 42f, 22f * fWave, 14f);
+                    targetRArmRot = new Vector3(-22f - fWave * 42f, -22f * fWave, -14f);
+                    break;
+
+                case "w_arknights":
+                    targetTorsoRot.Y = -10f + MathF.Sin(t * 2.2f) * 5f;
+                    // W играет с детонатором в левой руке
+                    targetLArmRot = new Vector3(-34f - fWave * 38f, 16f, 8f + fOsc * 12f);
+                    targetRArmRot = new Vector3(-18f + MathF.Sin(t * 2.0f) * 5f, -10f, -8f);
+                    break;
+
+                case "gold_ship":
+                    targetTorsoPos.Y = BaseTorsoPos.Y + MathF.Abs(MathF.Sin(t * 3.6f)) * 0.05f;
+                    // Голд Шип разминается перед забегом и отдаёт честь
+                    targetRArmRot = new Vector3(-24f - fWave * 75f, -12f * fWave, -12f + fOsc * 18f);
+                    targetLArmRot = new Vector3(-16f + MathF.Sin(t * 3.6f) * 10f, 0f, 12f);
+                    break;
+
+                case "pushnoy":
+                    targetTorsoRot.Z = MathF.Sin(t * 3.2f) * 4.5f + fOsc * 8f;
+                    // Александр Пушной берёт рок-аккорд на электрогитаре
+                    targetLArmRot = new Vector3(-32f, 24f, 12f + fOsc * 8f);
+                    targetRArmRot = new Vector3(-28f + MathF.Sin(t * 8.5f) * (10f + fWave * 22f), -18f, -10f);
+                    break;
+
+                case "freddy":
+                    // Механические подёргивания аниматроника Фредди Фазбера
+                    targetTorsoRot.Y = MathF.Round(MathF.Sin(t * 1.8f) * 2f) * 6f + fOsc * 14f;
+                    targetTorsoRot.Z = fWave * 9f;
+                    targetRArmRot = new Vector3(-32f - fWave * 28f, -8f, 0f);
+                    targetLArmRot = new Vector3(-12f + fOsc * 16f, 0f, 8f);
+                    break;
+
+                case "steve":
+                    // Классическое квадратное дыхание Стива из Minecraft
+                    targetLArmRot = new Vector3(MathF.Sin(t * 1.8f) * 4f, 0f, 4f);
+                    targetRArmRot = new Vector3(-18f - fWave * 36f, 0f, -4f);
+                    break;
+
+                case "jotaro":
+                    targetTorsoRot.Y = -16f + fWave * 12f;
+                    // Фирменная поза Джотаро Куджо: поправляет козырёк кепки и указывает пальцем вперёд ("Yare Yare Daze")
+                    targetLArmRot = new Vector3(-14f - fWave * 78f, 18f * fWave, 10f);
+                    targetRArmRot = new Vector3(-22f - fWave * 64f, 0f, -8f);
+                    break;
+
+                case "vyper":
+                    targetTorsoPos.Y = BaseTorsoPos.Y - 0.08f + MathF.Sin(t * 3.0f) * 0.04f;
+                    targetTorsoRot.X = 12f;
+                    targetTorsoRot.Y = MathF.Sin(t * 2.6f) * 8f;
+                    targetLArmRot = new Vector3(-24f, 14f, 8f);
+                    targetRArmRot = new Vector3(-26f - fWave * 25f, -12f, -8f);
+                    break;
+
+                case "haze":
+                    targetTorsoRot.Y = 10f + MathF.Sin(t * 1.8f) * 5f;
+                    targetLArmRot = new Vector3(-26f - fWave * 30f, 14f, 10f);
+                    targetRArmRot = new Vector3(-26f + fWave * 20f, -14f, -10f);
+                    break;
+
+                case "dmc_trio":
+                    targetTorsoRot.Y = -12f + MathF.Sin(t * 2.0f) * 5f + fWave * 16f;
+                    targetLArmRot = new Vector3(-22f - fWave * 38f, 12f, 10f);
+                    targetRArmRot = new Vector3(-28f - fWave * 45f, -16f, -12f);
+                    break;
+
+                case "sanabi":
+                    // Бригадный Генерал SANABI: калибрует гигантскую Механическую Руку-Крюк и переглядывается с парящим дроном Мари
+                    targetTorsoPos.Y = BaseTorsoPos.Y + MathF.Sin(t * 2.8f) * 0.045f;
+                    targetTorsoRot.Y = -15f + MathF.Sin(t * 1.9f) * 6f + fWave * 18f;
+                    targetTorsoRot.X = 5f + MathF.Cos(t * 2.2f) * 2.5f;
+                    targetLArmRot = new Vector3(-20f - fWave * 35f, 16f + fOsc * 10f, 10f);
+                    targetRArmRot = new Vector3(-32f - fWave * 58f + fOsc * 22f, -18f + fWave * 24f, -14f - fOsc * 16f);
+                    break;
+
+                case "jack_o":
+                    // Игривая стойка Jack-O' из Guilty Gear -Strive-: покачивание бёдрами, проверка маски и цепной Тыквы!
+                    targetTorsoPos.Y = BaseTorsoPos.Y + MathF.Sin(t * 3.4f) * 0.045f + fWave * 0.05f;
+                    targetTorsoRot.Z = MathF.Sin(t * 1.9f) * 6.5f;
+                    targetTorsoRot.Y = 12f + MathF.Cos(t * 1.7f) * 7f - fWave * 18f;
+                    targetLArmRot = new Vector3(-28f - fWave * 64f, 18f, 18f + MathF.Sin(t * 2.5f) * 6f);
+                    targetRArmRot = new Vector3(-24f + fOsc * 26f, -16f, -18f - MathF.Cos(t * 2.5f) * 6f);
+                    targetLLegRot.X = -6f + MathF.Sin(t * 1.9f) * 5f;
+                    targetRLegRot.X = 6f - MathF.Sin(t * 1.9f) * 5f;
                     break;
             }
 
@@ -559,11 +732,22 @@ namespace RiskOfCSharp2.Models
                             break;
 
                         case "sol":
-                            // Вонзающий удар Junkyard Dog в землю для GunFlame!
-                            targetTorsoRot.X += 24f * pulse;
-                            targetTorsoRot.Y = -28f + 52f * p;
-                            targetRArmRot.X = -85f + 125f * p;
-                            targetRArmRot.Y = -18f * pulse;
+                            if (IsKyKiske)
+                            {
+                                // Фехтовальный перекрёстный разрез мечом Thunderseal с громовым выпадом!
+                                targetTorsoRot.X += 18f * pulse;
+                                targetTorsoRot.Y = side * 34f * pulse;
+                                targetRArmRot = new Vector3(-76f + 98f * p, side * 38f * pulse, -14f * pulse);
+                                targetLArmRot = new Vector3(-28f * pulse, 26f, 16f);
+                            }
+                            else
+                            {
+                                // Вонзающий удар Junkyard Dog в землю для GunFlame!
+                                targetTorsoRot.X += 24f * pulse;
+                                targetTorsoRot.Y = -28f + 52f * p;
+                                targetRArmRot.X = -85f + 125f * p;
+                                targetRArmRot.Y = -18f * pulse;
+                            }
                             break;
 
                         case "gwen":
@@ -621,18 +805,116 @@ namespace RiskOfCSharp2.Models
                             targetRArmRot = new Vector3(-72f * pulse, -22f + 40f * p, -16f * pulse);
                             targetLArmRot = new Vector3(18f * pulse, 24f * pulse, 20f * pulse);
                             break;
+
+                        case "lappland":
+                        case "dmc_trio":
+                            targetTorsoRot.Y = side * 28f * pulse;
+                            targetTorsoRot.X += 16f * pulse;
+                            targetRArmRot = new Vector3(-78f + 95f * p, side * 34f * pulse, -14f * pulse);
+                            targetLArmRot = new Vector3(-48f * pulse, -side * 24f * pulse, 12f * pulse);
+                            break;
+
+                        case "w_arknights":
+                        case "vyper":
+                        case "haze":
+                            targetRArmRot.X -= 32f * pulse;
+                            targetLArmRot.X -= 22f * pulse;
+                            targetTorsoRot.Y = side * 12f * pulse;
+                            break;
+
+                        case "gold_ship":
+                            // Стремительный удар с разбега (нога/плечо)
+                            targetTorsoRot.X += 24f * pulse;
+                            targetTorsoRot.Y = side * 22f * pulse;
+                            targetRLegRot.X = -68f * pulse;
+                            targetRArmRot.X = -62f * pulse;
+                            break;
+
+                        case "pushnoy":
+                            // Мощный удар по струнам электрогитары!
+                            targetTorsoRot.Z = side * 14f * pulse;
+                            targetLArmRot = new Vector3(-38f, 26f, 14f);
+                            targetRArmRot = new Vector3(-55f + 70f * p, -24f, -18f * pulse);
+                            break;
+
+                        case "freddy":
+                            targetTorsoRot.Y = -22f + 44f * p;
+                            targetRArmRot = new Vector3(-92f + 110f * p, -18f * pulse, 0f);
+                            break;
+
+                        case "steve":
+                            // Классический взмах алмазным мечом / киркой из Minecraft!
+                            targetRArmRot = new Vector3(-95f + 115f * p, -16f * pulse, -8f);
+                            targetTorsoRot.Y = -14f * pulse;
+                            break;
+
+                        case "jotaro":
+                            // Джотаро указывает пальцем, пока Star Platinum бьёт ORA ORA!
+                            targetTorsoRot.Y = -18f * pulse;
+                            targetRArmRot = new Vector3(-78f * pulse, 0f, -10f);
+                            targetLArmRot = new Vector3(-24f * pulse, 16f, 12f);
+                            break;
+
+                        case "sanabi":
+                            // Сокрушительный прямой выпад и апперкот гигантской Механической Рукой-Крюком!
+                            targetTorsoRot.X += 22f * pulse;
+                            targetTorsoRot.Y = -34f + 68f * p;
+                            targetRArmRot = new Vector3(-96f * pulse, -28f + 56f * p, -20f * pulse);
+                            targetLArmRot = new Vector3(24f * pulse, 18f, 16f * pulse);
+                            break;
+
+                        case "jack_o":
+                            // Фирменный высокий пинок Jack-O' каблуком с откидыванием корпуса назад (5H / 6H из GGST)!
+                            targetTorsoPos.Y = BaseTorsoPos.Y + 0.05f * pulse;
+                            targetTorsoRot.X = -38f * pulse;
+                            targetTorsoRot.Y = 24f * pulse * side;
+                            targetTorsoRot.Z = 14f * pulse;
+                            targetLLegRot = new Vector3(-124f * pulse, -14f * pulse, 10f * pulse);
+                            targetRLegRot = new Vector3(18f * pulse, 0f, -6f);
+                            targetLArmRot = new Vector3(36f * pulse, 24f, 34f * pulse);
+                            targetRArmRot = new Vector3(-56f * pulse, -22f, -32f * pulse);
+                            break;
                     }
                 }
                 else if (ActiveAnim == "m2")
                 {
                     switch (charKey)
                     {
+                        case "jack_o":
+                            // Summon Servant (GGST): подъём обеих рук над головой в магическом круге призыва Слуги!
+                            targetTorsoPos.Y = BaseTorsoPos.Y + 0.08f * pulse;
+                            targetTorsoRot.X = -16f * pulse;
+                            targetLArmRot = new Vector3(-152f * pulse, 18f * pulse, 24f * pulse);
+                            targetRArmRot = new Vector3(-152f * pulse, -18f * pulse, -24f * pulse);
+                            targetLLegRot.X = -26f * pulse;
+                            targetRLegRot.X = 14f * pulse;
+                            break;
+
+                        case "sanabi":
+                            // Прицельный залп Цепным Гарпуном-Якорем вперёд с рывком лебёдки!
+                            targetTorsoRot.X += 26f * pulse;
+                            targetTorsoRot.Y = -22f * pulse;
+                            targetRArmRot = new Vector3(-92f * pulse, 8f * pulse, -8f);
+                            targetLArmRot = new Vector3(-42f * pulse, 28f * pulse, 12f);
+                            break;
+
                         case "sol":
-                            // Bandit Revolver: удар ногой с разворота в прыжке!
-                            targetTorsoRot.Y += p * 360f;
-                            targetTorsoRot.X = -18f * pulse;
-                            targetRLegRot.X = -85f * pulse;
-                            targetLLegRot.X = 25f * pulse;
+                            if (IsKyKiske)
+                            {
+                                // Stun Edge / Dire Eclat: широкий диагональный запуск креста молнии!
+                                targetTorsoRot.Y = 38f - 76f * p;
+                                targetTorsoRot.X += 16f * pulse;
+                                targetRArmRot = new Vector3(-92f * pulse, 42f - 84f * p, -20f * pulse);
+                                targetLArmRot = new Vector3(-42f * pulse, 28f, 18f);
+                            }
+                            else
+                            {
+                                // Bandit Revolver: удар ногой с разворота в прыжке!
+                                targetTorsoRot.Y += p * 360f;
+                                targetTorsoRot.X = -18f * pulse;
+                                targetRLegRot.X = -85f * pulse;
+                                targetLLegRot.X = 25f * pulse;
+                            }
                             break;
 
                         case "gwen":
@@ -677,6 +959,28 @@ namespace RiskOfCSharp2.Models
                             targetRArmRot = new Vector3(-48f * pulse, -20f, -34f * pulse);
                             break;
 
+                        case "gold_ship":
+                            // Дропкик с разбега обеими ногами вперёд!
+                            targetTorsoRot.X = -38f * pulse;
+                            targetLLegRot.X = -82f * pulse;
+                            targetRLegRot.X = -82f * pulse;
+                            targetLArmRot.X = 35f * pulse;
+                            targetRArmRot.X = 35f * pulse;
+                            break;
+
+                        case "steve":
+                            // Добыча киркой (взмах сверху вниз)
+                            targetRArmRot = new Vector3(-125f + 150f * p, 0f, 0f);
+                            targetTorsoRot.X += 22f * pulse;
+                            break;
+
+                        case "freddy":
+                            // Выпад скримера (Jumpscare)!
+                            targetTorsoRot.X += 28f * pulse;
+                            targetLArmRot = new Vector3(-85f * pulse, -25f * pulse, 24f * pulse);
+                            targetRArmRot = new Vector3(-85f * pulse, 25f * pulse, -24f * pulse);
+                            break;
+
                         default:
                             targetLArmRot.X = -42f * pulse;
                             targetRArmRot.X = -46f * pulse;
@@ -700,10 +1004,21 @@ namespace RiskOfCSharp2.Models
 
                         case "gwen":
                         case "reimu":
+                        case "lappland":
+                        case "haze":
+                        case "dmc_trio":
                             // Изящный пируэт на 360 градусов
                             targetTorsoRot.Y += p * 360f;
                             targetLArmRot.Z = 32f * pulse;
                             targetRArmRot.Z = -32f * pulse;
+                            break;
+
+                        case "vyper":
+                            // Низкое скольжение рептилии (Slither Slide)
+                            targetTorsoPos.Y = BaseTorsoPos.Y - 0.35f * pulse;
+                            targetTorsoRot.X = 38f * pulse;
+                            targetLLegRot.X = -55f * pulse;
+                            targetRLegRot.X = 35f * pulse;
                             break;
 
                         case "ahri":
@@ -725,9 +1040,57 @@ namespace RiskOfCSharp2.Models
                             break;
 
                         case "sol":
-                            // Bandit Bringer: взлёт с апперкотом и пикирующий огненный кулак вниз
-                            targetTorsoRot.X = p < 0.45f ? -18f : 36f;
-                            targetRArmRot.X = p < 0.45f ? -145f : 42f;
+                            if (IsKyKiske)
+                            {
+                                // Stun Dipper (GGST): низкий скользящий подкат по земле с вытянутой вперёд правой ногой!
+                                float slideHold = p < 0.78f ? MathF.Min(1f, p / 0.16f) : (1f - p) / 0.22f;
+                                targetTorsoPos.Y = BaseTorsoPos.Y - 0.44f * slideHold;
+                                targetTorsoRot.X = -42f * slideHold;
+                                targetTorsoRot.Y = -22f * slideHold;
+                                targetTorsoRot.Z = 8f * slideHold;
+                                targetRLegPos = BaseRightLegPos + new Vector3(0.04f * slideHold, 0.08f * slideHold, 0.26f * slideHold);
+                                targetRLegRot = new Vector3(-84f * slideHold, -8f * slideHold, -6f * slideHold);
+                                targetLLegPos = BaseLeftLegPos + new Vector3(-0.04f * slideHold, 0.12f * slideHold, -0.08f * slideHold);
+                                targetLLegRot = new Vector3(58f * slideHold, 14f * slideHold, 12f * slideHold);
+                                targetRArmRot = new Vector3(44f * slideHold, -36f * slideHold, -28f * slideHold);
+                                targetLArmRot = new Vector3(-52f * slideHold, 28f * slideHold, 24f * slideHold);
+                            }
+                            else
+                            {
+                                // Bandit Bringer: взлёт с апперкотом и пикирующий огненный кулак вниз
+                                targetTorsoRot.X = p < 0.45f ? -18f : 36f;
+                                targetRArmRot.X = p < 0.45f ? -145f : 42f;
+                            }
+                            break;
+
+                        case "jack_o":
+                            // Прыжок с Командным Флагом в правой руке и вонзание древка в землю при приземлении!
+                            if (p < 0.68f)
+                            {
+                                targetTorsoRot.X = -14f * pulse;
+                                targetTorsoRot.Y = -16f * pulse;
+                                targetRArmRot = new Vector3(-138f, -12f, -14f);
+                                targetLArmRot = new Vector3(-34f, 22f, 28f);
+                                targetLLegRot.X = -42f * pulse;
+                                targetRLegRot.X = 28f * pulse;
+                            }
+                            else
+                            {
+                                float slamP = (p - 0.68f) / 0.32f;
+                                targetTorsoPos.Y = BaseTorsoPos.Y - 0.16f * slamP;
+                                targetTorsoRot.X = 28f * slamP;
+                                targetRArmRot = new Vector3(-42f, -8f, -6f);
+                                targetLArmRot = new Vector3(24f, 16f, 22f);
+                            }
+                            break;
+
+                        case "sanabi":
+                            // Маятниковый свинг на Цепном Крюке с акробатическим переворотом в воздухе!
+                            targetTorsoRot.X = -28f + p * 360f;
+                            targetRArmRot = new Vector3(-135f * pulse, 0f, -16f);
+                            targetLArmRot = new Vector3(32f * pulse, 0f, 24f);
+                            targetLLegRot.X = -52f * pulse;
+                            targetRLegRot.X = 38f * pulse;
                             break;
 
                         default:
@@ -742,10 +1105,14 @@ namespace RiskOfCSharp2.Models
                     switch (charKey)
                     {
                         case "sol":
-                            // Рёв пробуждения Dragon Install
+                        case "jotaro":
+                        case "dmc_trio":
+                        case "pushnoy":
+                        case "sanabi":
+                            // Пробуждение силы / ZA WARUDO / Sin Devil Trigger / Протокол САННАБИ!
                             targetTorsoRot.X = -26f * pulse;
-                            targetLArmRot = new Vector3(-75f * pulse, 0f, 35f * pulse);
-                            targetRArmRot = new Vector3(-75f * pulse, 0f, -35f * pulse);
+                            targetLArmRot = new Vector3(-85f * pulse, 0f, 38f * pulse);
+                            targetRArmRot = new Vector3(-85f * pulse, 0f, -38f * pulse);
                             break;
 
                         case "tidehunter":
@@ -760,6 +1127,8 @@ namespace RiskOfCSharp2.Models
                         case "aigis":
                         case "reimu":
                         case "dante":
+                        case "haze":
+                        case "lappland":
                             targetTorsoRot.Y += p * 360f;
                             targetLArmRot.X = -110f * pulse;
                             targetRArmRot.X = -110f * pulse;
@@ -787,51 +1156,673 @@ namespace RiskOfCSharp2.Models
                             break;
                     }
                 }
+                else if (ActiveAnim == "ky_charge")
+                {
+                    // Зарядка Stun Edge Каем Киске: отводит Thunderseal к плечу, концентрируя золотисто-алую молнию!
+                    float tremor = MathF.Sin(t * 42f) * 2.2f;
+                    targetTorsoPos.Y = BaseTorsoPos.Y - 0.08f;
+                    targetTorsoRot = new Vector3(-8f, 38f + tremor, 0f);
+                    targetRArmRot = new Vector3(-116f + tremor, 42f, -24f);
+                    targetLArmRot = new Vector3(-52f, 34f, 18f);
+                    targetLLegRot.X = -24f;
+                    targetRLegRot.X = 22f;
+                }
+                else if (ActiveAnim == "ky_dipper")
+                {
+                    // Низкий подкат Stun Dipper по референсу GGST_Stun_Dipper_1.webp
+                    float slideHold = p < 0.80f ? MathF.Min(1f, p / 0.14f) : (1f - p) / 0.20f;
+                    targetTorsoPos.Y = BaseTorsoPos.Y - 0.46f * slideHold;
+                    targetTorsoRot = new Vector3(-44f * slideHold, -20f * slideHold, 8f * slideHold);
+                    targetRLegPos = BaseRightLegPos + new Vector3(0.04f * slideHold, 0.09f * slideHold, 0.28f * slideHold);
+                    targetRLegRot = new Vector3(-85f * slideHold, -8f * slideHold, -6f * slideHold);
+                    targetLLegPos = BaseLeftLegPos + new Vector3(-0.04f * slideHold, 0.12f * slideHold, -0.08f * slideHold);
+                    targetLLegRot = new Vector3(60f * slideHold, 14f * slideHold, 12f * slideHold);
+                    targetRArmRot = new Vector3(46f * slideHold, -36f * slideHold, -28f * slideHold);
+                    targetLArmRot = new Vector3(-54f * slideHold, 28f * slideHold, 24f * slideHold);
+                }
+                else if (ActiveAnim == "ky_rtl")
+                {
+                    // Горизонтальный полёт Ride the Lightning с вытянутым вперёд клинком в магический барьер!
+                    targetTorsoPos.Y = BaseTorsoPos.Y + 0.14f;
+                    targetTorsoRot = new Vector3(68f, -10f, 0f);
+                    targetRArmRot = new Vector3(-158f, -8f, 0f);
+                    targetLArmRot = new Vector3(36f, 18f, 24f);
+                    targetLLegRot.X = 34f;
+                    targetRLegRot.X = 28f;
+                }
+                else if (ActiveAnim == "jack_r_lunge")
+                {
+                    // Фаза 1 Forever Elysion Driver: стремительный прыжок вперёд с Железной Тыквой в вытянутой руке!
+                    targetTorsoRot = new Vector3(34f, -22f, 0f);
+                    targetRArmRot = new Vector3(-102f, -14f, -12f);
+                    targetLArmRot = new Vector3(28f, 18f, 24f);
+                    targetLLegRot.X = -46f;
+                    targetRLegRot.X = 34f;
+                }
+                else if (ActiveAnim == "jack_r_rise")
+                {
+                    // Фаза 2 Forever Elysion Driver: захватывает насаженного на шар врага обеими руками и взмывает с вращением в небо!
+                    targetTorsoRot = new Vector3(-18f, p * 720f, 0f);
+                    targetLArmRot = new Vector3(-128f, 26f, 16f);
+                    targetRArmRot = new Vector3(-128f, -26f, -16f);
+                    targetLLegRot.X = -42f;
+                    targetRLegRot.X = -32f;
+                }
+                else if (ActiveAnim == "jack_r_slam")
+                {
+                    // Фаза 3 Forever Elysion Driver: сокрушительное пикирование головой/шаром с врагом вниз в землю!
+                    targetTorsoRot = new Vector3(148f * MathF.Min(1f, p * 1.5f), 0f, 0f);
+                    targetLArmRot = new Vector3(-142f, 22f, 12f);
+                    targetRArmRot = new Vector3(-142f, -22f, -12f);
+                    targetLLegRot.X = -24f;
+                    targetRLegRot.X = -24f;
+                }
             }
 
-            // Анимация Стенда Крокодила Гены (привязан к ShieldAura у Чебурашки)
-            if (charKey == "cheburashka" && ShieldAura != null && ShieldAura.Enabled)
+            // Показ командного флага в руке Jack-O' во время прыжка Shift!
+            if (charKey == "jack_o" && Shield != null && !Shield.IsDestroyed)
             {
-                float standPulse = (AnimTimer > 0f && ActiveAnim is "m1" or "m2")
-                    ? MathF.Sin((1f - AnimTimer / MathF.Max(0.01f, AnimDuration)) * MathF.PI)
-                    : 0f;
-                ShieldAura.X = 0.85f + MathF.Sin(t * 3.5f) * 0.12f;
-                ShieldAura.Z = -0.65f + standPulse * 1.15f;
-                ShieldAura.RotationY = standPulse > 0.01f ? MathF.Sin(t * 32f) * 18f : MathF.Sin(t * 2.5f) * 6f;
-                ShieldAura.RotationX = standPulse * 16f;
+                bool showHandFlag = AnimTimer > 0f && ActiveAnim == "shift";
+                if (Shield.Enabled != showHandFlag) Shield.Enabled = showHandFlag;
             }
 
-            // Плавная интерполяция всех частей тела к целевой позе
-            float blend = MathF.Min(1f, dt * (AnimTimer > 0f ? 20f : 12f));
+            // Амортизация приземления (Landing Squash) — живое сгибание коленей и корпуса после прыжка
+            if (LandingSquash > 0.001f && string.IsNullOrEmpty(ActiveEmote))
+            {
+                float sq = MathF.Sin((LandingSquash / 0.24f) * MathF.PI * 0.5f);
+                targetTorsoPos.Y -= sq * 0.14f;
+                targetTorsoRot.X += sq * 9f;
+                targetLLegRot.X -= sq * 22f;
+                targetRLegRot.X += sq * 16f;
+            }
+
+            // 4. КОЛЕСО ЭМОЦИЙ [L] — ПОЛНЫЙ НАБОР ПРОЦЕДУРНЫХ АНИМАЦИЙ + ПАРНАЯ «КАМЕНЬ-НОЖНИЦЫ-БУМАГА»
+            float emoteHeadX = 0f, emoteHeadY = 0f, emoteHeadZ = 0f;
+            bool hasEmoteHead = false;
+            bool isCheb = charKey == "cheburashka";
+            bool isTide = charKey == "tidehunter";
+            float crouchScale = isCheb ? 0.44f : 1.0f;
+
+            if (!string.IsNullOrEmpty(ActiveEmote))
+            {
+                float et = EmoteTime;
+                switch (ActiveEmote)
+                {
+                    case "chair":
+                    case "plastic_chair":
+                    case "vergil_chair":
+                    {
+                        // 1. Сидение на белом пластиковом стуле (Мотивация Вергилия)
+                        if (isCheb)
+                        {
+                            // Коротконогий Чебурашка уютно сидит НА сиденье стула и болтает лапками
+                            float pawSwing = MathF.Sin(t * 3.4f) * 11f;
+                            targetTorsoPos = BaseTorsoPos + new Vector3(0f, -0.03f + MathF.Sin(t * 2.2f) * 0.012f, -0.08f);
+                            targetLLegPos = BaseLeftLegPos + new Vector3(-0.02f, 0.05f, 0.12f);
+                            targetRLegPos = BaseRightLegPos + new Vector3(0.02f, 0.05f, 0.12f);
+                            targetLLegRot = new Vector3(-72f + pawSwing, -10f, 4f);
+                            targetRLegRot = new Vector3(-72f - pawSwing, 10f, -4f);
+                        }
+                        else if (isTide)
+                        {
+                            targetTorsoPos = BaseTorsoPos + new Vector3(0f, -0.24f + MathF.Sin(t * 2.0f) * 0.015f, -0.08f);
+                            targetLLegPos = BaseLeftLegPos + new Vector3(-0.03f, -0.18f, 0.12f);
+                            targetRLegPos = BaseRightLegPos + new Vector3(0.03f, -0.18f, 0.12f);
+                            targetLLegRot = new Vector3(-68f, -12f, 5f);
+                            targetRLegRot = new Vector3(-66f, 12f, -5f);
+                        }
+                        else
+                        {
+                            targetTorsoPos = BaseTorsoPos + new Vector3(0f, -0.34f + MathF.Sin(t * 2.0f) * 0.015f, -0.08f);
+                            targetLLegPos = BaseLeftLegPos + new Vector3(-0.03f, -0.20f, 0.10f);
+                            targetRLegPos = BaseRightLegPos + new Vector3(0.03f, -0.20f, 0.10f);
+                            targetLLegRot = new Vector3(-70f, -10f, 4f);
+                            targetRLegRot = new Vector3(-66f, 10f, -4f);
+                        }
+                        targetTorsoRot = new Vector3(-11f, MathF.Sin(t * 0.8f) * 4f, 0f);
+                        targetLArmRot = new Vector3(-38f, 26f, 10f);
+                        targetRArmRot = new Vector3(-42f, -28f, -10f);
+                        emoteHeadX = 6f + MathF.Sin(t * 1.4f) * 3f;
+                        emoteHeadY = MathF.Sin(t * 0.7f) * 10f;
+                        emoteHeadZ = MathF.Cos(t * 0.7f) * 3.5f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "california":
+                    case "california_girls":
+                    case "california_gurls":
+                    {
+                        // 2. Калифорния гёрлс — мемный танец с покачиванием бёдер и руками за головой
+                        float beat = et * 6.8f;
+                        float sway = MathF.Sin(beat);
+                        float bounce = MathF.Abs(MathF.Cos(beat));
+                        bool handsUpPhase = (et % 3.6f) < 1.8f;
+                        targetTorsoPos = BaseTorsoPos + new Vector3(sway * 0.15f * crouchScale, bounce * 0.07f * crouchScale, 0f);
+                        targetTorsoRot = new Vector3(MathF.Sin(beat * 0.5f) * 6f, sway * 24f, sway * 13f);
+                        targetLLegRot = new Vector3(sway * 26f, 0f, sway * 9f);
+                        targetRLegRot = new Vector3(-sway * 26f, 0f, sway * 9f);
+                        if (handsUpPhase)
+                        {
+                            targetLArmRot = new Vector3(-136f + bounce * 12f, 28f, 34f + sway * 10f);
+                            targetRArmRot = new Vector3(-136f + bounce * 12f, -28f, -34f + sway * 10f);
+                        }
+                        else
+                        {
+                            targetLArmRot = new Vector3(-42f + sway * 28f, 32f, 24f);
+                            targetRArmRot = new Vector3(-42f - sway * 28f, -32f, -24f);
+                        }
+                        emoteHeadZ = -sway * 12f;
+                        emoteHeadY = -sway * 10f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "caramelldansen":
+                    case "caramell":
+                    {
+                        // 3. Карамеллдансен — быстрый евробит-танец с «кроличьими ушками» над головой и вилянием бёдрами!
+                        float beat = et * 11.4f;
+                        float sway = MathF.Sin(beat);
+                        float bounce = MathF.Abs(MathF.Cos(beat));
+                        float lPop = MathF.Max(0f, sway);
+                        float rPop = MathF.Max(0f, -sway);
+
+                        targetTorsoPos = BaseTorsoPos + new Vector3(-sway * 0.16f * crouchScale, (-0.03f + bounce * 0.10f) * crouchScale, 0f);
+                        targetTorsoRot = new Vector3(-4f + bounce * 6f, sway * 22f, -sway * 14f);
+                        // Ладони сложены «ушками» над макушкой и синхронно качаются влево-вправо в такт голове
+                        targetLArmRot = new Vector3(-128f + bounce * 14f, 22f - sway * 10f, 26f + sway * 18f);
+                        targetRArmRot = new Vector3(-128f + bounce * 14f, -22f - sway * 10f, -26f + sway * 18f);
+                        // Пружинящие колени с поочерёдным подбросом пяток назад по канону аниме-опенинга
+                        targetLLegRot = new Vector3(10f + lPop * 36f - rPop * 14f, -6f, -sway * 11f);
+                        targetRLegRot = new Vector3(10f + rPop * 36f - lPop * 14f, 6f, -sway * 11f);
+
+                        emoteHeadZ = -sway * 15f;
+                        emoteHeadY = -sway * 10f;
+                        emoteHeadX = -4f + bounce * 6f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "fortnite":
+                    case "default_dance":
+                    {
+                        // 4. Стандартный танец Фортнайта (Dance Moves / Default Dance) — 3 фазы с хлопком и указанием пальцем!
+                        float cyc = et % 3.2f;
+                        float step = MathF.Sin(et * 10.5f);
+                        float hop = MathF.Abs(MathF.Cos(et * 10.5f));
+                        if (cyc < 1.3f)
+                        {
+                            // Фаза 1: Энергичные перекрёстные взмахи руками и чечётка коленями
+                            targetTorsoPos = BaseTorsoPos + new Vector3(step * 0.08f * crouchScale, hop * 0.09f * crouchScale, 0f);
+                            targetTorsoRot = new Vector3(6f, step * 26f, step * 8f);
+                            targetLArmRot = new Vector3(-68f + step * 44f, 28f - step * 34f, 18f);
+                            targetRArmRot = new Vector3(-68f - step * 44f, -28f - step * 34f, -18f);
+                            targetLLegRot = new Vector3(MathF.Max(0f, step) * -48f, 0f, 8f);
+                            targetRLegRot = new Vector3(MathF.Max(0f, -step) * -48f, 0f, -8f);
+                            emoteHeadX = hop * 7f - 3f;
+                            emoteHeadY = -step * 10f;
+                            emoteHeadZ = step * 7f;
+                            hasEmoteHead = true;
+                        }
+                        else if (cyc < 2.2f)
+                        {
+                            // Фаза 2: Разворот на 360° и фирменный хлопок над головой!
+                            float sp = (cyc - 1.3f) / 0.9f;
+                            float clap = MathF.Sin(sp * MathF.PI);
+                            targetTorsoPos = BaseTorsoPos + new Vector3(0f, clap * 0.16f * crouchScale, 0f);
+                            targetTorsoRot = new Vector3(-10f * clap, sp * 360f, 0f);
+                            targetLArmRot = new Vector3(-148f * clap - 20f, 36f * clap, 14f);
+                            targetRArmRot = new Vector3(-148f * clap - 20f, -36f * clap, -14f);
+                            targetLLegRot = new Vector3(-24f * clap, 0f, 10f);
+                            targetRLegRot = new Vector3(22f * clap, 0f, -10f);
+                            emoteHeadX = -14f * clap;
+                            hasEmoteHead = true;
+                        }
+                        else
+                        {
+                            // Фаза 3: Скрещённые руки + дерзкий жест указательным пальцем вперёд под бит!
+                            float pt = (cyc - 2.2f) / 1.0f;
+                            float groove = MathF.Sin(pt * MathF.PI * 2f);
+                            targetTorsoPos = BaseTorsoPos + new Vector3(0f, MathF.Abs(groove) * 0.06f * crouchScale, 0f);
+                            targetTorsoRot = new Vector3(-6f, -18f + groove * 8f, groove * 6f);
+                            targetLArmRot = new Vector3(-52f, 44f, 12f);
+                            targetRArmRot = new Vector3(-86f + groove * 8f, -8f, -6f);
+                            targetLLegRot = new Vector3(-14f, 0f, 8f);
+                            targetRLegRot = new Vector3(14f, 0f, -8f);
+                            emoteHeadZ = 10f;
+                            emoteHeadY = 14f;
+                            hasEmoteHead = true;
+                        }
+                        break;
+                    }
+                    case "rps_wait":
+                    {
+                        // 5a. Ожидание партнёра для «Камень-Ножницы-Бумага»: постукивание кулаком о ладонь
+                        float tap = MathF.Abs(MathF.Sin(et * 5.8f));
+                        targetTorsoPos = BaseTorsoPos + new Vector3(0f, tap * 0.04f * crouchScale, 0f);
+                        targetTorsoRot = new Vector3(4f, MathF.Sin(et * 2.0f) * 8f, 0f);
+                        targetLArmRot = new Vector3(-56f, 28f, 8f);
+                        targetRArmRot = new Vector3(-60f - tap * 28f, -24f, -8f);
+                        emoteHeadY = MathF.Sin(et * 2.2f) * 16f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "rps":
+                    case "rps_count":
+                    {
+                        // 5b. Синхронный отсчёт «Камень... Ножницы... Бумага... РАЗ-ДВА-ТРИ!»
+                        float pump = MathF.Abs(MathF.Sin(et * MathF.PI * 2.6f));
+                        targetTorsoPos = BaseTorsoPos + new Vector3(0f, (1f - pump) * 0.06f * crouchScale, 0f);
+                        targetTorsoRot = new Vector3(12f * pump, -8f, 0f);
+                        targetLArmRot = new Vector3(-54f, 26f, 8f);
+                        targetRArmRot = new Vector3(-52f - pump * 62f, -18f, -8f);
+                        targetLLegRot = new Vector3(-12f * pump, 0f, 0f);
+                        targetRLegRot = new Vector3(12f * pump, 0f, 0f);
+                        emoteHeadX = 10f * pump;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "rps_win":
+                    {
+                        // 5c. Победа в КНБ — триумфальные прыжки с поднятыми кулаками!
+                        float jmp = MathF.Abs(MathF.Sin(et * 8.5f));
+                        targetTorsoPos = BaseTorsoPos + new Vector3(0f, jmp * 0.22f * crouchScale, 0f);
+                        targetTorsoRot = new Vector3(-12f, MathF.Sin(et * 8.5f) * 14f, 0f);
+                        targetLArmRot = new Vector3(-148f + jmp * 18f, 0f, 28f);
+                        targetRArmRot = new Vector3(-148f + jmp * 18f, 0f, -28f);
+                        targetLLegRot = new Vector3(-26f * jmp, 0f, 8f);
+                        targetRLegRot = new Vector3(22f * jmp, 0f, -8f);
+                        emoteHeadX = -10f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "rps_lose":
+                    {
+                        // 5d. Поражение в КНБ — хватается за голову в отчаянии
+                        targetTorsoPos = BaseTorsoPos + new Vector3(0f, -0.22f * crouchScale, 0f);
+                        targetTorsoRot = new Vector3(34f, MathF.Sin(et * 9f) * 8f, 0f);
+                        targetLArmRot = new Vector3(-128f, 28f, 18f);
+                        targetRArmRot = new Vector3(-128f, -28f, -18f);
+                        targetLLegRot = new Vector3(-28f, 0f, 0f);
+                        targetRLegRot = new Vector3(-28f, 0f, 0f);
+                        emoteHeadX = 22f;
+                        emoteHeadY = MathF.Sin(et * 11f) * 18f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "rps_draw":
+                    {
+                        // 5e. Боевая ничья в КНБ — разводит руками в стороны
+                        targetTorsoRot = new Vector3(-4f, MathF.Sin(et * 4f) * 8f, MathF.Sin(et * 4f) * 6f);
+                        targetLArmRot = new Vector3(-48f, 0f, 44f);
+                        targetRArmRot = new Vector3(-48f, 0f, -44f);
+                        emoteHeadZ = 14f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "kazotsky":
+                    case "squat_dance":
+                    case "prisyadka":
+                    {
+                        // 6. Танец вприсядку (Казачок / Kazotsky Kick) — присядка со скрещёнными руками, «ХЭЙ!» и выбросом ног!
+                        float kickSin = MathF.Sin(et * 9.6f);
+                        float hop = MathF.Abs(MathF.Cos(et * 9.6f));
+                        float lKick = MathF.Max(0f, kickSin);
+                        float rKick = MathF.Max(0f, -kickSin);
+                        bool heyFlourish = (et % 4.0f) >= 3.0f;
+
+                        targetTorsoPos = BaseTorsoPos + new Vector3(kickSin * 0.05f * crouchScale, (-0.28f + hop * 0.11f) * crouchScale, -0.04f);
+                        targetTorsoRot = new Vector3(-8f, kickSin * 12f, -kickSin * 7f);
+                        if (heyFlourish)
+                        {
+                            // Задорный взмах руками в стороны на каждый 4-й такт («ХЭЙ!»)
+                            targetLArmRot = new Vector3(-122f + hop * 12f, -10f, 38f);
+                            targetRArmRot = new Vector3(-122f + hop * 12f, 10f, -38f);
+                        }
+                        else
+                        {
+                            targetLArmRot = new Vector3(-66f, 48f, 12f);
+                            targetRArmRot = new Vector3(-66f, -48f, -12f);
+                        }
+                        targetLLegPos = BaseLeftLegPos + new Vector3(0f, -0.10f * crouchScale, 0.08f);
+                        targetRLegPos = BaseRightLegPos + new Vector3(0f, -0.10f * crouchScale, 0.08f);
+                        targetLLegRot = new Vector3(-36f - 54f * lKick, 0f, 8f);
+                        targetRLegRot = new Vector3(-36f - 54f * rKick, 0f, -8f);
+                        emoteHeadZ = kickSin * 8f;
+                        emoteHeadX = heyFlourish ? -10f : 2f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "gangnam":
+                    case "gangnam_style":
+                    {
+                        // 7. Gangnam Style — скачка на невидимом коне + вращение лассо над головой!
+                        float gallop = MathF.Abs(MathF.Sin(et * 8.6f));
+                        float sideStep = MathF.Sin(et * 4.3f);
+                        bool lassoPhase = (et % 3.2f) >= 1.6f;
+                        targetTorsoPos = BaseTorsoPos + new Vector3(sideStep * 0.09f * crouchScale, (-0.10f + gallop * 0.16f) * crouchScale, 0f);
+                        targetTorsoRot = new Vector3(6f - gallop * 8f, sideStep * 14f, sideStep * 6f);
+                        targetLLegRot = new Vector3(-22f - MathF.Max(0f, sideStep) * 28f, -12f, 16f);
+                        targetRLegRot = new Vector3(-22f - MathF.Max(0f, -sideStep) * 28f, 12f, -16f);
+                        if (!lassoPhase)
+                        {
+                            targetLArmRot = new Vector3(-72f - gallop * 18f, 34f, 10f);
+                            targetRArmRot = new Vector3(-76f - gallop * 18f, -34f, -10f);
+                        }
+                        else
+                        {
+                            targetLArmRot = new Vector3(-56f, 28f, 14f);
+                            targetRArmRot = new Vector3(-148f, MathF.Sin(et * 18f) * 36f, -22f + MathF.Cos(et * 18f) * 34f);
+                        }
+                        emoteHeadX = -gallop * 8f;
+                        emoteHeadY = sideStep * 10f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "sun":
+                    case "praise_the_sun":
+                    case "praise_sun":
+                    {
+                        // 8. Восхвали солнце! (Praise the Sun \[T]/)
+                        float glow = MathF.Sin(et * 2.4f) * 0.03f;
+                        targetTorsoPos = BaseTorsoPos + new Vector3(0f, 0.05f + glow, 0f);
+                        targetTorsoRot = new Vector3(-18f, 0f, 0f);
+                        targetLArmRot = new Vector3(-148f, -6f, 36f);
+                        targetRArmRot = new Vector3(-148f, 6f, -36f);
+                        targetLLegRot = new Vector3(5f, -6f, 7f);
+                        targetRLegRot = new Vector3(5f, 6f, -7f);
+                        emoteHeadX = -26f;
+                        emoteHeadY = MathF.Sin(et * 1.2f) * 3f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "jojo":
+                    case "jojo_pose":
+                    {
+                        // 9. JoJo Поза (Menacing) — драматичный прогиб Араки с ладонью у лица!
+                        float rumble = MathF.Sin(et * 22f) * 1.2f;
+                        targetTorsoPos = BaseTorsoPos + new Vector3(-0.05f * crouchScale, -0.04f * crouchScale, 0f);
+                        targetTorsoRot = new Vector3(-20f, -26f + rumble, 16f);
+                        targetLArmRot = new Vector3(-114f, 40f, 18f);
+                        targetRArmRot = new Vector3(-68f, -32f, -42f);
+                        targetLLegRot = new Vector3(-22f, -12f, 12f);
+                        targetRLegRot = new Vector3(18f, 14f, -10f);
+                        emoteHeadX = 12f;
+                        emoteHeadY = 24f;
+                        emoteHeadZ = -14f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                    case "distraction":
+                    case "stickmin":
+                    {
+                        // 10. Танец Отвлечения (Henry Stickmin Distraction Dance): хлопок -> наклон влево с разведёнными руками -> хлопок -> наклон вправо!
+                        float cyc = et % 1.6f;
+                        if (cyc < 0.40f || (cyc >= 0.80f && cyc < 1.20f))
+                        {
+                            float p = (cyc % 0.40f) / 0.40f;
+                            float clap = MathF.Sin(p * MathF.PI);
+                            targetTorsoPos = BaseTorsoPos + new Vector3(0f, clap * 0.08f * crouchScale, 0f);
+                            targetTorsoRot = new Vector3(6f * clap, 0f, 0f);
+                            targetLArmRot = new Vector3(-76f, 24f + 32f * clap, 10f);
+                            targetRArmRot = new Vector3(-76f, -24f - 32f * clap, -10f);
+                            targetLLegRot = new Vector3(-18f * (1f - clap), 0f, 6f);
+                            targetRLegRot = new Vector3(-18f * (1f - clap), 0f, -6f);
+                            emoteHeadX = 10f * clap;
+                            hasEmoteHead = true;
+                        }
+                        else
+                        {
+                            bool leanLeft = cyc < 0.80f;
+                            float dir = leanLeft ? -1f : 1f;
+                            float p = (leanLeft ? (cyc - 0.40f) : (cyc - 1.20f)) / 0.40f;
+                            float pose = MathF.Pow(MathF.Max(0f, MathF.Sin(p * MathF.PI)), 0.65f);
+
+                            targetTorsoPos = BaseTorsoPos + new Vector3(dir * 0.17f * pose * crouchScale, -0.13f * pose * crouchScale, 0f);
+                            targetTorsoRot = new Vector3(8f * pose, dir * 20f * pose, -dir * 18f * pose);
+                            if (leanLeft)
+                            {
+                                targetLArmRot = new Vector3(-124f * pose - 22f * (1f - pose), -14f * pose, 48f * pose);
+                                targetRArmRot = new Vector3(-56f * pose - 22f * (1f - pose), 14f * pose, -50f * pose);
+                                targetLLegRot = new Vector3(-38f * pose, -10f * pose, 16f * pose);
+                                targetRLegRot = new Vector3(16f * pose, 12f * pose, -24f * pose);
+                            }
+                            else
+                            {
+                                targetLArmRot = new Vector3(-56f * pose - 22f * (1f - pose), -14f * pose, 50f * pose);
+                                targetRArmRot = new Vector3(-124f * pose - 22f * (1f - pose), 14f * pose, -48f * pose);
+                                targetLLegRot = new Vector3(16f * pose, -12f * pose, 24f * pose);
+                                targetRLegRot = new Vector3(-38f * pose, 10f * pose, -16f * pose);
+                            }
+                            emoteHeadZ = -dir * 18f * pose;
+                            emoteHeadY = -dir * 16f * pose;
+                            emoteHeadX = -6f * pose;
+                            hasEmoteHead = true;
+                        }
+                        break;
+                    }
+                    default:
+                    {
+                        // Универсальный бодрый танец на случай нестандартного ID эмоции
+                        float groove = MathF.Sin(et * 8.0f);
+                        float bounce = MathF.Abs(MathF.Cos(et * 8.0f));
+                        targetTorsoPos = BaseTorsoPos + new Vector3(groove * 0.10f * crouchScale, bounce * 0.08f * crouchScale, 0f);
+                        targetTorsoRot = new Vector3(0f, groove * 18f, -groove * 10f);
+                        targetLArmRot = new Vector3(-85f + groove * 30f, 18f, 24f);
+                        targetRArmRot = new Vector3(-85f - groove * 30f, -18f, -24f);
+                        targetLLegRot = new Vector3(groove * 22f, 0f, 6f);
+                        targetRLegRot = new Vector3(-groove * 22f, 0f, -6f);
+                        emoteHeadZ = -groove * 12f;
+                        hasEmoteHead = true;
+                        break;
+                    }
+                }
+            }
+
+            // Призыв Стенда Крокодила Гены у Чебурашки на время эмоций, чтобы Гена с гармошкой тоже танцевал и позировал!
+            if (isCheb && ShieldAura != null && !ShieldAura.IsDestroyed)
+            {
+                if (!string.IsNullOrEmpty(ActiveEmote))
+                {
+                    if (!ShieldAura.Enabled)
+                    {
+                        ShieldAura.Enabled = true;
+                        _emoteSpawnedGena = true;
+                    }
+                }
+                else if (_emoteSpawnedGena)
+                {
+                    ShieldAura.Enabled = false;
+                    _emoteSpawnedGena = false;
+                }
+            }
+
+            // Выразительная анимация Стенда Крокодила Гены (у Чебурашки), Star Platinum (у Джотаро) и Дрона Мари (у Генерала SANABI)
+            if (charKey is "cheburashka" or "jotaro" && ShieldAura != null && ShieldAura.Enabled)
+            {
+                float baseX = charKey == "jotaro" ? 0.68f : 0.85f;
+                float baseY = charKey == "jotaro" ? 0.24f : 0.68f;
+                Vector3 standPos;
+                Vector3 standRot;
+
+                if (!string.IsNullOrEmpty(ActiveEmote))
+                {
+                    float et = EmoteTime;
+                    switch (ActiveEmote)
+                    {
+                        case "chair":
+                        case "plastic_chair":
+                        case "vergil_chair":
+                            // Стенд невозмутимо парит за спинкой пластикового стула как верный телохранитель
+                            standPos = new Vector3(baseX + 0.08f, baseY + 0.10f + MathF.Sin(t * 2.4f) * 0.05f, -0.56f);
+                            standRot = new Vector3(-6f, MathF.Sin(t * 1.1f) * 14f, 0f);
+                            break;
+                        case "jojo":
+                        case "jojo_pose":
+                            // Синхронная грозная JoJo-стойка плечом к плечу с хозяином!
+                            standPos = new Vector3(baseX + 0.10f, baseY + 0.16f + MathF.Sin(t * 3.0f) * 0.04f, -0.24f);
+                            standRot = new Vector3(-18f, 22f + MathF.Sin(et * 22f) * 2.5f, -14f);
+                            break;
+                        case "sun":
+                        case "praise_the_sun":
+                        case "praise_sun":
+                            // Стенд возносится за спиной, тоже восхваляя Солнце!
+                            standPos = new Vector3(0f, baseY + 0.56f + MathF.Sin(et * 2.4f) * 0.05f, -0.62f);
+                            standRot = new Vector3(-22f, 0f, 0f);
+                            break;
+                        case "rps_win":
+                            float winHop = MathF.Abs(MathF.Sin(et * 8.5f));
+                            standPos = new Vector3(baseX, baseY + winHop * 0.28f, -0.32f);
+                            standRot = new Vector3(-14f, MathF.Sin(et * 12f) * 20f, 0f);
+                            break;
+                        case "rps_lose":
+                            standPos = new Vector3(baseX, baseY - 0.18f, -0.48f);
+                            standRot = new Vector3(28f, MathF.Sin(et * 10f) * 14f, 0f);
+                            break;
+                        default:
+                            // Бодрый танец Стенда (и игра Гены на гармошке) в такт любой танцевальной эмоции!
+                            float beatSpd = ActiveEmote is "caramelldansen" or "caramell" ? 11.4f : 8.4f;
+                            float sBeat = MathF.Sin(et * beatSpd);
+                            float sHop = MathF.Abs(MathF.Cos(et * beatSpd));
+                            standPos = new Vector3(baseX + sBeat * 0.22f, baseY + sHop * 0.18f, -0.42f);
+                            standRot = new Vector3(MathF.Cos(et * beatSpd) * 10f, sBeat * 24f, -sBeat * 14f);
+                            break;
+                    }
+                }
+                else
+                {
+                    float standPulse = (AnimTimer > 0f && ActiveAnim is "m1" or "m2" or "r")
+                        ? MathF.Sin((1f - AnimTimer / MathF.Max(0.01f, AnimDuration)) * MathF.PI)
+                        : 0f;
+                    standPos = new Vector3(
+                        baseX + MathF.Sin(t * 3.5f) * 0.10f - standPulse * 0.45f,
+                        baseY + MathF.Cos(t * 2.8f) * 0.06f,
+                        -0.58f + standPulse * 1.35f);
+                    standRot = new Vector3(
+                        standPulse * 18f,
+                        standPulse > 0.01f ? MathF.Sin(t * 38f) * 22f : MathF.Sin(t * 2.5f) * 6f,
+                        0f);
+                }
+
+                float standBlend = MathF.Min(1f, dt * 14f);
+                ShieldAura.Position = Lerp(ShieldAura.Position, standPos, standBlend);
+                ShieldAura.Rotation = LerpEulerDeg(ShieldAura.Rotation, standRot, standBlend);
+            }
+            else if (charKey == "sanabi" && ShieldAura != null && ShieldAura.Enabled)
+            {
+                Vector3 mariPos;
+                Vector3 mariRot;
+                if (!string.IsNullOrEmpty(ActiveEmote))
+                {
+                    float et = EmoteTime;
+                    switch (ActiveEmote)
+                    {
+                        case "chair":
+                        case "plastic_chair":
+                        case "vergil_chair":
+                            // Дрон Мари уютно устраивается над левым подлокотником стула Генерала
+                            mariPos = new Vector3(-0.44f, 0.24f + MathF.Sin(t * 3.0f) * 0.035f, 0.22f);
+                            mariRot = new Vector3(-6f, 22f + MathF.Sin(t * 1.5f) * 10f, MathF.Sin(t * 2.5f) * 6f);
+                            break;
+                        case "sun":
+                        case "praise_the_sun":
+                        case "praise_sun":
+                            // Мари взмывает прямо над головой Генерала как сияющая путеводная звезда!
+                            mariPos = new Vector3(0f, 1.10f + MathF.Sin(et * 4.0f) * 0.06f, 0.08f);
+                            mariRot = new Vector3(-12f, et * 180f, 0f);
+                            break;
+                        case "caramelldansen":
+                        case "caramell":
+                            // Мари восторженно прыгает и качает неоновыми ушками-антеннами под евробит!
+                            float mSway = MathF.Sin(et * 11.4f);
+                            float mHop = MathF.Abs(MathF.Cos(et * 11.4f));
+                            mariPos = new Vector3(-0.56f + mSway * 0.18f, 0.64f + mHop * 0.18f, 0.26f);
+                            mariRot = new Vector3(-8f + mHop * 10f, 18f - mSway * 20f, -mSway * 26f);
+                            break;
+                        case "rps_win":
+                            // Победные круги радости вокруг Генерала!
+                            mariPos = new Vector3(MathF.Cos(et * 7.5f) * 0.68f, 0.84f + MathF.Abs(MathF.Sin(et * 12f)) * 0.14f, MathF.Sin(et * 7.5f) * 0.68f);
+                            mariRot = new Vector3(-10f, et * 360f, 12f);
+                            break;
+                        case "rps_lose":
+                            // Грустно поникший дрон Мари
+                            mariPos = new Vector3(-0.54f, 0.20f, 0.24f);
+                            mariRot = new Vector3(32f, MathF.Sin(et * 10f) * 18f, 0f);
+                            break;
+                        default:
+                            // Весёлый танец Мари «восьмёркой» рядом с плечом Генерала
+                            float dBeat = MathF.Sin(et * 8.2f);
+                            float dHop = MathF.Abs(MathF.Cos(et * 8.2f));
+                            mariPos = new Vector3(-0.62f + dBeat * 0.22f, 0.58f + dHop * 0.16f, 0.22f + MathF.Cos(et * 4.1f) * 0.14f);
+                            mariRot = new Vector3(MathF.Sin(et * 4.1f) * 10f, 16f + dBeat * 28f, -dBeat * 20f);
+                            break;
+                    }
+                }
+                else
+                {
+                    float hackPulse = (AnimTimer > 0f && ActiveAnim == "r") ? 0.45f : 0f;
+                    mariPos = new Vector3(
+                        -0.68f + MathF.Sin(t * 3.2f) * 0.12f,
+                        0.56f + MathF.Cos(t * 4.4f) * 0.09f + hackPulse,
+                        0.10f + MathF.Sin(t * 2.6f) * 0.08f);
+                    mariRot = new Vector3(0f, MathF.Sin(t * 2.2f) * 18f, MathF.Cos(t * 3.5f) * 8f);
+                }
+
+                float mariBlend = MathF.Min(1f, dt * 14f);
+                ShieldAura.Position = Lerp(ShieldAura.Position, mariPos, mariBlend);
+                ShieldAura.Rotation = LerpEulerDeg(ShieldAura.Rotation, mariRot, mariBlend);
+            }
+
+            // Плавная интерполяция позиций и кратчайших дуг углов Эйлера (без обратного проворота после 360°)
+            float blend = MathF.Min(1f, dt * (AnimTimer > 0f ? 20f : (!string.IsNullOrEmpty(ActiveEmote) ? 15f : 12f)));
             Torso.Position = Lerp(Torso.Position, targetTorsoPos, blend);
-            Torso.Rotation = Lerp(Torso.Rotation, targetTorsoRot, blend);
-            LeftArm.Rotation = Lerp(LeftArm.Rotation, targetLArmRot, blend);
-            RightArm.Rotation = Lerp(RightArm.Rotation, targetRArmRot, blend);
-            LeftLeg.Rotation = Lerp(LeftLeg.Rotation, targetLLegRot, blend);
-            RightLeg.Rotation = Lerp(RightLeg.Rotation, targetRLegRot, blend);
+            Torso.Rotation = LerpEulerDeg(Torso.Rotation, targetTorsoRot, blend);
+            LeftArm.Position = Lerp(LeftArm.Position, targetLArmPos, blend);
+            RightArm.Position = Lerp(RightArm.Position, targetRArmPos, blend);
+            LeftLeg.Position = Lerp(LeftLeg.Position, targetLLegPos, blend);
+            RightLeg.Position = Lerp(RightLeg.Position, targetRLegPos, blend);
+            LeftArm.Rotation = LerpEulerDeg(LeftArm.Rotation, targetLArmRot, blend);
+            RightArm.Rotation = LerpEulerDeg(RightArm.Rotation, targetRArmRot, blend);
+            LeftLeg.Rotation = LerpEulerDeg(LeftLeg.Rotation, targetLLegRot, blend);
+            RightLeg.Rotation = LerpEulerDeg(RightLeg.Rotation, targetRLegRot, blend);
 
             // Вторичная анимация головы (дыхание, оглядывание по сторонам в покое, стабилизация взгляда и повороты при стрейфах)
             if (Head != null)
             {
                 Vector3 targetHeadRot = BaseHeadRot;
-                float idleLookY = !isMoving ? (MathF.Sin(t * 1.15f) * 9.5f + fOsc * 12f) : 0f;
-                float idleTiltZ = !isMoving ? (MathF.Cos(t * 1.6f) * 3.5f + (charKey is "cheburashka" or "ahri" or "gwen" ? fWave * 11f : fWave * 5f)) : 0f;
-                float idleNodX = !isMoving ? (fWave * (charKey is "dante" or "m4a1" or "buzz" ? 12f : -8f)) : 0f;
-                if (charKey is "v1" or "aigis" && !isMoving)
-                    idleLookY = MathF.Round(MathF.Sin(t * 1.6f) * 2.0f) * 7.5f + fOsc * 14f; // Роботизированные повороты визора
+                if (hasEmoteHead)
+                {
+                    targetHeadRot.X += emoteHeadX;
+                    targetHeadRot.Y += emoteHeadY;
+                    targetHeadRot.Z += emoteHeadZ;
+                }
+                else
+                {
+                    float idleLookY = !isMoving ? (MathF.Sin(t * 1.15f) * 9.5f + fOsc * 12f) : 0f;
+                    float idleTiltZ = !isMoving ? (MathF.Cos(t * 1.6f) * 3.5f + (charKey is "cheburashka" or "ahri" or "gwen" ? fWave * 11f : fWave * 5f)) : 0f;
+                    float idleNodX = !isMoving ? (fWave * (charKey is "dante" or "m4a1" or "buzz" ? 12f : -8f)) : 0f;
+                    if (charKey is "v1" or "aigis" && !isMoving)
+                        idleLookY = MathF.Round(MathF.Sin(t * 1.6f) * 2.0f) * 7.5f + fOsc * 14f; // Роботизированные повороты визора
 
-                targetHeadRot.X += MathF.Sin(t * 2.8f - 0.6f) * 3.2f + idleNodX - Math.Clamp((targetTorsoRot.X - BaseTorsoRot.X) * 0.35f, -14f, 14f);
-                targetHeadRot.Y += -Math.Clamp((targetTorsoRot.Y - BaseTorsoRot.Y) * 0.32f, -20f, 20f) + strafeInput * 8.5f + idleLookY;
-                targetHeadRot.Z += -strafeInput * 5.0f + idleTiltZ;
-                Head.Rotation = Lerp(Head.Rotation, targetHeadRot, blend);
+                    targetHeadRot.X += MathF.Sin(t * 2.8f - 0.6f) * 3.2f + idleNodX - Math.Clamp((targetTorsoRot.X - BaseTorsoRot.X) * 0.35f, -14f, 14f);
+                    targetHeadRot.Y += -Math.Clamp((targetTorsoRot.Y - BaseTorsoRot.Y) * 0.32f, -20f, 20f) + strafeInput * 8.5f + idleLookY;
+                    targetHeadRot.Z += -strafeInput * 5.0f + idleTiltZ;
+                }
+                Head.Rotation = LerpEulerDeg(Head.Rotation, targetHeadRot, blend);
             }
 
-            // Вторичная волновая анимация хвостов, косичек, плащей и больших ушей (Ари, Сларк, Гвен, Чебурашка, Сол)
+            // Вторичная волновая анимация хвостов, косичек, плащей и больших ушей (Ари, Сларк, Гвен, Чебурашка, Сол, Генерал SANABI)
             if (Tails.Count > 0)
             {
-                float skillFlare = AnimTimer > 0f ? MathF.Sin((1f - AnimTimer / MathF.Max(0.01f, AnimDuration)) * MathF.PI) : (fWave * 0.75f);
-                float waveSpd = (isMoving ? 6.2f : 3.2f) + skillFlare * 5.0f;
-                float waveAmp = (isMoving ? 13.5f : 8.5f) + skillFlare * 9.5f;
+                bool calmEmote = ActiveEmote is "chair" or "plastic_chair" or "vergil_chair";
+                bool fastEurobeat = ActiveEmote is "caramelldansen" or "caramell";
+                float skillFlare = AnimTimer > 0f
+                    ? MathF.Sin((1f - AnimTimer / MathF.Max(0.01f, AnimDuration)) * MathF.PI)
+                    : (!string.IsNullOrEmpty(ActiveEmote) ? (calmEmote ? 0.10f : 0.55f) : fWave * 0.75f);
+                float waveSpd = fastEurobeat
+                    ? 11.4f
+                    : (calmEmote ? 2.6f : (isMoving || !string.IsNullOrEmpty(ActiveEmote) ? 6.4f : 3.2f) + skillFlare * 5.0f);
+                float waveAmp = fastEurobeat
+                    ? 18.0f
+                    : (calmEmote ? 6.0f : (isMoving || !string.IsNullOrEmpty(ActiveEmote) ? 13.5f : 8.5f) + skillFlare * 9.5f);
                 for (int i = 0; i < Tails.Count; i++)
                 {
                     var tail = Tails[i];
@@ -843,9 +1834,380 @@ namespace RiskOfCSharp2.Models
                         bRot.Y + MathF.Cos(phase * 0.85f) * (waveAmp * 1.15f) - strafeInput * 10f,
                         bRot.Z + MathF.Sin(phase * 0.65f + 0.8f) * (waveAmp * 0.55f)
                     );
-                    tail.Rotation = Lerp(tail.Rotation, tRot, MathF.Min(1f, dt * 14f));
+                    tail.Rotation = LerpEulerDeg(tail.Rotation, tRot, MathF.Min(1f, dt * 14f));
                 }
             }
+        }
+
+        // Специализированная хореография звездолёта Ядра «Гамма» (Mindustry): полёт, стрельба и все эмоции Колеса [L]
+        private void UpdateMindustryAnimations(float t, float dt, bool isMoving, float strafeInput, float forwardInput)
+        {
+            Vector3 targetShipPos = BaseTorsoPos;
+            Vector3 targetShipRot = BaseTorsoRot;
+            Vector3 targetLArmPos = BaseLeftArmPos;
+            Vector3 targetRArmPos = BaseRightArmPos;
+            Vector3 targetLArmRot = BaseLeftArmRot;
+            Vector3 targetRArmRot = BaseRightArmRot;
+            Vector3 localLLegOffset = Vector3.Zero;
+            Vector3 localRLegOffset = Vector3.Zero;
+            Vector3 localLLegRot = Vector3.Zero;
+            Vector3 localRLegRot = Vector3.Zero;
+
+            if (string.IsNullOrEmpty(ActiveEmote))
+            {
+                float hoverBob = MathF.Sin(t * 3.8f) * 0.08f;
+                targetShipPos = new Vector3(BaseTorsoPos.X, BaseTorsoPos.Y + hoverBob, BaseTorsoPos.Z);
+                targetShipRot = new Vector3(forwardInput * 12f, BaseTorsoRot.Y, -strafeInput * 16f);
+
+                float enginePulse = isMoving ? MathF.Sin(t * 24f) * 8f : MathF.Sin(t * 6f) * 3f;
+                localLLegRot = new Vector3(enginePulse, 0f, 0f);
+                localRLegRot = new Vector3(-enginePulse, 0f, 0f);
+
+                if (AnimTimer > 0f && !string.IsNullOrEmpty(ActiveAnim))
+                {
+                    float p = Math.Clamp(1f - AnimTimer / MathF.Max(0.01f, AnimDuration), 0f, 1f);
+                    float pulse = MathF.Sin(p * MathF.PI);
+                    if (ActiveAnim == "m1")
+                    {
+                        float kick = pulse * -0.15f;
+                        if (AnimStep % 2 == 0) targetLArmPos.Z += kick;
+                        else targetRArmPos.Z += kick;
+                    }
+                    else if (ActiveAnim == "m2")
+                    {
+                        targetLArmPos.Z -= 0.20f * pulse;
+                        targetRArmPos.Z -= 0.20f * pulse;
+                        targetShipRot.X -= 8f * pulse;
+                    }
+                    else if (ActiveAnim == "shift")
+                    {
+                        targetShipRot.Z += p * 360f;
+                        targetShipRot.X += 14f * pulse;
+                    }
+                    else if (ActiveAnim == "r")
+                    {
+                        targetShipRot.X -= 16f * pulse;
+                        targetLArmRot.Y = -18f * pulse;
+                        targetRArmRot.Y = 18f * pulse;
+                    }
+                }
+            }
+            else
+            {
+                float et = EmoteTime;
+                switch (ActiveEmote)
+                {
+                    case "chair":
+                    case "plastic_chair":
+                    case "vergil_chair":
+                    {
+                        // Кораблик «Гамма» снижается и гордо восседает на белом пластиковом стуле Вергилия, сложив пушки!
+                        float purr = MathF.Sin(t * 4.2f);
+                        targetShipPos = new Vector3(0f, 0.68f + MathF.Sin(t * 2.2f) * 0.016f, -0.08f);
+                        targetShipRot = new Vector3(-10f, MathF.Sin(t * 0.75f) * 5f, MathF.Sin(t * 1.5f) * 1.5f);
+                        targetLArmPos = new Vector3(-0.54f, 0.02f, 0.28f);
+                        targetRArmPos = new Vector3(0.54f, 0.02f, 0.28f);
+                        targetLArmRot = new Vector3(8f, 18f, 6f);
+                        targetRArmRot = new Vector3(8f, -18f, -6f);
+                        localLLegOffset = new Vector3(0.05f, 0.38f, 0.06f);
+                        localRLegOffset = new Vector3(-0.05f, 0.38f, 0.06f);
+                        localLLegRot = new Vector3(purr * 2.5f, 0f, 0f);
+                        localRLegRot = new Vector3(-purr * 2.5f, 0f, 0f);
+                        break;
+                    }
+                    case "caramelldansen":
+                    case "caramell":
+                    {
+                        // Меха-ушки: передние лазерные пушки поднимаются вверх над рубкой и синхронно машут влево-вправо под евробит!
+                        float beat = et * 11.4f;
+                        float sway = MathF.Sin(beat);
+                        float bounce = MathF.Abs(MathF.Cos(beat));
+                        targetShipPos = BaseTorsoPos + new Vector3(-sway * 0.22f, -0.06f + bounce * 0.16f, 0f);
+                        targetShipRot = new Vector3(-6f + bounce * 8f, sway * 16f, -sway * 22f);
+                        targetLArmPos = new Vector3(-0.38f + sway * 0.08f, 0.28f, 0.16f);
+                        targetRArmPos = new Vector3(0.38f + sway * 0.08f, 0.28f, 0.16f);
+                        targetLArmRot = new Vector3(-64f + bounce * 14f, 12f + sway * 38f, 0f);
+                        targetRArmRot = new Vector3(-64f + bounce * 14f, -12f + sway * 38f, 0f);
+                        localLLegRot = new Vector3(12f + MathF.Max(0f, sway) * 26f, -sway * 12f, 0f);
+                        localRLegRot = new Vector3(12f + MathF.Max(0f, -sway) * 26f, -sway * 12f, 0f);
+                        break;
+                    }
+                    case "fortnite":
+                    case "default_dance":
+                    {
+                        // 3-фазное аэробатическое шоу Fortnite: качание пушками -> бочка 360° с подскоком -> дерзкий прицел!
+                        float cyc = et % 3.2f;
+                        float step = MathF.Sin(et * 10.5f);
+                        float hop = MathF.Abs(MathF.Cos(et * 10.5f));
+                        if (cyc < 1.3f)
+                        {
+                            targetShipPos = BaseTorsoPos + new Vector3(step * 0.16f, hop * 0.14f, 0f);
+                            targetShipRot = new Vector3(5f, step * 20f, -step * 22f);
+                            targetLArmPos = BaseLeftArmPos + new Vector3(0f, 0f, MathF.Max(0f, step) * 0.18f);
+                            targetRArmPos = BaseRightArmPos + new Vector3(0f, 0f, MathF.Max(0f, -step) * 0.18f);
+                            targetLArmRot = new Vector3(-18f + step * 26f, 16f - step * 20f, 0f);
+                            targetRArmRot = new Vector3(-18f - step * 26f, -16f - step * 20f, 0f);
+                            localLLegRot = new Vector3(step * 22f, 0f, 0f);
+                            localRLegRot = new Vector3(-step * 22f, 0f, 0f);
+                        }
+                        else if (cyc < 2.2f)
+                        {
+                            // Чёткая авиационная бочка 360° (Barrel Roll) со сведением орудий!
+                            float sp = (cyc - 1.3f) / 0.9f;
+                            float clap = MathF.Sin(sp * MathF.PI);
+                            targetShipPos = BaseTorsoPos + new Vector3(0f, clap * 0.34f, 0f);
+                            targetShipRot = new Vector3(-12f * clap, 0f, sp * 360f);
+                            targetLArmRot = new Vector3(-48f * clap, 30f * clap, 0f);
+                            targetRArmRot = new Vector3(-48f * clap, -30f * clap, 0f);
+                        }
+                        else
+                        {
+                            // Финальная фаза: гордый разворот и указание правой лазерной пушкой вперёд в такт биту!
+                            float pt = (cyc - 2.2f) / 1.0f;
+                            float groove = MathF.Sin(pt * MathF.PI * 2f);
+                            targetShipPos = BaseTorsoPos + new Vector3(0f, MathF.Abs(groove) * 0.10f, 0f);
+                            targetShipRot = new Vector3(-8f, -16f + groove * 8f, 14f + groove * 6f);
+                            targetLArmPos = new Vector3(-0.52f, 0.04f, 0.34f);
+                            targetLArmRot = new Vector3(6f, 38f, 0f);
+                            targetRArmPos = BaseRightArmPos + new Vector3(-0.08f, 0.04f, 0.22f + MathF.Abs(groove) * 0.08f);
+                            targetRArmRot = new Vector3(-6f + groove * 8f, -6f, 0f);
+                        }
+                        break;
+                    }
+                    case "california":
+                    case "california_girls":
+                    case "california_gurls":
+                    {
+                        // Плавный полёт «восьмёркой» с покачиванием крыльев и ритмичным вилянием сопел!
+                        float beat = et * 6.8f;
+                        float sway = MathF.Sin(beat);
+                        float fig8 = MathF.Sin(beat * 2f);
+                        bool handsUpPhase = (et % 3.6f) < 1.8f;
+                        targetShipPos = BaseTorsoPos + new Vector3(sway * 0.28f, fig8 * 0.10f, MathF.Cos(beat) * 0.08f);
+                        targetShipRot = new Vector3(fig8 * 7f, sway * 24f, -sway * 20f);
+                        if (handsUpPhase)
+                        {
+                            targetLArmPos = new Vector3(-0.52f, 0.20f, 0.22f);
+                            targetRArmPos = new Vector3(0.52f, 0.20f, 0.22f);
+                            targetLArmRot = new Vector3(-48f, 22f + sway * 16f, 0f);
+                            targetRArmRot = new Vector3(-48f, -22f + sway * 16f, 0f);
+                        }
+                        else
+                        {
+                            targetLArmRot = new Vector3(-8f + sway * 18f, 14f + sway * 16f, 0f);
+                            targetRArmRot = new Vector3(-8f - sway * 18f, -14f + sway * 16f, 0f);
+                        }
+                        localLLegRot = new Vector3(sway * 18f, -sway * 26f, 0f);
+                        localRLegRot = new Vector3(-sway * 18f, -sway * 26f, 0f);
+                        break;
+                    }
+                    case "sun":
+                    case "praise_the_sun":
+                    case "praise_sun":
+                    {
+                        // Вертикальная свеча к Солнцу \[T]/: нос задран на -70°, пушки широко распахнуты, радар вращается на максимуме!
+                        targetShipPos = BaseTorsoPos + new Vector3(0f, 0.22f + MathF.Sin(et * 2.4f) * 0.05f, 0f);
+                        targetShipRot = new Vector3(-70f, 0f, 0f);
+                        targetLArmPos = BaseLeftArmPos + new Vector3(-0.14f, 0.08f, 0.08f);
+                        targetRArmPos = BaseRightArmPos + new Vector3(0.14f, 0.08f, 0.08f);
+                        targetLArmRot = new Vector3(-12f, -34f, 20f);
+                        targetRArmRot = new Vector3(-12f, 34f, -20f);
+                        float sunPulse = MathF.Sin(et * 14f) * 5f;
+                        localLLegRot = new Vector3(sunPulse, 0f, 0f);
+                        localRLegRot = new Vector3(-sunPulse, 0f, 0f);
+                        break;
+                    }
+                    case "kazotsky":
+                    case "squat_dance":
+                    case "prisyadka":
+                    {
+                        // Бреющее зависание у самой земли и поочерёдные залихватские «пинки» вперед соплами двигателей!
+                        float kickSin = MathF.Sin(et * 9.6f);
+                        float hop = MathF.Abs(MathF.Cos(et * 9.6f));
+                        float lKick = MathF.Max(0f, kickSin);
+                        float rKick = MathF.Max(0f, -kickSin);
+                        bool heyFlourish = (et % 4.0f) >= 3.0f;
+
+                        targetShipPos = new Vector3(kickSin * 0.09f, 0.74f + hop * 0.14f, -0.05f);
+                        targetShipRot = new Vector3(-16f, kickSin * 14f, -kickSin * 12f);
+                        if (heyFlourish)
+                        {
+                            targetLArmRot = new Vector3(-36f, -34f, 16f);
+                            targetRArmRot = new Vector3(-36f, 34f, -16f);
+                        }
+                        else
+                        {
+                            targetLArmPos = new Vector3(-0.46f, 0.06f, 0.44f);
+                            targetRArmPos = new Vector3(0.46f, 0.06f, 0.44f);
+                            targetLArmRot = new Vector3(0f, 44f, 0f);
+                            targetRArmRot = new Vector3(0f, -44f, 0f);
+                        }
+                        localLLegOffset = new Vector3(0f, 0.18f + lKick * 0.10f, 0.12f + lKick * 0.72f);
+                        localRLegOffset = new Vector3(0f, 0.18f + rKick * 0.10f, 0.12f + rKick * 0.72f);
+                        localLLegRot = new Vector3(-28f * lKick, 0f, 0f);
+                        localRLegRot = new Vector3(-28f * rKick, 0f, 0f);
+                        break;
+                    }
+                    case "gangnam":
+                    case "gangnam_style":
+                    {
+                        // Воздушный галоп и раскрутка правой пушки как «лассо»!
+                        float gallop = MathF.Abs(MathF.Sin(et * 8.6f));
+                        float sideStep = MathF.Sin(et * 4.3f);
+                        bool lassoPhase = (et % 3.2f) >= 1.6f;
+                        targetShipPos = BaseTorsoPos + new Vector3(sideStep * 0.16f, -0.08f + gallop * 0.24f, 0f);
+                        targetShipRot = new Vector3(10f - gallop * 22f, sideStep * 18f, -sideStep * 12f);
+                        if (!lassoPhase)
+                        {
+                            targetLArmPos = new Vector3(-0.46f, 0.04f, 0.46f);
+                            targetRArmPos = new Vector3(0.46f, 0.04f, 0.46f);
+                            targetLArmRot = new Vector3(-12f - gallop * 22f, 34f, 0f);
+                            targetRArmRot = new Vector3(-12f - gallop * 22f, -34f, 0f);
+                        }
+                        else
+                        {
+                            targetLArmPos = new Vector3(-0.50f, 0.04f, 0.40f);
+                            targetLArmRot = new Vector3(0f, 28f, 0f);
+                            targetRArmPos = new Vector3(0.44f, 0.28f, 0.24f);
+                            targetRArmRot = new Vector3(-62f + MathF.Cos(et * 18f) * 28f, MathF.Sin(et * 18f) * 44f, 0f);
+                        }
+                        localLLegRot = new Vector3(-18f * gallop, 0f, 0f);
+                        localRLegRot = new Vector3(-18f * gallop, 0f, 0f);
+                        break;
+                    }
+                    case "jojo":
+                    case "jojo_pose":
+                    {
+                        // Драматичный угрожающий вираж 42° с вибрацией реактора Ядра!
+                        float rumble = MathF.Sin(et * 22f) * 1.4f;
+                        targetShipPos = BaseTorsoPos + new Vector3(-0.08f, 0.06f, 0f);
+                        targetShipRot = new Vector3(-24f, -28f + rumble, 42f);
+                        targetLArmPos = new Vector3(-0.44f, 0.20f, 0.42f);
+                        targetLArmRot = new Vector3(-28f, 38f, 18f);
+                        targetRArmPos = BaseRightArmPos + new Vector3(0.10f, -0.06f, 0f);
+                        targetRArmRot = new Vector3(16f, -32f, -24f);
+                        localLLegRot = new Vector3(-16f, 0f, 0f);
+                        localRLegRot = new Vector3(14f, 0f, 0f);
+                        break;
+                    }
+                    case "distraction":
+                    case "stickmin":
+                    {
+                        // Танец Отвлечения: «хлопок» сведением пушек перед носом -> резкий крен влево с роспуском крыльев -> хлопок -> крен вправо!
+                        float cyc = et % 1.6f;
+                        if (cyc < 0.40f || (cyc >= 0.80f && cyc < 1.20f))
+                        {
+                            float p = (cyc % 0.40f) / 0.40f;
+                            float clap = MathF.Sin(p * MathF.PI);
+                            targetShipPos = BaseTorsoPos + new Vector3(0f, clap * 0.14f, 0f);
+                            targetShipRot = new Vector3(8f * clap, 0f, 0f);
+                            targetLArmPos = new Vector3(-0.70f + 0.32f * clap, 0.08f, 0.44f);
+                            targetRArmPos = new Vector3(0.70f - 0.32f * clap, 0.08f, 0.44f);
+                            targetLArmRot = new Vector3(0f, 38f * clap, 0f);
+                            targetRArmRot = new Vector3(0f, -38f * clap, 0f);
+                        }
+                        else
+                        {
+                            bool leanLeft = cyc < 0.80f;
+                            float dir = leanLeft ? -1f : 1f;
+                            float p = (leanLeft ? (cyc - 0.40f) : (cyc - 1.20f)) / 0.40f;
+                            float pose = MathF.Pow(MathF.Max(0f, MathF.Sin(p * MathF.PI)), 0.65f);
+
+                            targetShipPos = BaseTorsoPos + new Vector3(dir * 0.28f * pose, -0.10f * pose, 0f);
+                            targetShipRot = new Vector3(6f * pose, dir * 22f * pose, -dir * 28f * pose);
+                            targetLArmRot = new Vector3((leanLeft ? -34f : 14f) * pose, -38f * pose, 0f);
+                            targetRArmRot = new Vector3((leanLeft ? 14f : -34f) * pose, 38f * pose, 0f);
+                            localLLegRot = new Vector3(-dir * 20f * pose, 0f, 0f);
+                            localRLegRot = new Vector3(dir * 20f * pose, 0f, 0f);
+                        }
+                        break;
+                    }
+                    case "rps_wait":
+                    {
+                        float tap = MathF.Abs(MathF.Sin(et * 5.8f));
+                        targetShipPos = BaseTorsoPos + new Vector3(0f, tap * 0.06f, 0f);
+                        targetShipRot = new Vector3(4f, MathF.Sin(et * 2.2f) * 16f, MathF.Sin(et * 2.2f) * 6f);
+                        targetLArmPos = new Vector3(-0.46f, 0.04f, 0.42f);
+                        targetLArmRot = new Vector3(0f, 24f, 0f);
+                        targetRArmPos = new Vector3(0.56f - tap * 0.16f, 0.04f + tap * 0.10f, 0.42f);
+                        targetRArmRot = new Vector3(-18f * tap, -28f, 0f);
+                        break;
+                    }
+                    case "rps":
+                    case "rps_count":
+                    {
+                        float pump = MathF.Abs(MathF.Sin(et * MathF.PI * 2.6f));
+                        targetShipPos = BaseTorsoPos + new Vector3(0f, (1f - pump) * 0.10f, 0f);
+                        targetShipRot = new Vector3(16f * pump - 6f, 0f, 0f);
+                        targetLArmRot = new Vector3(0f, 22f, 0f);
+                        targetRArmRot = new Vector3(-38f * pump, -18f, 0f);
+                        break;
+                    }
+                    case "rps_win":
+                    {
+                        // Победные виражи и вертикальные прыжки на форсаже!
+                        float jmp = MathF.Abs(MathF.Sin(et * 8.5f));
+                        targetShipPos = BaseTorsoPos + new Vector3(0f, jmp * 0.32f, 0f);
+                        targetShipRot = new Vector3(-18f, et * 360f, MathF.Sin(et * 8.5f) * 18f);
+                        targetLArmRot = new Vector3(-52f + jmp * 14f, -18f, 0f);
+                        targetRArmRot = new Vector3(-52f + jmp * 14f, 18f, 0f);
+                        break;
+                    }
+                    case "rps_lose":
+                    {
+                        // Аварийное проседание тяги — кораблик грустно опускает нос и пушки к земле
+                        targetShipPos = new Vector3(0f, 0.72f, 0f);
+                        targetShipRot = new Vector3(32f, MathF.Sin(et * 10f) * 14f, 0f);
+                        targetLArmRot = new Vector3(26f, 16f, 0f);
+                        targetRArmRot = new Vector3(26f, -16f, 0f);
+                        localLLegOffset = new Vector3(0f, 0.26f, 0f);
+                        localRLegOffset = new Vector3(0f, 0.26f, 0f);
+                        break;
+                    }
+                    case "rps_draw":
+                    {
+                        // Озадаченное покачивание с крыла на крыло
+                        float shrug = MathF.Sin(et * 5f);
+                        targetShipRot = new Vector3(-4f, shrug * 10f, shrug * 18f);
+                        targetLArmRot = new Vector3(-10f, -38f, 0f);
+                        targetRArmRot = new Vector3(-10f, 38f, 0f);
+                        break;
+                    }
+                    default:
+                    {
+                        float waggle = MathF.Sin(et * 8.0f);
+                        targetShipPos = BaseTorsoPos + new Vector3(waggle * 0.18f, MathF.Abs(MathF.Cos(et * 8.0f)) * 0.12f, 0f);
+                        targetShipRot = new Vector3(0f, waggle * 16f, -waggle * 20f);
+                        targetLArmRot = new Vector3(-24f + waggle * 18f, 0f, 0f);
+                        targetRArmRot = new Vector3(-24f - waggle * 18f, 0f, 0f);
+                        break;
+                    }
+                }
+            }
+
+            float shipBlend = MathF.Min(1f, dt * (!string.IsNullOrEmpty(ActiveEmote) ? 14f : 9f));
+            float armBlend = MathF.Min(1f, dt * (!string.IsNullOrEmpty(ActiveEmote) ? 16f : 12f));
+            Torso.Position = Lerp(Torso.Position, targetShipPos, shipBlend);
+            Torso.Rotation = LerpEulerDeg(Torso.Rotation, targetShipRot, shipBlend);
+
+            LeftArm.Position = Lerp(LeftArm.Position, targetLArmPos, armBlend);
+            RightArm.Position = Lerp(RightArm.Position, targetRArmPos, armBlend);
+            LeftArm.Rotation = LerpEulerDeg(LeftArm.Rotation, targetLArmRot, armBlend);
+            RightArm.Rotation = LerpEulerDeg(RightArm.Rotation, targetRArmRot, armBlend);
+
+            // Гондолы задних двигателей привязаны к root, поэтому трансформируем их синхронно с корпусом корабля
+            const float deg2rad = MathF.PI / 180f;
+            Matrix4x4 shipRotMat = Matrix4x4.CreateFromYawPitchRoll(
+                Torso.Rotation.Y * deg2rad,
+                Torso.Rotation.X * deg2rad,
+                Torso.Rotation.Z * deg2rad);
+            Vector3 targetLLegWorld = Torso.Position + Vector3.Transform((BaseLeftLegPos - BaseTorsoPos) + localLLegOffset, shipRotMat);
+            Vector3 targetRLegWorld = Torso.Position + Vector3.Transform((BaseRightLegPos - BaseTorsoPos) + localRLegOffset, shipRotMat);
+            float legBlend = MathF.Min(1f, dt * (!string.IsNullOrEmpty(ActiveEmote) ? 18f : 12f));
+            LeftLeg.Position = Lerp(LeftLeg.Position, targetLLegWorld, legBlend);
+            RightLeg.Position = Lerp(RightLeg.Position, targetRLegWorld, legBlend);
+            LeftLeg.Rotation = LerpEulerDeg(LeftLeg.Rotation, Torso.Rotation + localLLegRot, legBlend);
+            RightLeg.Rotation = LerpEulerDeg(RightLeg.Rotation, Torso.Rotation + localRLegRot, legBlend);
         }
 
         public void SetUltForm(bool active)
@@ -865,8 +2227,21 @@ namespace RiskOfCSharp2.Models
         {
             "commando", "artificer", "huntress", "buzz", "v1", "sol", "gwen",
             "enforcer", "scout", "m4a1", "medic", "aigis", "reimu", "mindustry",
-            "slark", "tidehunter", "freeman", "dante", "cheburashka", "ahri"
+            "slark", "tidehunter", "freeman", "dante", "cheburashka", "ahri",
+            "lappland", "w_arknights", "gold_ship", "pushnoy", "freddy",
+            "steve", "jotaro", "vyper", "haze", "dmc_trio", "sanabi", "jack_o"
         };
+
+        public static List<string> GetVisibleRosterKeys()
+        {
+            var list = new List<string>(OrderedKeys.Length);
+            foreach (var k in OrderedKeys)
+            {
+                if (Data.ProgressData.Instance.IsCharacterVisible(k))
+                    list.Add(k);
+            }
+            return list;
+        }
 
         public static bool IsMobaCharacter(string charKey)
             => charKey is "gwen" or "slark" or "tidehunter" or "ahri";
@@ -1132,12 +2507,193 @@ namespace RiskOfCSharp2.Models
                     ["shift"] = new() { Name = "Призрачный Рывок (3 Заряда)", Cd = 4.5f, Desc = "[Shift] Стремительный рывок к курсору (до 3 зарядов), выпускающий 3 духовных разряда в ближайших врагов!" },
                     ["r"] = new() { Name = "Очарование и Всплеск Души", Cd = 9.0f, Desc = "[R] Посылает воздушный поцелуй (Очарование на 3.5с, +25% урона по цели) и взрыв духовной энергии!" }
                 }
+            },
+            ["lappland"] = new()
+            {
+                Key = "lappland", Name = "ЛАППЛАНД (ARKNIGHTS)", Icon = "LAP", Subtitle = "Белая Волчица Сиракуз [3-й скин: ЛАППЛАНД ДЕКАДЕНЦА]",
+                Hp = 135, Speed = 11.4f, Damage = 22.0f, FireRate = 4.2f, ProjSpeed = 62f, ProjScale = 0.30f, Aoe = 1.8f,
+                BodyColor = Rgb(235, 238, 246), ArmorColor = Rgb(34, 36, 46), VisorColor = Rgb(225, 45, 70),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Парные Клинки Сиракуз", Cd = 0.24f, Desc = "[ЛКМ] Рубящие взмахи парными мечами + дальние серебряные полумесяцы искусств (накладывают Безмолвие)." },
+                    ["m2"] = new() { Name = "Солнечные Часы (Sundial)", Cd = 3.5f, Desc = "[ПКМ] Блок-парирование (+35 щита) и мгновенный двойной контрудар на 260% магического урона!" },
+                    ["shift"] = new() { Name = "Волчий Выпад (Lupine Rush)", Cd = 3.6f, Desc = "[Shift] Стремительный рывок сквозь врагов с широким кроваво-серебряным разрезом." },
+                    ["r"] = new() { Name = "Дух Волчицы (Wolf Spirit)", Cd = 9.0f, Desc = "[R] Призывает серебряные призрачные мечи вокруг Лаппланд и выпускает шквал диагональных волн!" }
+                }
+            },
+            ["w_arknights"] = new()
+            {
+                Key = "w_arknights", Name = "W / ВИШАДЕЛЬ (ARKNIGHTS)", Icon = "W", Subtitle = "Подрывница Каздела [3-й скин: ВИШАДЕЛЬ]",
+                Hp = 120, Speed = 10.6f, Damage = 28.0f, FireRate = 2.6f, ProjSpeed = 54f, ProjScale = 0.38f, Aoe = 3.8f,
+                BodyColor = Rgb(42, 40, 48), ArmorColor = Rgb(225, 42, 58), VisorColor = Rgb(255, 195, 55),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Гранатомёт Сарказа", Cd = 0.38f, Desc = "[ЛКМ] Выпускает разрывные осколочные гранаты с большим радиусом поражения." },
+                    ["m2"] = new() { Name = "Валет Червей (Мина-ловушка)", Cd = 3.8f, Desc = "[ПКМ] Бросает клейкую мину C4, которая детонирует при приближении врагов и оглушает их!" },
+                    ["shift"] = new() { Name = "Взрывной Прыжок", Cd = 4.0f, Desc = "[Shift] Отпрыгивает на взрывной волне (+30 щита), оставляя под ногами мину." },
+                    ["r"] = new() { Name = "D12 (Дистанционный Детонатор)", Cd = 9.5f, Desc = "[R] Нажимает на детонатор, прикрепляя бомбы C4 ко всем врагам вокруг с цепным взрывом и оглушением!" }
+                }
+            },
+            ["gold_ship"] = new()
+            {
+                Key = "gold_ship", Name = "ГОЛД ШИП (UMAMUSUME)", Icon = "GLD", Subtitle = "Непотопляемый Золотой Корабль [УРОН ОТ СКОРОСТИ БЕГА!]",
+                Hp = 155, Speed = 13.0f, Damage = 20.0f, FireRate = 4.4f, ProjSpeed = 60f, ProjScale = 0.32f, Aoe = 2.2f,
+                BodyColor = Rgb(225, 42, 55), ArmorColor = Rgb(242, 240, 248), VisorColor = Rgb(255, 215, 55),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Удар на Скаку (Gallop Strike)", Cd = 0.22f, Desc = "[ЛКМ] Удары на ходу и плечевой таран: чем выше текущая скорость бега и разгон, тем выше урон и радиус волны!" },
+                    ["m2"] = new() { Name = "Фирменный Дропкик Голд Шип!", Cd = 3.4f, Desc = "[ПКМ] Легендарный прыжок двумя ногами вперёд с разбега! Множитель урона и отбрасывания растёт от скорости!" },
+                    ["shift"] = new() { Name = "Финишный Рывок с Конца (Last Spurt)", Cd = 4.2f, Desc = "[Shift] Включает турбо-галоп (+65% к скорости бега на 4.5 сек., сбивает врагов с ног при беге)!" },
+                    ["r"] = new() { Name = "Бросок Золотого Якоря (Warning Shot!)", Cd = 9.0f, Desc = "[R] Раскручивает и обрушивает гигантский золотой корабельный якорь (урон масштабируется от скорости разгона)!" }
+                }
+            },
+            ["pushnoy"] = new()
+            {
+                Key = "pushnoy", Name = "АЛЕКСАНДР ПУШНОЙ", Icon = "GAL", Subtitle = "Ведущий «Галилео» и Рок-Музыкант [ЭКСПЕРИМЕНТЫ + МЕТАЛ!]",
+                Hp = 135, Speed = 10.8f, Damage = 23.0f, FireRate = 3.8f, ProjSpeed = 58f, ProjScale = 0.34f, Aoe = 2.6f,
+                BodyColor = Rgb(245, 145, 32), ArmorColor = Rgb(42, 46, 58), VisorColor = Rgb(95, 235, 255),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Тяжёлый Рифф «Галилео!»", Cd = 0.26f, Desc = "[ЛКМ] Мощные метал-аккорды на электрогитаре Гибсон, пускающие пробивные звуковые волны и молнии!" },
+                    ["m2"] = new() { Name = "А сейчас — ЭКСПЕРИМЕНТ!", Cd = 3.4f, Desc = "[ПКМ] Бросает колбу с научным опытом (чередует: Жидкий Азот -> Термитная смесь -> Взрыв с ментосом)!" },
+                    ["shift"] = new() { Name = "Кресло на Огнетушителе!", Cd = 3.8f, Desc = "[Shift] Реактивный рывок верхом на офисном кресле с огнетушителем, оставляющий морозный пенный след!" },
+                    ["r"] = new() { Name = "Катушка Теслы + МЕГА-РОК СОЛО", Cd = 9.5f, Desc = "[R] Ставит генератор молний Теслы и исполняет убойное рок-соло, поражая всех врагов вокруг током!" }
+                }
+            },
+            ["freddy"] = new()
+            {
+                Key = "freddy", Name = "МИШКА ФРЕДДИ (FNAF)", Icon = "FNF", Subtitle = "Главный Аниматроник Fazbear's Pizza [ТОРЕАДОР И СКРИМЕР]",
+                Hp = 170, Speed = 10.0f, Damage = 25.0f, FireRate = 3.2f, ProjSpeed = 56f, ProjScale = 0.34f, Aoe = 2.2f,
+                BodyColor = Rgb(145, 88, 42), ArmorColor = Rgb(32, 32, 38), VisorColor = Rgb(85, 225, 255),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Бросок Микрофона (Mic Toss)", Cd = 0.30f, Desc = "[ЛКМ] Бросает тяжёлый концертный микрофон (возвращается бумерангом) и бьёт лапой вблизи." },
+                    ["m2"] = new() { Name = "СКРИМЕР (Укус 87-го!)", Cd = 3.8f, Desc = "[ПКМ] Резкий рывок к жертве с оглушающим скримером Фредди, наносящий 320% урона и восстанавливающий HP!" },
+                    ["shift"] = new() { Name = "0% Энергии — Марш Тореадора", Cd = 5.0f, Desc = "[Shift] Выключает свет на 3.5 сек.: Фредди становится неуязвимым, играет шкатулку Тореадора, а его глаза светятся!" },
+                    ["r"] = new() { Name = "Ночная Смена (Шоу Fazbear Band)", Cd = 10.0f, Desc = "[R] Призывает эндоскелетов-аниматроников на помощь и обрушивает пицца-фейерверк по всей арене!" }
+                }
+            },
+            ["steve"] = new()
+            {
+                Key = "steve", Name = "СТИВ (MINECRAFT)", Icon = "MC", Subtitle = "Шахтёр и Крафтер [ЛОМАЕТ ПОЛ/СТЕНЫ/АЛТАРИ + ВЕРСТАК]",
+                Hp = 150, Speed = 10.6f, Damage = 21.0f, FireRate = 3.8f, ProjSpeed = 60f, ProjScale = 0.30f, Aoe = 1.6f,
+                BodyColor = Rgb(45, 175, 195), ArmorColor = Rgb(62, 75, 165), VisorColor = Rgb(85, 245, 235),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Алмазный Меч и Лук", Cd = 0.26f, Desc = "[ЛКМ] Рубящий удар мечом с отбрасыванием вблизи + выстрел стрелой из лука на дистанции." },
+                    ["m2"] = new() { Name = "Кирка: КОПАТЬ КАРТУ (Пол / Стены / Алтари)", Cd = 0.85f, Desc = "[ПКМ] Ломает кусок пола (создавая реальную 3D-яму!), стены, скалы, деревья и алтари, добывая Дерево, Камень, Железо и Алмазы!" },
+                    ["shift"] = new() { Name = "Жемчуг Края (Ender Pearl)", Cd = 3.8f, Desc = "[Shift] Бросает Эндер-жемчуг для мгновенной телепортации и получает Золотые сердца щита!" },
+                    ["r"] = new() { Name = "Поставить Верстак / ТНТ", Cd = 6.0f, Desc = "[R] Ставит Верстак перед собой (также спавнится у портала после босса!) и бросает динамит ТНТ, пробивающий пол!" }
+                }
+            },
+            ["jotaro"] = new()
+            {
+                Key = "jotaro", Name = "ДЖОТАРО КУДЖО (JOJO)", Icon = "JOJ", Subtitle = "Обладатель Стенда Star Platinum [ORA ORA + ОСТАНОВКА ВРЕМЕНИ!]",
+                Hp = 160, Speed = 10.8f, Damage = 24.0f, FireRate = 5.5f, ProjSpeed = 66f, ProjScale = 0.32f, Aoe = 2.0f,
+                BodyColor = Rgb(34, 38, 56), ArmorColor = Rgb(165, 95, 245), VisorColor = Rgb(255, 215, 65),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Шквал Ударов «ORA ORA ORA!»", Cd = 0.18f, Desc = "[ЛКМ] Star Platinum наносит ураганную серию кулачных ударов перед Джотаро с высокой скоростью!" },
+                    ["m2"] = new() { Name = "Звёздный Палец (Star Finger!)", Cd = 3.4f, Desc = "[ПКМ] Удлиняет пальцы Star Platinum в дальнобойный пробивной луч (320% урона + оглушение по линии)!" },
+                    ["shift"] = new() { Name = "Прыжок Стенда (Stand Leap)", Cd = 3.8f, Desc = "[Shift] Мощный рывок на силе Star Platinum с отражением снарядов и +40 щита." },
+                    ["r"] = new() { Name = "STAR PLATINUM: THE WORLD! (Остановка Времени)", Cd = 11.0f, Desc = "[R] «ZA WARUDO!» — полностью ОСТАНАВЛИВАЕТ ВРЕМЯ для всех врагов и боссов на 4.0 секунды!" }
+                }
+            },
+            ["vyper"] = new()
+            {
+                Key = "vyper", Name = "ВАЙПЕР (DEADLOCK)", Icon = "VYP", Subtitle = "Скользящая Рептилия-Преступница [СКОЛЬЖЕНИЕ И ОКАМЕНЕНИЕ]",
+                Hp = 125, Speed = 12.2f, Damage = 14.5f, FireRate = 7.5f, ProjSpeed = 66f, ProjScale = 0.22f, Aoe = 1.4f,
+                BodyColor = Rgb(65, 185, 85), ArmorColor = Rgb(185, 145, 75), VisorColor = Rgb(165, 255, 75),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Гадючий ПП (Огонь в Скольжении)", Cd = 0.13f, Desc = "[ЛКМ] Ураганный огонь из ПП. Во время движения и скольжения не тратит боезапас и стреляет на 35% быстрее!" },
+                    ["m2"] = new() { Name = "Смертельный Яд (Lethal Venom)", Cd = 3.5f, Desc = "[ПКМ] Отравляющий дротик: наносит взрывной урон токсином тем сильнее, чем меньше HP осталось у цели!" },
+                    ["shift"] = new() { Name = "Бронебойное Скольжение (Slither)", Cd = 3.2f, Desc = "[Shift] Стремительный низкий слайд рептилии (+45 щита, +50% скорости и бонус к скорострельности)!" },
+                    ["r"] = new() { Name = "Окаменяющая Бола (Petrifying Bola)", Cd = 9.5f, Desc = "[R] Бросает проклятую болу, превращающую всех врагов в радиусе взрыва в камень на 3.5 сек.!" }
+                }
+            },
+            ["haze"] = new()
+            {
+                Key = "haze", Name = "ХЕЙЗ (DEADLOCK)", Icon = "HAZ", Subtitle = "Оперативник Снов OSIC [ФИКСАЦИЯ, КИНЖАЛ СНА И ТАНЕЦ ПУЛЬ]",
+                Hp = 115, Speed = 11.4f, Damage = 13.5f, FireRate = 7.2f, ProjSpeed = 68f, ProjScale = 0.20f, Aoe = 1.2f,
+                BodyColor = Rgb(42, 44, 62), ArmorColor = Rgb(215, 145, 55), VisorColor = Rgb(255, 195, 75),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Парные ПП + Фиксация (Fixation)", Cd = 0.14f, Desc = "[ЛКМ] Каждое попадание накладывает стаки Фиксации, увеличивая урон по цели и взрываясь сном на 20 стаках!" },
+                    ["m2"] = new() { Name = "Усыпляющий Кинжал (Sleep Dagger)", Cd = 3.6f, Desc = "[ПКМ] Мгновенный бросок кинжала снов: усыпляет/оглушает цель, накладывает 10 стаков Фиксации и наносит крит!" },
+                    ["shift"] = new() { Name = "Дымовая Шашка (Smoke Bomb)", Cd = 4.2f, Desc = "[Shift] Скрывается в тумане снов: невидимость, неуязвимость, +50% скорости бега и +35 щита!" },
+                    ["r"] = new() { Name = "Танец Пуль (Bullet Dance)", Cd = 9.5f, Desc = "[R] Хейз кружится в вихревом танце, выпуская шквал точных очередей с Фиксацией по всем врагам вокруг!" }
+                }
+            },
+            ["dmc_trio"] = new()
+            {
+                Key = "dmc_trio", Name = "ТРИО DMC (ДАНТЕ / НЕРО / ВЕРГИЛИЙ)", Icon = "DMC", Subtitle = "Охотники на Демонов [1: ДАНТЕ | 2: НЕРО | 3: ВЕРГИЛИЙ]",
+                Hp = 145, Speed = 11.5f, Damage = 23.0f, FireRate = 4.5f, ProjSpeed = 65f, ProjScale = 0.30f, Aoe = 2.0f,
+                BodyColor = Rgb(195, 34, 46), ArmorColor = Rgb(36, 38, 48), VisorColor = Rgb(255, 85, 95),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Мятежник + Эбони и Айвори", Cd = 0.22f, Desc = "[ЛКМ] Комбо демоническим мечом Rebellion вблизи + скорострельная стрельба из парных пистолетов Ebony & Ivory." },
+                    ["m2"] = new() { Name = "Жало (Stinger) + Drive", Cd = 3.2f, Desc = "[ПКМ] Молниеносный пробивной выпад мечом вперёд с демонической ударной волной Drive!" },
+                    ["shift"] = new() { Name = "Стиль Ловкача / Королевский Страж", Cd = 3.4f, Desc = "[Shift] Телепортационный рывок Trickster с блоком Royal Guard (+40 щита и отражение урона)." },
+                    ["r"] = new() { Name = "Истинный Демонический Облик (Sin Devil Trigger)", Cd = 10.0f, Desc = "[R] Пробуждает крылатую форму Sin Devil Trigger, исцеляя Данте и обрушивая адский взрыв Judgment!" }
+                }
+            },
+            ["sanabi"] = new()
+            {
+                Key = "sanabi", Name = "ГЕНЕРАЛ САННАБИ [ЭКСКЛЮЗИВ]", Icon = "SNB", Subtitle = "Бригадный Генерал Чосона и Мари [ЦЕПНОЙ КРЮК, МАЯТНИК И ИМПУЛЬС]",
+                Hp = 160, Speed = 12.6f, Damage = 26.0f, FireRate = 4.8f, ProjSpeed = 88f, ProjScale = 0.32f, Aoe = 2.4f,
+                BodyColor = Rgb(52, 68, 56), ArmorColor = Rgb(44, 48, 58), VisorColor = Rgb(65, 235, 255),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Рывок Цепного Крюка (Chain-Arm Breach)", Cd = 0.20f, Desc = "[ЛКМ] Мгновенный захват цели гигантской Рукой-Крюком и сокрушительный таранный удар в упор! Урон растёт от набранного Импульса скорости!" },
+                    ["m2"] = new() { Name = "Гарпун-Якорь Маго (Chain Grapple)", Cd = 2.2f, Desc = "[ПКМ] Выстреливает стальным 3D-тросом в точку прицела или врага, притягивая Генерала на сверхзвуковой скорости (+100% Импульса и сброс КД Shift)!" },
+                    ["shift"] = new() { Name = "Маятниковый Свинг-Импульс (Pendulum Boost)", Cd = 2.4f, Desc = "[Shift] Акробатический маятниковый рывок на цепи в воздухе или над землёй (+45 щита, взрывная волна и набор максимального Импульса)!" },
+                    ["r"] = new() { Name = "Протокол «САННАБИ»: Перегрузка Мари (Overdrive)", Cd = 9.0f, Desc = "[R] Мари взламывает поле боя: время вокруг замедляется, КД крюка обнуляется, а Генерал обрушивает казнь цепными молниями по всем врагам!" }
+                }
+            },
+            ["jack_o"] = new()
+            {
+                Key = "jack_o", Name = "ДЖЕК-О ВАЛЕНТАЙН", Icon = "JKO", Subtitle = "Повелительница Слуг и Железной Тыквы [GUILTY GEAR -STRIVE-]",
+                Hp = 135, Speed = 10.9f, Damage = 24.5f, FireRate = 3.2f, ProjSpeed = 58f, ProjScale = 0.42f, Aoe = 2.8f,
+                BodyColor = Rgb(245, 245, 250), ArmorColor = Rgb(198, 32, 48), VisorColor = Rgb(135, 255, 65),
+                Skills = new()
+                {
+                    ["m1"] = new() { Name = "Пинок Железной Тыквой (Iron Pumpkin Kick)", Cd = 0.31f, Desc = "[ЛКМ] Высокий пинок каблуком запускает прикованный к ноге шар на цепи вперёд по широкой дуге, сбивая врагов!" },
+                    ["m2"] = new() { Name = "Призыв Слуги (Summon Servant)", Cd = 3.2f, Desc = "[ПКМ] Спавнит маленького миньончика-рыцаря (до 4 шт.), который атакует врагов леденцом. При малом HP миньон взрывается!" },
+                    ["shift"] = new() { Name = "Командный Флаг (Attack / Defend Cheer)", Cd = 4.2f, Desc = "[Shift] Прыгает с флагом в руке и ставит его в точке приземления: флаг живёт 12 сек. и баффает миньонов на УРОН или ЗАЩИТУ!" },
+                    ["r"] = new() { Name = "Forever Elysion Driver!", Cd = 9.5f, Desc = "[R] Прыгает вперёд с шаром в руке, насаживает его на врага, взмывает с ним в небо и жёстко вбивает вниз с колоссальным уроном!" }
+                }
             }
         };
 
         static SurvivorDatabase()
         {
             InitializeLoadoutsAndSkins();
+        }
+
+        private static Dictionary<string, List<SkillDef>> BuildCustomSkinSkillSet(
+            string formDisplayName,
+            SkillDef stdM1, SkillDef altM1,
+            SkillDef stdM2, SkillDef altM2,
+            SkillDef stdShift, SkillDef altShift,
+            SkillDef stdR, SkillDef altR)
+        {
+            altM1.UnlockAchKey = "ach_slayer";
+            altM1.UnlockReqText = $"Играя за {formDisplayName}: Уничтожьте 12 монстров за забег (Истребитель)";
+            altM2.UnlockAchKey = "ach_boss";
+            altM2.UnlockReqText = $"Играя за {formDisplayName}: Победите Босса Телепорта (Убийца Титанов)";
+            altShift.UnlockAchKey = "ach_traveler";
+            altShift.UnlockReqText = $"Играя за {formDisplayName}: Перейдите на 2-й этап (Исследователь миров)";
+            altR.UnlockAchKey = "ach_hoarder";
+            altR.UnlockReqText = $"Играя за {formDisplayName}: Соберите 6 предметов за забег (Коллекционер)";
+
+            return new Dictionary<string, List<SkillDef>>
+            {
+                ["m1"] = new List<SkillDef> { stdM1, altM1 },
+                ["m2"] = new List<SkillDef> { stdM2, altM2 },
+                ["shift"] = new List<SkillDef> { stdShift, altShift },
+                ["r"] = new List<SkillDef> { stdR, altR }
+            };
         }
 
         private static void SetupCharLoadout(
@@ -1152,6 +2708,9 @@ namespace RiskOfCSharp2.Models
             cfg.OverviewLore = lore;
             cfg.PassiveName = passiveName;
             cfg.PassiveDesc = passiveDesc;
+            cfg.BaseSubtitle = cfg.Subtitle;
+            cfg.BasePassiveName = passiveName;
+            cfg.BasePassiveDesc = passiveDesc;
 
             altM1.UnlockAchKey = "ach_slayer";
             altM1.UnlockReqText = $"Играя за {cfg.Name}: Уничтожьте 12 монстров за забег (Истребитель)";
@@ -1165,29 +2724,41 @@ namespace RiskOfCSharp2.Models
             altR.UnlockAchKey = "ach_hoarder";
             altR.UnlockReqText = $"Играя за {cfg.Name}: Соберите 6 предметов за забег (Коллекционер)";
 
-            reskin.UnlockAchKey = "ach_stage3";
-            reskin.UnlockReqText = $"Играя за {cfg.Name}: Доберитесь до 3-го этапа (Покоритель Глубин)";
-
-            if (masterySkin.UnlockAchKey == "ach_stage3")
+            if (!reskin.UnlockedByDefault)
             {
-                masterySkin.UnlockAchKey = "ach_stage4";
-                masterySkin.UnlockReqText = $"Играя за {cfg.Name}: Доберитесь до 4-го этапа или победите Митрикса";
+                reskin.UnlockAchKey = "ach_stage3";
+                reskin.UnlockReqText = $"Играя за {cfg.Name}: Доберитесь до 3-го этапа (Покоритель Глубин)";
             }
-            else
+
+            if (!masterySkin.UnlockedByDefault)
             {
-                masterySkin.UnlockReqText = $"Играя за {cfg.Name}: {masterySkin.UnlockReqText}";
+                if (masterySkin.UnlockAchKey == "ach_stage3")
+                {
+                    masterySkin.UnlockAchKey = "ach_stage4";
+                    masterySkin.UnlockReqText = $"Играя за {cfg.Name}: Доберитесь до 4-го этапа или победите Митрикса";
+                }
+                else
+                {
+                    masterySkin.UnlockReqText = $"Играя за {cfg.Name}: {masterySkin.UnlockReqText}";
+                }
             }
 
             cfg.SkillVariants["m1"] = new List<SkillDef> { cfg.Skills["m1"], altM1 };
             cfg.SkillVariants["m2"] = new List<SkillDef> { cfg.Skills["m2"], altM2 };
             cfg.SkillVariants["shift"] = new List<SkillDef> { cfg.Skills["shift"], altShift };
             cfg.SkillVariants["r"] = new List<SkillDef> { cfg.Skills["r"], altR };
+            foreach (var kv in cfg.SkillVariants)
+                cfg.BaseSkillVariants[kv.Key] = kv.Value;
+
             cfg.Skins.Add(new SkinDef
             {
-                Name = "Классический",
-                Desc = $"Стандартное снаряжение и классический облик выжившего ({cfg.Name}).",
+                Name = key == "dmc_trio" ? "Данте [Слот 1]" : "Классический",
+                Desc = key == "dmc_trio"
+                    ? "Сын Спарды Данте: красный плащ, демонический меч Rebellion и пистолеты Ebony & Ivory."
+                    : $"Стандартное снаряжение и классический облик выжившего ({cfg.Name}).",
                 UnlockAchKey = null,
                 UnlockReqText = "Открыт по умолчанию",
+                UnlockedByDefault = true,
                 ChangesModel = false,
                 BodyColor = cfg.BaseBodyColor,
                 ArmorColor = cfg.BaseArmorColor,
@@ -1251,14 +2822,37 @@ namespace RiskOfCSharp2.Models
                 new SkinDef { Name = "V2 Высшая Машина [Модель]", Desc = "Багровый корпус V2 с золотой короной, крестовым визором и удлинёнными крыльями-лезвиями.", UnlockAchKey = "ach_carnage", UnlockReqText = "Испытание: Кровавая Жатва (25 врагов за забег)", ChangesModel = true, BodyColor = Rgb(215, 38, 48), ArmorColor = Rgb(42, 32, 36), VisorColor = Rgb(255, 225, 55) });
 
             SetupCharLoadout("sol",
-                "Охотник за головами и прототип Гира, вооружённый огненным мечом-артефактом Fireseal (Junkyard Dog). Мастер сокрушительных комбо ближнего боя.",
+                "Охотник за головами и прототип Гира, вооружённый огненным мечом-артефактом Fireseal (Junkyard Dog). В 3-м слоте скина переключается на свою альтернативную версию «Кай Киске (Гром Иллирии)» с мечом Thunderseal и 8 новыми громовыми способностями!",
                 "Пламя Порчи (Flame of Corruption)", "Удары мечом высекают столпы пламени, а пробуждение Драконьего Инсталла превращает Сола в демонического Гира.",
-                new SkillDef { Name = "Fafnir (Сокрушительный выпад)", Cd = 0.44f, Desc = "[ЛКМ] Тяжёлый прямой удар огненным кулаком с взрывом, пробитием брони и отбрасыванием." },
-                new SkillDef { Name = "Volcanic Viper (Апперкот)", Cd = 3.6f, Desc = "[ПКМ] Взмывает вверх с пылающим восходящим ударом меча, оглушая врагов вокруг." },
-                new SkillDef { Name = "Night Raid Vortex (Прорыв)", Cd = 3.8f, Desc = "[Shift] Стремительный прорыв по земле сквозь врагов с мощным огненным апперкотом." },
-                new SkillDef { Name = "Tyrant Rave (Тиранский Взрыв)", Cd = 10.0f, Desc = "[R] Пробуждает силу Гира и выпускает колоссальный огненный взрыв на 650% урона перед собой!" },
-                new SkinDef { Name = "Кай Киске (Гром Ордена)", Desc = "Бело-лазурное облачение Короля Иллирии с молниеносным клинком.", UnlockAchKey = "ach_boss", UnlockReqText = "Достижение: Убийца Титанов (Победа над Боссом)", BodyColor = Rgb(238, 242, 252), ArmorColor = Rgb(45, 115, 225), VisorColor = Rgb(115, 235, 255) },
-                new SkinDef { Name = "Орденский Сол [Модель]", Desc = "Облик Святого Рыцаря Ордена: бело-золотой плащ, корона и каменная плита меча Fireseal.", UnlockAchKey = "ach_boss_hunter", UnlockReqText = "Испытание: Гроза Стражей (3 Босса)", ChangesModel = true, BodyColor = Rgb(240, 238, 245), ArmorColor = Rgb(185, 38, 48), VisorColor = Rgb(255, 205, 55) });
+                new SkillDef { Name = "Fafnir (Сокрушительный выпад)", Cd = 0.44f, Desc = "[ЛКМ Альт.] Тяжёлый прямой удар огненным кулаком с взрывом, пробитием брони и отбрасыванием." },
+                new SkillDef { Name = "Volcanic Viper (Апперкот)", Cd = 3.6f, Desc = "[ПКМ Альт.] Взмывает вверх с пылающим восходящим ударом меча, оглушая врагов вокруг." },
+                new SkillDef { Name = "Night Raid Vortex (Прорыв)", Cd = 3.8f, Desc = "[Shift Альт.] Стремительный прорыв по земле сквозь врагов с мощным огненным апперкотом." },
+                new SkillDef { Name = "Tyrant Rave (Тиранский Взрыв)", Cd = 10.0f, Desc = "[R Альт.] Пробуждает силу Гира и выпускает колоссальный огненный взрыв на 650% урона перед собой!" },
+                new SkinDef { Name = "Орденский Сол [Модель]", Desc = "Облик Святого Рыцаря Ордена: бело-золотой плащ, корона и каменная плита меча Fireseal.", UnlockAchKey = "ach_stage3", UnlockReqText = "Достижение: Покоритель Глубин (3-й этап)", ChangesModel = true, BodyColor = Rgb(240, 238, 245), ArmorColor = Rgb(185, 38, 48), VisorColor = Rgb(255, 205, 55) },
+                new SkinDef
+                {
+                    Name = "Кай Киске (Гром Иллирии) [Альт. Версия]",
+                    Desc = "Альтернативная версия Кая Киске — Первого Короля Иллирии и вечного соперника Сола! Меч Громовая Печать (Thunderseal), бело-лазурный королевский плащ и 8 новых способностей молнии!",
+                    UnlockedByDefault = true,
+                    UnlockReqText = "Альт. версия (Открыта сразу — альт. навыки открываются отдельно!)",
+                    ChangesModel = true,
+                    BodyColor = Rgb(240, 244, 255),
+                    ArmorColor = Rgb(42, 108, 225),
+                    VisorColor = Rgb(95, 238, 255),
+                    CustomSubtitle = "Кай Киске [АЛЬТ. ВЕРСИЯ | ПЕРВЫЙ КОРОЛЬ ИЛЛИРИИ]",
+                    CustomPassiveName = "Знак Грома (Shock State)",
+                    CustomPassiveDesc = "Громовые атаки Кая Киске накладывают Шоковый Заряд, усиливающий урон его умений на +25% и вызывающий цепные дуги молний между врагами!",
+                    CustomSkillVariants = BuildCustomSkinSkillSet(
+                        "Кай Киске",
+                        new SkillDef { Name = "Громовая Печать (Thunderseal Slash)", Cd = 0.25f, Desc = "[ЛКМ Кай] Благородные фехтовальные взмахи мечом Thunderseal с выпуском дугового разряда молнии и цепным Шоком." },
+                        new SkillDef { Name = "Священный Выпад (Vapor Thrust)", Cd = 0.34f, Desc = "[ЛКМ Альт. Кай] Пробивной молниеносный выпад клинком, высекающий столп небесной молнии на цели!" },
+                        new SkillDef { Name = "Лезвие Грома (Stun Edge — Заряд)", Cd = 3.2f, Desc = "[ПКМ Кай — ЗАРЯД] Удерживайте ПКМ, чтобы заряжать золотой Stun Edge! Чем дольше держите кнопку, тем мощнее и крупнее снаряд!" },
+                        new SkillDef { Name = "Священный Крест (Charged Stun Edge + Dire Eclat)", Cd = 3.6f, Desc = "[ПКМ Альт. Кай — ЗАРЯД] Удерживайте ПКМ для многоударного Charged Stun Edge + разряд Dire Eclat вокруг (+ щит от заряда)!" },
+                        new SkillDef { Name = "Скользящий Выпад (Stun Dipper)", Cd = 3.4f, Desc = "[Shift Кай] Стремительный низкий подкат по земле + мощный электрический разряд впереди, оглушающий врагов (+40 щита)!" },
+                        new SkillDef { Name = "Дуга Грома (Foudre Arc)", Cd = 3.2f, Desc = "[Shift Альт. Кай] Акробатическое колесо в прыжке с ударом молнией сверху вниз, сбивающее врагов с ног!" },
+                        new SkillDef { Name = "Оседлать Молнию! (Ride the Lightning)", Cd = 9.5f, Desc = "[R Кай] Увеличенная дальность полёта копьём молнии со светящимся магическим барьером спереди, пронзающим врагов!" },
+                        new SkillDef { Name = "Драконий Инсталл: Весы Юноны (Sacred Edge)", Cd = 11.0f, Desc = "[R Альт. Кай] Пробуждает глаз Гира и крыло молнии Весов Юноны (10 сек.) + выпускает веер из 5 Священных Крестов!" })
+                });
 
             SetupCharLoadout("gwen",
                 "Ожившая кукла, вооружённая Священными Ножницами, иглами и благословенным Священным Туманом. Сражается в изометрическом MOBA-режиме.",
@@ -1399,6 +2993,293 @@ namespace RiskOfCSharp2.Models
                 new SkillDef { Name = "Парад Девяти Хвостов (3 Сердца)", Cd = 9.5f, Desc = "[R] Выпускает веер из 3 сердец Очарования и полностью восстанавливает все 3 заряда Рывка!" },
                 new SkinDef { Name = "Полуночная Ари", Desc = "Тёмно-фиолетовое облачение зимней ночи с серебристыми хвостами и лунной сферой.", UnlockAchKey = "ach_hoarder", UnlockReqText = "Достижение: Коллекционер (6 предметов)", BodyColor = Rgb(95, 52, 165), ArmorColor = Rgb(230, 235, 250), VisorColor = Rgb(185, 135, 255) },
                 new SkinDef { Name = "Дух Цветения Ари [Модель]", Desc = "Сакуровое кимоно Духа Цветения, золотая диадема-рожки и парящий фамильяр-лисёнок!", UnlockAchKey = "ach_arsenal", UnlockReqText = "Испытание: Вооружён до зубов (12 предметов)", ChangesModel = true, BodyColor = Rgb(255, 130, 195), ArmorColor = Rgb(245, 248, 255), VisorColor = Rgb(110, 240, 255) });
+
+            // =========================================================================================
+            // 21. ЛАППЛАНД (ARKNIGHTS) + 3-Й СКИН: АЛЬТ. ВЕРСИЯ «ЛАППЛАНД ДЕКАДЕНЦА» (8 ОТДЕЛЬНЫХ СКИЛЛОВ)
+            // =========================================================================================
+            SetupCharLoadout("lappland",
+                "Изгнанная наследница мафиозной семьи Сальваторе из Сиракуз (Arknights). В 3-м слоте скина переключается на свою альтернативную версию «Лаппланд Декаденца» с новой 3D-моделью и 8 новыми скиллами!",
+                "Духовное Разрушение (Безмолвие)", "Удары Лаппланд накладывают Безмолвие, снижают защиту врагов и наносят бонусный магический урон (Arts).",
+                new SkillDef { Name = "Вихрь Крови Сиракуз", Cd = 0.22f, Desc = "[ЛКМ Альт.] Двойные перекрёстные волны мечей с вампиризмом и повышенным шансом крита." },
+                new SkillDef { Name = "Казнь Семьи Сальваторе", Cd = 3.2f, Desc = "[ПКМ Альт.] Выпускает 3 огромных пробивных креста серебряного света с оглушением." },
+                new SkillDef { Name = "Призрачный Шаг Волчицы", Cd = 3.2f, Desc = "[Shift Альт.] Мгновенная телепортация за спину врагу с +40 щита и взрывом Искусств." },
+                new SkillDef { Name = "Кровавая Луна Сиракуз", Cd = 8.5f, Desc = "[R Альт.] Вызывает 8 падающих с неба гигантских мечей и ускоряет атаку Лаппланд на 50%!" },
+                new SkinDef { Name = "Утончённый Кошмар", Desc = "Парадный багрово-золотой костюм серии Bloodline of Combat.", UnlockAchKey = "ach_slayer", UnlockReqText = "Достижение: Истребитель (12 монстров)", BodyColor = Rgb(195, 38, 52), ArmorColor = Rgb(242, 238, 245), VisorColor = Rgb(255, 205, 65) },
+                new SkinDef
+                {
+                    Name = "Лаппланд Декаденца [Альт. Версия]",
+                    Desc = "Альтернативная версия Lappland the Decadenza (Caster): маскарадное пальто, парящие призрачные волки Сиракуз и совершенно новый набор из 8 навыков!",
+                    UnlockedByDefault = true,
+                    UnlockReqText = "Альт. версия (Открыта сразу — альт. навыки открываются отдельно!)",
+                    ChangesModel = true,
+                    BodyColor = Rgb(28, 26, 38),
+                    ArmorColor = Rgb(215, 175, 65),
+                    VisorColor = Rgb(185, 85, 255),
+                    CustomSubtitle = "Лаппланд Декаденца [АЛЬТ. ВЕРСИЯ | ПРИЗРАЧНЫЕ ВОЛКИ СИРАКУЗ]",
+                    CustomPassiveName = "Вожак Стаи Декаденцы",
+                    CustomPassiveDesc = "Атаки призывают парящих Призрачных Волков (Signori dei Lupi), которые преследуют и терзают врагов магическим уроном.",
+                    CustomSkillVariants = BuildCustomSkinSkillSet(
+                        "Лаппланд Декаденца",
+                        new SkillDef { Name = "Призрачная Стая (Feral Pack)", Cd = 0.24f, Desc = "[ЛКМ Декаденца] Направляет парящих призрачных волков и золотые клинки, разрывающие врагов на дистанции." },
+                        new SkillDef { Name = "Багровый Реквием Волков", Cd = 0.28f, Desc = "[ЛКМ Альт. Декаденца] Выпускает сразу 3 самонаводящихся призрачных волчьих черепа с взрывом по площади!" },
+                        new SkillDef { Name = "Печать Молчания Карнавала", Cd = 3.4f, Desc = "[ПКМ Декаденца] Стягивает врагов в магический водоворот Декаденцы, накладывая страх и 300% урона." },
+                        new SkillDef { Name = "Челюсти Синьоров Волка", Cd = 3.6f, Desc = "[ПКМ Альт. Декаденца] Гигантская призрачная пасть волка смыкается на врагах, исцеляя Лаппланд и давая +45 щита!" },
+                        new SkillDef { Name = "Вальс Маскарада", Cd = 3.6f, Desc = "[Shift Декаденца] Грациозный полёт сквозь тени Сиракуз (+40 щита и 3 волчьих духа вокруг)." },
+                        new SkillDef { Name = "Шаг Сквозь Чистилище", Cd = 3.2f, Desc = "[Shift Альт. Декаденца] Телепортация с оставлением взрывной иллюзии и +50% скорости бега." },
+                        new SkillDef { Name = "Гранд-Финал: Il Silenzio!", Cd = 9.5f, Desc = "[R Декаденца] Открывает купол Карнавала Декаденцы: шквал призрачных волков и золотых мечей по всей арене!" },
+                        new SkillDef { Name = "Апофеоз Сиракуз (Вечная Охота)", Cd = 10.0f, Desc = "[R Альт. Декаденца] Призывает 2 огромных бессмертных Волчьих Фамильяра и обрушивает 10 лучей Искусств!" })
+                });
+
+            // =========================================================================================
+            // 22. W (ARKNIGHTS) + 3-Й СКИН: АЛЬТ. ВЕРСИЯ «ВИШАДЕЛЬ / WIŠ'ADEL» (8 ОТДЕЛЬНЫХ СКИЛЛОВ)
+            // =========================================================================================
+            SetupCharLoadout("w_arknights",
+                "Легендарная наёмница-сарказка из Каздела (Arknights). В 3-м слоте скина переключается на свою королевскую альт. версию «Вишадель (Wiš'adel)» с установками «Тень Восставших» и 8 новыми скиллами!",
+                "Засада и Тактический Подрыв", "Враги, задетые взрывами или оглушением W, получают на 25% больше урона от всех источников.",
+                new SkillDef { Name = "Кассетный Гранатомёт", Cd = 0.42f, Desc = "[ЛКМ Альт.] Выпускает гранату, распадающуюся на 3 прыгающие суб-гранаты." },
+                new SkillDef { Name = "Король Пик (Тройное Минное Поле)", Cd = 4.0f, Desc = "[ПКМ Альт.] Разбрасывает веером сразу 3 клейкие мины C4 с увеличенным радиусом взрыва!" },
+                new SkillDef { Name = "Дымовой Камуфляж Наёмницы", Cd = 3.6f, Desc = "[Shift Альт.] Взрывной отскок с получением невидимости, +45 щита и ускорения." },
+                new SkillDef { Name = "Симфония Разрушения (Мега-D12)", Cd = 9.0f, Desc = "[R Альт.] Мгновенная ковровая бомбардировка из 10 зарядов C4 с цепной детонацией!" },
+                new SkinDef { Name = "Фуга (Fugue)", Desc = "Элегантный парадный костюм серии EPOQUE с золотым гранатомётом.", UnlockAchKey = "ach_boss", UnlockReqText = "Достижение: Убийца Титанов (Победа над Боссом)", BodyColor = Rgb(235, 232, 240), ArmorColor = Rgb(185, 34, 48), VisorColor = Rgb(255, 215, 65) },
+                new SkinDef
+                {
+                    Name = "Вишадель (Wiš'adel) [Альт. Версия]",
+                    Desc = "Альтернативная версия Wiš'adel: парящие артиллерийские пилоны «Тень Восставших (Revenant's Shadow)», королевский плащ Каздела и 8 новых навыков!",
+                    UnlockedByDefault = true,
+                    UnlockReqText = "Альт. версия (Открыта сразу — альт. навыки открываются отдельно!)",
+                    ChangesModel = true,
+                    BodyColor = Rgb(225, 38, 52),
+                    ArmorColor = Rgb(245, 242, 250),
+                    VisorColor = Rgb(255, 215, 55),
+                    CustomSubtitle = "Вишадель (Wiš'adel) [АЛЬТ. ВЕРСИЯ | ПОВЕЛИТЕЛЬНИЦА РЕВЕНАНТОВ]",
+                    CustomPassiveName = "Тень Восставших (Revenant's Shadow)",
+                    CustomPassiveDesc = "Оружие предков Каздела оставляет на врагах взрывные метки Душ и автоматически обстреливает цели вокруг.",
+                    CustomSkillVariants = BuildCustomSkinSkillSet(
+                        "Вишадель",
+                        new SkillDef { Name = "Залп Предков Каздела", Cd = 0.34f, Desc = "[ЛКМ Вишадель] Мощный выстрел из тяжёлого орудия с последующим вторичным взрывом Души Ревенанта." },
+                        new SkillDef { Name = "Сдвоенный Импульс Ревенанта", Cd = 0.30f, Desc = "[ЛКМ Альт. Вишадель] Выпускает 2 самонаводящихся снаряда багровой энергии предков подряд!" },
+                        new SkillDef { Name = "Призыв Тени Восставших (Пилон)", Cd = 4.0f, Desc = "[ПКМ Вишадель] Устанавливает автономный артиллерийский пилон Каздела, обстреливающий и оглушающий врагов!" },
+                        new SkillDef { Name = "Багровый Обелиск Душ", Cd = 3.8f, Desc = "[ПКМ Альт. Вишадель] Вызывает взрывной обелиск, стягивающий врагов и дающий Вишадель +50 щита." },
+                        new SkillDef { Name = "Крылья Короны Каздела", Cd = 3.6f, Desc = "[Shift Вишадель] Реактивный взлёт с камуфляжем и сбросом 3 кассетных бомб под себя!" },
+                        new SkillDef { Name = "Фазовый Сдвиг Сарказов", Cd = 3.4f, Desc = "[Shift Альт. Вишадель] Мгновенный рывок с перезарядкой орудий и исцелением 20% HP." },
+                        new SkillDef { Name = "Сумерки Взрывного Рассвета (Explosive Dawn)", Cd = 10.0f, Desc = "[R Вишадель] Взлетает в воздух и обрушивает 6 ядерных залпов Ревенанта по всей карте!" },
+                        new SkillDef { Name = "Приговор Королей Сарказов", Cd = 9.5f, Desc = "[R Альт. Вишадель] Призывает 3 пилона «Тень Восставших» и выжигает арену орбитальным лучом Каздела!" })
+                });
+
+            // =========================================================================================
+            // 23. ГОЛД ШИП (UMAMUSUME: PRETTY DERBY) — ИГРА ОТ СКОРОСТИ БЕГА И РАЗБЕГА
+            // =========================================================================================
+            SetupCharLoadout("gold_ship",
+                "Самая эксцентричная и непредсказуемая девушка-пони Академии Трейсен (Umamusume: Pretty Derby). Вся её боевая мощь напрямую зависит от текущей скорости бега и набранного разбега!",
+                "Непотопляемый Разгон (Speed Scaling)", "Во время бега Голд Шип набирает Разгон (до +100% скорости). Чем быстрее она движется в момент удара, тем сильнее урон, радиус ударной волны и бонусный щит!",
+                new SkillDef { Name = "Таран Золотого Корабля", Cd = 0.24f, Desc = "[ЛКМ Альт.] Широкий удар на бегу с золотыми ударными волнами, наносящий до x3.2 урона на полном ходу!" },
+                new SkillDef { Name = "Торпедный Дропкик в Прыжке!", Cd = 3.2f, Desc = "[ПКМ Альт.] Стремительный полёт вперёд ногами (дальность и взрыв растут от скорости движения)!" },
+                new SkillDef { Name = "Второе Дыхание Арима Кинен", Cd = 3.8f, Desc = "[Shift Альт.] Мгновенно набирает 100% Разгона, снимает замедления и восстанавливает 25% HP!" },
+                new SkillDef { Name = "Врата Уорп-Голдшипа (Якорный Шторм)", Cd = 8.5f, Desc = "[R Альт.] Открывает золотые порталы и обрушивает 5 корабельных якорей и ракет по врагам вокруг!" },
+                new SkinDef { Name = "Курортный Капитан", Desc = "Бело-золотая капитанская форма Голд Шип с солнцезащитными очками.", UnlockAchKey = "ach_traveler", UnlockReqText = "Достижение: Исследователь миров (2-й этап)", BodyColor = Rgb(245, 246, 252), ArmorColor = Rgb(35, 65, 145), VisorColor = Rgb(255, 215, 55) },
+                new SkinDef { Name = "Легенда Гран-При G1 [Модель]", Desc = "Золотая корона Чемпиона Тройной Короны, капитанский плащ и золотой якорь за спиной!", UnlockAchKey = "ach_carnage", UnlockReqText = "Испытание: Кровавая Жатва (25 врагов за забег)", ChangesModel = true, BodyColor = Rgb(235, 185, 45), ArmorColor = Rgb(185, 28, 42), VisorColor = Rgb(255, 245, 130) });
+
+            // =========================================================================================
+            // 24. АЛЕКСАНДР ПУШНОЙ (ГАЛИЛЕО)
+            // =========================================================================================
+            SetupCharLoadout("pushnoy",
+                "Легендарный телеведущий программы «Галилео», физик и рок-музыкант. Сокрушает монстров убойными метал-риффами на электрогитаре и безумными научными экспериментами в прямом эфире!",
+                "Наука и Рок-н-Ролл!", "Каждое применение научного эксперимента усиливает следующий гитарный рифф цепными молниями и даёт защитный барьер.",
+                new SkillDef { Name = "Ультразвуковой Даунстрок", Cd = 0.22f, Desc = "[ЛКМ Альт.] Скоростной чёс на электрогитаре: выпускает 3 широкие звуковые волны с оглушением!" },
+                new SkillDef { Name = "Неньютоновская Жидкость + Азот", Cd = 3.2f, Desc = "[ПКМ Альт.] Создаёт взрывную лужу неньютоновской жидкости, замораживающую врагов и дающую Пушному +50 щита!" },
+                new SkillDef { Name = "Турбо-Огнетушитель X2", Cd = 3.4f, Desc = "[Shift Альт.] Сверхдальний пролёт на двух огнетушителях с ледяным взрывом на старте и финише!" },
+                new SkillDef { Name = "Мегаваттный Концерт «ГАЛИЛЕО!»", Cd = 9.0f, Desc = "[R Альт.] Вызывает грозовой шторм из 8 разрядов молний Теслы и усиливает урон на +40%!" },
+                new SkinDef { Name = "Лабораторный Профессор", Desc = "Белый научный халат поверх рок-футболки и защитные очки для опасных опытов.", UnlockAchKey = "ach_slayer", UnlockReqText = "Достижение: Истребитель (12 монстров)", BodyColor = Rgb(242, 245, 252), ArmorColor = Rgb(225, 95, 32), VisorColor = Rgb(85, 245, 255) },
+                new SkinDef { Name = "Повелитель Молний Теслы [Модель]", Desc = "Двухгрифовая золотая электрогитара, ранец с катушками Теслы за спиной и неоновые очки!", UnlockAchKey = "ach_arsenal", UnlockReqText = "Испытание: Вооружён до зубов (12 предметов)", ChangesModel = true, BodyColor = Rgb(35, 38, 48), ArmorColor = Rgb(245, 195, 55), VisorColor = Rgb(105, 245, 255) });
+
+            // =========================================================================================
+            // 25. МИШКА ФРЕДДИ (FIVE NIGHTS AT FREDDY'S)
+            // =========================================================================================
+            SetupCharLoadout("freddy",
+                "Главный аниматроник пиццерии Freddy Fazbear's Pizza. В бою использует тяжёлый микрофон, смертоносный Скример и отключение электричества под мелодию «Марша Тореадора»!",
+                "Ночной Протокол Fazbear", "В темноте и после Скримера Фредди получает повышенную броню, а его атаки пугают и замедляют врагов.",
+                new SkillDef { Name = "Горячая Пицца Пепперони!", Cd = 0.26f, Desc = "[ЛКМ Альт.] Мечет вращающиеся огненные пиццы-диски, рикошетящие между врагами!" },
+                new SkillDef { Name = "Золотой Укус 1983-го", Cd = 3.5f, Desc = "[ПКМ Альт.] Телепортационный скример с круговым звуковым взрывом на 380% урона!" },
+                new SkillDef { Name = "Сбой Камер Наблюдения", Cd = 4.2f, Desc = "[Shift Альт.] Мгновенный скачок сквозь помехи камер с получением +60 щита и невидимости." },
+                new SkillDef { Name = "Пробуждение ГОЛДЕН ФРЕДДИ (IT'S ME)", Cd = 9.5f, Desc = "[R Альт.] Вызывает гигантскую золотую проекцию Golden Freddy, сокрушающую всех врагов вокруг психическим взрывом!" },
+                new SkinDef { Name = "Фредбер (Fredbear)", Desc = "Золотисто-жёлтый корпус оригинального аниматроника с фиолетовым цилиндром и бабочкой.", UnlockAchKey = "ach_boss", UnlockReqText = "Достижение: Убийца Титанов (Победа над Боссом)", BodyColor = Rgb(235, 190, 52), ArmorColor = Rgb(135, 45, 185), VisorColor = Rgb(185, 105, 255) },
+                new SkinDef { Name = "Глэмрок Фредди [Модель]", Desc = "Неоновый панк-рок облик Glamrock Freddy: наплечники со шипами, очки-звёзды и голубой корпус!", UnlockAchKey = "ach_boss_hunter", UnlockReqText = "Испытание: Гроза Стражей (3 Босса)", ChangesModel = true, BodyColor = Rgb(235, 125, 42), ArmorColor = Rgb(55, 205, 245), VisorColor = Rgb(255, 75, 165) });
+
+            // =========================================================================================
+            // 26. СТИВ (MINECRAFT) — ДИНАМИЧЕСКАЯ ДОБЫЧА КАРТЫ (ЯМЫ В ПОЛУ, СТЕНЫ, АЛТАРИ) + ВЕРСТАК
+            // =========================================================================================
+            SetupCharLoadout("steve",
+                "Легендарный покоритель кубического мира Minecraft. Способен буквально ломать киркой пол (создавая настоящие 3D-ямы!), стены, деревья и алтари, а затем крафтить на Верстаке мощную экипировку и предметы!",
+                "Шахтёрское Ремесло и Верстак [E]", "Добывает Дерево, Камень, Железо и Алмазы прямо из геометрии карты. После победы над боссом и зарядки портала рядом появляется Верстак для спокойного крафта!",
+                new SkillDef { Name = "Незеритовый Топор + Арбалет", Cd = 0.30f, Desc = "[ЛКМ Альт.] Сокрушительный удар топором по площади + тройной залп фейерверками из арбалета!" },
+                new SkillDef { Name = "Буровая Кирка «Эффективность V»", Cd = 0.65f, Desc = "[ПКМ Альт.] Ускоренная копка пола/стен/алтарей с удвоенной добычей ресурсов и ударной волной!" },
+                new SkillDef { Name = "Полёт на Элитрах с Фейерверком", Cd = 3.6f, Desc = "[Shift Альт.] Реактивный взлёт в воздух на крыльях Элитрах с бомбардировкой врагов под собой!" },
+                new SkillDef { Name = "Мега-ТНТ + Поставить Верстак", Cd = 5.5f, Desc = "[R Альт.] Ставит Верстак и бросает связку из 3 блоков ТНТ, вырывающих огромный кратер в полу!" },
+                new SkinDef { Name = "Алмазный Стив", Desc = "Полный комплект сверкающей зачарованной алмазной брони.", UnlockAchKey = "ach_hoarder", UnlockReqText = "Достижение: Коллекционер (6 предметов)", BodyColor = Rgb(65, 225, 240), ArmorColor = Rgb(42, 145, 175), VisorColor = Rgb(175, 255, 255) },
+                new SkinDef { Name = "Незеритовый Лорд и Херобрин [Модель]", Desc = "Тёмная незеритовая броня с золотой короной, крыльями Элитрами и светящимися белыми глазами Херобрина!", UnlockAchKey = "ach_stage3", UnlockReqText = "Испытание: Покоритель Глубин (3-й этап)", ChangesModel = true, BodyColor = Rgb(58, 52, 62), ArmorColor = Rgb(235, 185, 55), VisorColor = Rgb(255, 255, 255) });
+
+            // =========================================================================================
+            // 27. ДЖОТАРО КУДЖО (JOJO'S BIZARRE ADVENTURE)
+            // =========================================================================================
+            SetupCharLoadout("jotaro",
+                "Непоколебимый герой Stardust Crusaders и обладатель непобедимого Стенда ближнего боя «Star Platinum». Сокрушает врагов шквалом «ORA ORA ORA!» и останавливает само время!",
+                "Стенд: Star Platinum", "Star Platinum постоянно парит за плечом Джотаро, увеличивая скорость атаки и автоматически блокируя часть урона.",
+                new SkillDef { Name = "Шквал «ORA!» + Подшипники", Cd = 0.20f, Desc = "[ЛКМ Альт.] Удары кулаками Star Platinum + дальнобойный щелчок стальными шариками с рикошетом!" },
+                new SkillDef { Name = "Звёздный Раскол Земли", Cd = 3.2f, Desc = "[ПКМ Альт.] Star Platinum бьёт обоими кулаками в землю, поднимая каменную гряду и оглушая всех врагов!" },
+                new SkillDef { Name = "Шаги Вне Времени (Time Skip)", Cd = 3.4f, Desc = "[Shift Альт.] Мгновенная телепортация в микро-остановке времени с +45 щита и ударом с разворота!" },
+                new SkillDef { Name = "ZA WARUDO: 5 Секунд + Финальный ORA!", Cd = 11.5f, Desc = "[R Альт.] Останавливает время на 5.0 сек. и выпускает сокрушительную серию из 12 ударов Star Platinum!" },
+                new SkinDef { Name = "Океан Камня (Часть 6)", Desc = "Фиолетово-золотой плащ Джотаро из Stone Ocean с эмблемами звезды.", UnlockAchKey = "ach_boss", UnlockReqText = "Достижение: Убийца Титанов (Победа над Боссом)", BodyColor = Rgb(88, 48, 138), ArmorColor = Rgb(235, 195, 55), VisorColor = Rgb(95, 235, 255) },
+                new SkinDef { Name = "Морио (Часть 4) + Star Platinum Over Heaven [Модель]", Desc = "Белоснежный плащ Джотаро из Diamond is Unbreakable и бело-золотой Стенд Star Platinum Over Heaven!", UnlockAchKey = "ach_boss_hunter", UnlockReqText = "Испытание: Гроза Стражей (3 Босса)", ChangesModel = true, BodyColor = Rgb(242, 244, 252), ArmorColor = Rgb(245, 195, 65), VisorColor = Rgb(115, 245, 255) });
+
+            // =========================================================================================
+            // 28. ВАЙПЕР (DEADLOCK)
+            // =========================================================================================
+            SetupCharLoadout("vyper",
+                "Неуловимая рептилия-преступница из Нью-Йорка (Deadlock). Непрерывно скользит по полю боя, поливая врагов свинцом и нейротоксинами, а её ульта превращает толпы монстров в камень!",
+                "Змеиное Скольжение (Slither)", "Во время движения и скольжения Вайпер получает +30% к скорострельности и +25% к уклонению/броне.",
+                new SkillDef { Name = "Рикошетящие Клыки (Разрывной ПП)", Cd = 0.15f, Desc = "[ЛКМ Альт.] Токсичные пули рикошетят в соседних врагов и отравляют их!" },
+                new SkillDef { Name = "Кислотный Выброс Кобры", Cd = 3.2f, Desc = "[ПКМ Альт.] Выплёскивает широкий веер кислоты, плавящий броню и наносящий урон от недостающего HP!" },
+                new SkillDef { Name = "Вихревой Бросок Гадюки", Cd = 3.0f, Desc = "[Shift Альт.] Сверхбыстрый зигзагообразный слайд сквозь врагов с отравлением и +55 щита." },
+                new SkillDef { Name = "Взгляд Медузы (Каменный Шторм)", Cd = 9.0f, Desc = "[R Альт.] Выпускает 3 окаменяющие болы веером, мгновенно превращая всю группу врагов в статуи!" },
+                new SkinDef { Name = "Неоновая Гадюка", Desc = "Ярко-бирюзовая чешуя и фиолетовый плащ ночного синдиката.", UnlockAchKey = "ach_slayer", UnlockReqText = "Достижение: Истребитель (12 монстров)", BodyColor = Rgb(42, 215, 185), ArmorColor = Rgb(95, 45, 155), VisorColor = Rgb(255, 225, 65) },
+                new SkinDef { Name = "Золотая Королевская Кобра [Модель]", Desc = "Золотой капюшон королевской кобры, корона и спаренные плазменные ПП!", UnlockAchKey = "ach_carnage", UnlockReqText = "Испытание: Кровавая Жатва (25 врагов за забег)", ChangesModel = true, BodyColor = Rgb(235, 185, 48), ArmorColor = Rgb(36, 38, 48), VisorColor = Rgb(115, 255, 95) });
+
+            // =========================================================================================
+            // 29. ХЕЙЗ (DEADLOCK)
+            // =========================================================================================
+            SetupCharLoadout("haze",
+                "Специальный агент песочных снов бюро OSIC (Deadlock). Каждое попадание накапливает на цели стаки Фиксации, усыпляет опасных врагов кинжалом и расстреливает всё вокруг в «Танце Пуль»!",
+                "Фиксация (Fixation)", "Каждое попадание по врагу накладывает стак Фиксации (до 20). При достижении 20 стаков происходит Взрыв Снов с огромным уроном!",
+                new SkillDef { Name = "Калибр Кошмаров (Пробивные ПП)", Cd = 0.16f, Desc = "[ЛКМ Альт.] Выстрелы накладывают по 2 стака Фиксации сразу и прошивают врагов насквозь!" },
+                new SkillDef { Name = "Веер Сонных Кинжалов (3 шт.)", Cd = 3.8f, Desc = "[ПКМ Альт.] Бросает веером 3 усыпляющих кинжала снов, оглушающих группу врагов!" },
+                new SkillDef { Name = "Шаг Песочного Человека", Cd = 3.6f, Desc = "[Shift Альт.] Телепортация в облаке золотого песка с мгновенным взрывом стаков Фиксации вокруг!" },
+                new SkillDef { Name = "Абсолютный Танец Пуль (Жатва Снов)", Cd = 9.0f, Desc = "[R Альт.] Расширенный вихрь стрельбы с неуязвимостью, вампиризмом и двойным уроном Фиксации!" },
+                new SkinDef { Name = "Багровый Кошмар OSIC", Desc = "Чёрно-алый плащ старшего инспектора оккультного бюро.", UnlockAchKey = "ach_hoarder", UnlockReqText = "Достижение: Коллекционер (6 предметов)", BodyColor = Rgb(185, 34, 52), ArmorColor = Rgb(28, 28, 36), VisorColor = Rgb(255, 215, 75) },
+                new SkinDef { Name = "Архонт Вечных Снов [Модель]", Desc = "Золотая корона-нимб Песочного Человека, парящие часы снов и золотые пистолеты-пулемёты!", UnlockAchKey = "ach_arsenal", UnlockReqText = "Испытание: Вооружён до зубов (12 предметов)", ChangesModel = true, BodyColor = Rgb(242, 240, 248), ArmorColor = Rgb(235, 185, 55), VisorColor = Rgb(110, 235, 255) });
+
+            // =========================================================================================
+            // 30. ТРИО ИЗ DEVIL MAY CRY (1: ДАНТЕ | 2: НЕРО | 3: ВЕРГИЛИЙ — У КАЖДОГО 8 СКИЛЛОВ!)
+            // =========================================================================================
+            SetupCharLoadout("dmc_trio",
+                "Легендарное трио охотников на демонов из Devil May Cry! Переключайте слоты скинов, чтобы менять самого персонажа, его 3D-модель и все 8 способностей: Слот 1 — ДАНТЕ, Слот 2 — НЕРО, Слот 3 — ВЕРГИЛИЙ!",
+                "Кровь Спарды (Данте: Смена Стилей)", "Удары Данте чередуют меч и пистолеты, исцеляя здоровье в демоническом резонансе.",
+                new SkillDef { Name = "Дьявольский Меч Данте + Койот-А", Cd = 0.25f, Desc = "[ЛКМ Альт. Данте] Призывает парящие призрачные клинки DSD и бьёт картечью из дробовика!" },
+                new SkillDef { Name = "Танец Макабр + Багровый Дождь", Cd = 3.4f, Desc = "[ПКМ Альт. Данте] Серия молниеносных выпадов с круговым расстрелом из Ebony & Ivory!" },
+                new SkillDef { Name = "Кавалерия (Мотоцикл-Пила!)", Cd = 3.6f, Desc = "[Shift Альт. Данте] Таранный прорыв вперёд на демоническом мотоцикле Cavaliere с +50 щита!" },
+                new SkillDef { Name = "Королевское Возмездие + SDT Суд", Cd = 9.5f, Desc = "[R Альт. Данте] Взрыв накопленной ярости Royal Release и тотальная аннигиляция арены!" },
+                new SkinDef
+                {
+                    Name = "Неро (Nero) [Слот 2]",
+                    Desc = "Молодой охотник на демонов Неро из Фортуны: меч «Алая Королева (Red Queen)» с зажиганием Exceed, револьвер «Синяя Роза» и механический протез Devil Breaker!",
+                    UnlockedByDefault = true,
+                    UnlockReqText = "Персонаж 2-го слота (Открыт сразу — альт. навыки открываются отдельно!)",
+                    ChangesModel = true,
+                    BodyColor = Rgb(38, 68, 145),
+                    ArmorColor = Rgb(185, 34, 48),
+                    VisorColor = Rgb(85, 225, 255),
+                    CustomSubtitle = "Неро (Nero) [СЛОТ 2 | АЛАЯ КОРОЛЕВА, EXCEED И DEVIL BREAKER]",
+                    CustomPassiveName = "Зажигание Exceed (MAX-Act)",
+                    CustomPassiveDesc = "Меч «Алая Королева» оснащён двигателем: каждый 3-й взмах выпускает огненную волну Exceed с повышенным уроном!",
+                    CustomSkillVariants = BuildCustomSkinSkillSet(
+                        "Неро (DMC)",
+                        new SkillDef { Name = "Алая Королева + Синяя Роза", Cd = 0.23f, Desc = "[ЛКМ Неро] Рубящие удары мечом с огненным двигателем Exceed + двуствольный выстрел из револьвера Blue Rose." },
+                        new SkillDef { Name = "MAX-Act Стрик + Заряженный Выстрел 3", Cd = 0.26f, Desc = "[ЛКМ Альт. Неро] Пылающий круговой разрез Red Queen и разрывной выстрел Blue Rose с задержанной детонацией!" },
+                        new SkillDef { Name = "Бич Дьявола: Увертюра (Overture)", Cd = 3.2f, Desc = "[ПКМ Неро] Мощная электрическая ладонь протеза Devil Breaker, оглушающая и отбрасывающая врагов!" },
+                        new SkillDef { Name = "Реактивный Кулак (Punch Line)", Cd = 3.4f, Desc = "[ПКМ Альт. Неро] Запускает самонаводящуюся ракетную руку-протез, взрывающуюся в гуще врагов!" },
+                        new SkillDef { Name = "Трос-Захват (Wire Snatch) + Гербера", Cd = 3.4f, Desc = "[Shift Неро] Стремительный рывок к цели на демоническом тросе с ударной волной лепестков Gerbera (+40 щита)!" },
+                        new SkillDef { Name = "Верховой Полёт на Протезе", Cd = 3.5f, Desc = "[Shift Альт. Неро] Пролетает верхом на реактивной руке Punch Line, сбивая врагов с ног!" },
+                        new SkillDef { Name = "Дьявольский Облик: Buster Showdown!", Cd = 9.5f, Desc = "[R Неро] Пробуждает призрачные крылья Неро и обрушивает гигантские демонические кулаки на всех врагов вокруг!" },
+                        new SkillDef { Name = "Поломка Протеза: Луч Герберы GP01", Cd = 9.0f, Desc = "[R Альт. Неро] Перегружает протез Devil Breaker, выжигая арену колоссальным отражающимся лазером!" })
+                },
+                new SkinDef
+                {
+                    Name = "Вергилий (Vergil) [Слот 3]",
+                    Desc = "Альфа и Омега — старший брат-близнец Данте в синем плаще с пространственной катаной «Ямато (Yamato)» и Призрачными Клинками!",
+                    UnlockedByDefault = true,
+                    UnlockReqText = "Персонаж 3-го слота (Открыт сразу — альт. навыки открываются отдельно!)",
+                    ChangesModel = true,
+                    BodyColor = Rgb(32, 65, 138),
+                    ArmorColor = Rgb(235, 238, 248),
+                    VisorColor = Rgb(85, 215, 255),
+                    CustomSubtitle = "Вергилий (Vergil) [СЛОТ 3 | КАТАНА ЯМАТО И РАЗРЕЗ ПРАВОСУДИЯ]",
+                    CustomPassiveName = "Концентрация (Motivation)",
+                    CustomPassiveDesc = "Точные удары катаной Ямато рассекают само пространство, игнорируя броню врагов и призывая Призрачные Клинки.",
+                    CustomSkillVariants = BuildCustomSkinSkillSet(
+                        "Вергилий (DMC)",
+                        new SkillDef { Name = "Катана Ямато + Разрез Правосудия", Cd = 0.21f, Desc = "[ЛКМ Вергилий] Молниеносные взмахи Ямато + пространственная сфера Judgement Cut прямо по цели!" },
+                        new SkillDef { Name = "Беовульф + Грань Силы (Mirage Edge)", Cd = 0.24f, Desc = "[ЛКМ Альт. Вергилий] Сокрушительные удары светом Беовульфа и парные комбо Ямато + Mirage Edge!" },
+                        new SkillDef { Name = "Шторм Призрачных Клинков (Spiral Swords)", Cd = 3.4f, Desc = "[ПКМ Вергилий] Окружает Вергилия кольцом лазурных клинков (+35 щита) и выпускает их во врагов!" },
+                        new SkillDef { Name = "Тяжёлый Дождь Клинков (Blistering Swords)", Cd = 3.5f, Desc = "[ПКМ Альт. Вергилий] Обрушивает с неба ливень из 8 пространственных мечей, пригвождающих врагов к земле!" },
+                        new SkillDef { Name = "Стремительный Разрез (Rapid Slash)", Cd = 3.2f, Desc = "[Shift Вергилий] Телепортационный прорыв сквозь врагов, оставляющий за спиной серию задержанных разрезов!" },
+                        new SkillDef { Name = "Тёмный Убийца (Air Trick + Восходящий Дракон)", Cd = 3.2f, Desc = "[Shift Альт. Вергилий] Мгновенная телепортация к цели с восходящим драконьим апперкотом и +45 щита!" },
+                        new SkillDef { Name = "ФИНАЛЬНЫЙ РАЗРЕЗ ПРАВОСУДИЯ (Judgement Cut End!)", Cd = 10.0f, Desc = "[R Вергилий] «I AM THE STORM THAT IS APPROACHING!» — рассекает реальность по всей арене десятками пространственных разрезов!" },
+                        new SkillDef { Name = "Двойник SDT + Ад на Земле (Hell on Earth)", Cd = 10.0f, Desc = "[R Альт. Вергилий] Призывает теневого Двойника (Doppelganger) и бьёт в землю кулаком Sin Devil Trigger!" })
+                });
+
+            // =========================================================================================
+            // 31. СЕКРЕТНЫЙ ЭКСКЛЮЗИВНЫЙ ПЕРСОНАЖ: БРИГАДНЫЙ ГЕНЕРАЛ (SANABI) + МАРИ
+            // (Доступен только игрокам из белого списка ProgressData.SanabiAllowedUsers: lddrakon, EinKamerad)
+            // =========================================================================================
+            SetupCharLoadout("sanabi",
+                "Легендарный Бригадный Генерал Чосона (Проект №17) и его юная напарница-хакер Мари из киберпанк-мегаполиса Маго (SANABI). Сражается исполинской механической Рукой-Крюком на тросе: набирает колоссальный Импульс скорости в полёте, притягивается к врагам и поверхностям, отталкивается от целей в воздухе и уничтожает целые армии за доли секунды!",
+                "Кинетический Маятник и Навигатор Мари", "Полёты на крюке и движение разгоняют шкалу Импульса (до 200%), умножая урон всех ударов Руки-Крюка до x2.5 и сокращая перезарядку навыков при попадании!",
+                new SkillDef { Name = "Казнь Военного Трибунала (Chain-Slam)", Cd = 0.24f, Desc = "[ЛКМ Альт.] Захватывает цель крюком, подбрасывает Генерала над ней и с размаху вбивает врага в землю с ударной волной!" },
+                new SkillDef { Name = "Сквозной Гарпун «Заводной Механизм»", Cd = 2.4f, Desc = "[ПКМ Альт.] Выпускает раскалённый плазменный гарпун, прошивающий строй врагов насквозь и стягивающий их в одну точку перед рывком Генерала!" },
+                new SkillDef { Name = "Реактивный Подброс Цепи (Sky-Vault)", Cd = 2.2f, Desc = "[Shift Альт.] Мгновенный вертикально-диагональный взлёт на цепи с гравитационным ударом вниз и +60 щита!" },
+                new SkillDef { Name = "Финальная Гармоника: Взрыв Поезда Маго", Cd = 9.5f, Desc = "[R Альт.] Полная синхронизация Генерала и Мари: призывает кибер-разряд по всей карте, даёт неуязвимость, +100 щита и 200% Импульса!" },
+                new SkinDef
+                {
+                    Name = "Призрак Мегаполиса Маго (Неон)",
+                    Desc = "Ночной киберпанк-облик из залитого неоном Маго: угольный плащ, пурпурно-малиновое ядро Руки-Крюка и розовая голограмма Мари.",
+                    UnlockedByDefault = true,
+                    UnlockReqText = "Подарочный эксклюзив (Открыт сразу)",
+                    BodyColor = Rgb(28, 26, 38),
+                    ArmorColor = Rgb(58, 42, 72),
+                    VisorColor = Rgb(255, 65, 165)
+                },
+                new SkinDef
+                {
+                    Name = "Высший Генерал Чосона [Мастер-Модель]",
+                    Desc = "Парадный бело-золотой китель Бригадного Генерала Королевской Гвардии, плазменный венец, золотая Рука-Крюк и крылатый дрон Мари!",
+                    UnlockedByDefault = true,
+                    UnlockReqText = "Подарочный эксклюзив (Открыт сразу)",
+                    ChangesModel = true,
+                    BodyColor = Rgb(240, 242, 250),
+                    ArmorColor = Rgb(235, 185, 55),
+                    VisorColor = Rgb(75, 235, 255)
+                });
+
+            // =========================================================================================
+            // 32. ДЖЕК-О ВАЛЕНТАЙН (GUILTY GEAR -STRIVE-)
+            // =========================================================================================
+            SetupCharLoadout("jack_o",
+                "Искусственная форма жизни Валентайн, созданная Асукой Р. Кройцем и хранящая в себе частицу души Арии Хейл (Guilty Gear -Strive-). Сражается прикованным к лодыжке чугунным шаром «Железная Тыква» через высокие пинки, призывает отряд маленьких рыцарей-миньонов (взрывающихся при низком здоровье!), усиливает их Командным Флагом и вбивает врагов с небес в землю приёмом Forever Elysion Driver!",
+                "Хоровод Слуг и Заводной Фитиль", "Каждый активный Слуга даёт Джек-О +6% к скорости и броне. Когда у миньона остаётся мало HP, у него зажигается фитиль и он взрывается по площади!",
+                new SkillDef { Name = "Двойной Вихрь Тыквы (Shoot Command)", Cd = 0.34f, Desc = "[ЛКМ Альт.] Круговой пинок шаром на цепи вокруг себя, запускающий ближайших миньонов во врагов как живые снаряды!" },
+                new SkillDef { Name = "Двойной Призыв Слуг (Twin Servants)", Cd = 4.0f, Desc = "[ПКМ Альт.] Спавнит сразу 2 маленьких Слуг (лимит до 5 шт.) с увеличенным радиусом предсмертного взрыва!" },
+                new SkillDef { Name = "Королевский Штандарт Элизиона", Cd = 4.4f, Desc = "[Shift Альт.] Прыжок с золотым флагом: в точке приземления знамя одновременно баффает миньонов и на УРОН, и на ЗАЩИТУ (+50 щита)!" },
+                new SkillDef { Name = "Сверхновая Forever Elysion Driver!", Cd = 10.0f, Desc = "[R Альт.] Насаживает врага на шар, взлетает ещё выше и при жёстком приземлении оставляет в кратере 2 взрывных Слуг!" },
+                new SkinDef
+                {
+                    Name = "Карнавал Хэллоуина",
+                    Desc = "Готический чёрно-тыквенный комбинезон с фиолетовыми ремнями и неоново-оранжевым свечением Железной Тыквы.",
+                    UnlockAchKey = "ach_slayer",
+                    UnlockReqText = "Достижение: Истребитель (12 монстров)",
+                    BodyColor = Rgb(34, 30, 44),
+                    ArmorColor = Rgb(245, 115, 32),
+                    VisorColor = Rgb(255, 195, 45)
+                },
+                new SkinDef
+                {
+                    Name = "Крылья Арии и Задворков [Модель]",
+                    Desc = "Сияющий бело-золотой наряд с восстановленным венцом-нимбом, крыльями света Задворков и коронованной Железной Тыквой!",
+                    UnlockAchKey = "ach_boss_hunter",
+                    UnlockReqText = "Испытание: Гроза Стражей (3 Босса)",
+                    ChangesModel = true,
+                    BodyColor = Rgb(248, 248, 255),
+                    ArmorColor = Rgb(235, 185, 55),
+                    VisorColor = Rgb(115, 255, 195)
+                });
         }
 
         private static bool ColorClose(Color a, Color b, int tol = 42)
@@ -1625,6 +3506,82 @@ namespace RiskOfCSharp2.Models
                     new Entity(parent: foxSpirit, model: "diamond", scale: new(0.18f, 0.18f, 0.36f), position: new(0, 0.06f, -0.24f), color: Rgb(255, 155, 215), unlit: true);
                     parts.Tails.Add(foxSpirit);
                     break;
+
+                case "gold_ship":
+                    // Легенда Гран-При G1: золотая корона Чемпиона, капитанский плащ и золотой якорь за спиной!
+                    if (head != null)
+                        new Entity(parent: head, model: "diamond", scale: new(0.38f, 0.28f, 0.38f), position: new(0, 0.44f, 0.02f), color: Color.Gold, unlit: true);
+                    var gAnchor = new Entity(parent: torso, position: new(0, 0.18f, -0.34f));
+                    new Entity(parent: gAnchor, model: "cube", scale: new(0.14f, 0.95f, 0.14f), color: Color.Gold, unlit: true);
+                    new Entity(parent: gAnchor, model: "diamond", scale: new(0.85f, 0.26f, 0.16f), position: new(0, -0.38f, 0), color: Color.Gold, unlit: true);
+                    break;
+
+                case "pushnoy":
+                    // Повелитель Молний Теслы: ранец с катушкой Теслы за спиной и неоновые очки!
+                    if (head != null)
+                        new Entity(parent: head, model: "cube", scale: new(0.52f, 0.12f, 0.14f), position: new(0, 0.06f, 0.27f), color: skin.VisorColor, unlit: true);
+                    var teslaPack = new Entity(parent: torso, position: new(0, 0.28f, -0.32f));
+                    new Entity(parent: teslaPack, model: "cube", scale: new(0.36f, 0.56f, 0.24f), color: Rgb(50, 56, 70));
+                    new Entity(parent: teslaPack, model: "sphere", scaleUniform: 0.34f, position: new(0, 0.44f, 0), color: skin.VisorColor, unlit: true);
+                    break;
+
+                case "freddy":
+                    // Глэмрок Фредди: панк-наплечники со шипами и неоновые очки-звёзды!
+                    if (head != null)
+                        new Entity(parent: head, model: "diamond", scale: new(0.62f, 0.18f, 0.14f), position: new(0, 0.10f, 0.34f), color: skin.VisorColor, unlit: true);
+                    foreach (int s in new[] { -1, 1 })
+                        new Entity(parent: torso, model: "diamond", scale: new(0.38f, 0.26f, 0.38f), position: new(s * 0.52f, 0.38f, 0), color: Rgb(235, 45, 75), unlit: true);
+                    break;
+
+                case "steve":
+                    // Незеритовый Лорд и Херобрин: крылья Элитры за спиной и золотая корона!
+                    if (head != null)
+                        new Entity(parent: head, model: "cube", scale: new(0.56f, 0.16f, 0.56f), position: new(0, 0.34f, 0), color: Color.Gold, unlit: true);
+                    foreach (int s in new[] { -1, 1 })
+                        new Entity(parent: torso, model: "diamond", scale: new(0.52f, 1.05f, 0.10f), position: new(s * 0.28f, -0.05f, -0.26f), rotation: new(12, 0, s * 18f), color: Rgb(95, 85, 115));
+                    break;
+
+                case "jotaro":
+                    // Star Platinum Over Heaven: золотой ореол над Стендом и золотые наплечники
+                    if (parts.ShieldAura != null)
+                        new Entity(parent: parts.ShieldAura, model: "diamond", scale: new(0.75f, 0.12f, 0.75f), position: new(0, 0.95f, 0), color: Color.Gold, unlit: true);
+                    break;
+
+                case "vyper":
+                    // Золотая Королевская Кобра: раскрытый золотой капюшон кобры за головой!
+                    if (head != null)
+                        new Entity(parent: head, model: "diamond", scale: new(0.88f, 0.68f, 0.14f), position: new(0, 0.08f, -0.14f), color: Color.Gold, unlit: true);
+                    break;
+
+                case "haze":
+                    // Архонт Вечных Снов: парящий золотой нимб часов за спиной
+                    var dreamHalo = new Entity(parent: torso, model: "diamond", scale: new(1.25f, 1.25f, 0.08f), position: new(0, 0.42f, -0.32f), color: Color.Gold, unlit: true);
+                    parts.Halo = dreamHalo;
+                    break;
+
+                case "sanabi":
+                    // Высший Генерал Чосона: золотой кибер-ореол над плечами, парадные эполеты и серафим-крылья у дрона Мари
+                    if (head != null)
+                        new Entity(parent: head, model: "diamond", scale: new(0.54f, 0.22f, 0.14f), position: new(0, 0.34f, 0.22f), color: Color.Gold, unlit: true);
+                    foreach (int s in new[] { -1, 1 })
+                        new Entity(parent: torso, model: "diamond", scale: new(0.46f, 0.18f, 0.36f), position: new(s * 0.44f, 0.38f, 0), color: Color.Gold, unlit: true);
+                    if (parts.ShieldAura != null)
+                    {
+                        foreach (int s in new[] { -1, 1 })
+                            new Entity(parent: parts.ShieldAura, model: "diamond", scale: new(0.65f, 0.16f, 0.10f), position: new(s * 0.38f, 0.12f, -0.08f), rotation: new(0, 0, s * 28f), color: Color.Gold, unlit: true);
+                    }
+                    break;
+
+                case "jack_o":
+                    // Крылья Арии и Задворков: световые крылья серафима Задворков за спиной и золотая диадема!
+                    if (head != null)
+                        new Entity(parent: head, model: "diamond", scale: new(0.46f, 0.24f, 0.14f), position: new(0, 0.38f, 0.18f), color: Color.Gold, unlit: true);
+                    foreach (int s in new[] { -1, 1 })
+                    {
+                        new Entity(parent: torso, model: "diamond", scale: new(1.22f, 0.24f, 0.10f), position: new(s * 0.68f, 0.36f, -0.28f), rotation: new(0, s * -12f, s * 26f), color: Color.Gold, unlit: true);
+                        new Entity(parent: torso, model: "diamond", scale: new(0.96f, 0.18f, 0.10f), position: new(s * 0.58f, 0.06f, -0.28f), rotation: new(0, s * -12f, s * -18f), color: skin.VisorColor, unlit: true);
+                    }
+                    break;
             }
         }
 
@@ -1656,7 +3613,7 @@ namespace RiskOfCSharp2.Models
                 case "huntress": BuildHuntress(root, cfg, parts); break;
                 case "buzz": BuildBuzz(root, cfg, parts); break;
                 case "v1": BuildV1(root, cfg, parts); break;
-                case "sol": BuildSol(root, cfg, parts); break;
+                case "sol": BuildSol(root, cfg, parts, skinIdx); break;
                 case "gwen": BuildGwen(root, cfg, parts); break;
                 case "enforcer": BuildEnforcer(root, cfg, parts); break;
                 case "scout": BuildScout(root, cfg, parts); break;
@@ -1671,6 +3628,18 @@ namespace RiskOfCSharp2.Models
                 case "dante": BuildDante(root, cfg, parts); break;
                 case "cheburashka": BuildCheburashka(root, cfg, parts); break;
                 case "ahri": BuildAhri(root, cfg, parts); break;
+                case "lappland": BuildLappland(root, cfg, parts, skinIdx); break;
+                case "w_arknights": BuildWArknights(root, cfg, parts, skinIdx); break;
+                case "gold_ship": BuildGoldShip(root, cfg, parts); break;
+                case "pushnoy": BuildPushnoy(root, cfg, parts); break;
+                case "freddy": BuildFreddy(root, cfg, parts); break;
+                case "steve": BuildSteve(root, cfg, parts); break;
+                case "jotaro": BuildJotaro(root, cfg, parts, skinIdx); break;
+                case "vyper": BuildVyper(root, cfg, parts); break;
+                case "haze": BuildHaze(root, cfg, parts); break;
+                case "dmc_trio": BuildDmcTrio(root, cfg, parts, skinIdx); break;
+                case "sanabi": BuildSanabi(root, cfg, parts, skinIdx); break;
+                case "jack_o": BuildJackO(root, cfg, parts, skinIdx); break;
                 default: BuildCommando(root, cfg, parts); break;
             }
 
@@ -1678,9 +3647,9 @@ namespace RiskOfCSharp2.Models
             cfg.ArmorColor = savedArmor;
             cfg.VisorColor = savedVisor;
 
-            if (skinIdx > 0)
+            if (skinIdx > 0 && charKey is not ("lappland" or "w_arknights" or "dmc_trio") && !(charKey == "sol" && skinIdx == 2))
                 ApplySkinColorRemap(root, cfg, skin);
-            if (skin.ChangesModel)
+            if (skin.ChangesModel && !(charKey == "sol" && skinIdx == 2))
                 ApplyMasterySkinGeometry(charKey, root, parts, skin);
 
             parts.CaptureBindPose();
@@ -2192,10 +4161,117 @@ namespace RiskOfCSharp2.Models
         }
 
         // ==========================================
-        // 6. SOL BADGUY (Guilty Gear)
+        // 6. SOL BADGUY / KY KISKE [АЛЬТ. ВЕРСИЯ] (Guilty Gear)
         // ==========================================
-        private static void BuildSol(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        private static void BuildSol(Entity root, SurvivorConfig cfg, SurvivorParts parts, int skinIdx = 0)
         {
+            if (skinIdx == 2)
+            {
+                // =========================================================================
+                // КАЙ КИСКЕ (ПЕРВЫЙ КОРОЛЬ ИЛЛИРИИ) — АЛЬТЕРНАТИВНАЯ 3D-ВЕРСИЯ СОЛА!
+                // Бело-лазурный королевский редингот Святого Ордена с золотыми эполетами,
+                // светлые золотистые волосы с хвостиком, крестообразный меч Thunderseal
+                // и форма Dragon Install: Весы Юноны (крыло молнии + лазурный глаз Гира)!
+                // =========================================================================
+                parts.IsKyKiske = true;
+                Color kySkin = Rgb(250, 224, 204);
+                Color kyWhite = Rgb(242, 245, 255);
+                Color kyBlue = Rgb(38, 102, 218);
+                Color kyDark = Rgb(24, 30, 46);
+                Color kyGold = Rgb(248, 204, 68);
+                Color kyBlonde = Rgb(248, 218, 95);
+                Color kyCyan = Rgb(95, 238, 255);
+
+                var kyLHip = new Entity(parent: root, position: new(-0.20f, 0.86f, 0));
+                var kyRHip = new Entity(parent: root, position: new(0.20f, 0.86f, 0));
+                foreach (var (side, hip) in new[] { (-1, kyLHip), (1, kyRHip) })
+                {
+                    new Entity(parent: hip, model: "cube", scale: new(0.21f, 0.44f, 0.23f), position: new(0, -0.20f, 0), color: kyDark);
+                    new Entity(parent: hip, model: "diamond", scale: new(0.25f, 0.24f, 0.26f), position: new(0, -0.42f, 0.05f), color: kyGold);
+                    new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.42f, 0.22f), position: new(0, -0.62f, 0), color: kyWhite);
+                    new Entity(parent: hip, model: "cube", scale: new(0.06f, 0.38f, 0.23f), position: new(side * 0.09f, -0.62f, 0), color: kyBlue);
+                    new Entity(parent: hip, model: "cube", scale: new(0.22f, 0.16f, 0.40f), position: new(0, -0.80f, 0.06f), color: kyWhite);
+                    new Entity(parent: hip, model: "diamond", scale: new(0.20f, 0.10f, 0.16f), position: new(0, -0.80f, 0.22f), color: kyGold);
+                }
+                parts.LeftLeg = kyLHip;
+                parts.RightLeg = kyRHip;
+
+                var kyTorso = new Entity(parent: root, position: new(0, 1.26f, 0));
+                // Королевский пояс с золотым крестом Ордена
+                new Entity(parent: kyTorso, model: "cube", scale: new(0.58f, 0.18f, 0.38f), position: new(0, -0.32f, 0), color: kyBlue);
+                new Entity(parent: kyTorso, model: "diamond", scale: new(0.22f, 0.26f, 0.42f), position: new(0, -0.32f, 0.02f), color: kyGold, unlit: true);
+                // Бело-синий мундир Иллирии с золотыми перевязями
+                new Entity(parent: kyTorso, model: "cube", scale: new(0.58f, 0.62f, 0.38f), position: new(0, 0.06f, 0), color: kyWhite);
+                new Entity(parent: kyTorso, model: "cube", scale: new(0.28f, 0.58f, 0.40f), position: new(0, 0.06f, 0.02f), color: kyDark);
+                new Entity(parent: kyTorso, model: "diamond", scale: new(0.18f, 0.42f, 0.42f), position: new(0, 0.10f, 0.03f), color: kyCyan, unlit: true);
+                new Entity(parent: kyTorso, model: "cube", scale: new(0.56f, 0.22f, 0.42f), position: new(0, 0.38f, -0.02f), color: kyBlue);
+                new Entity(parent: kyTorso, model: "cube", scale: new(0.58f, 0.05f, 0.44f), position: new(0, 0.48f, -0.02f), color: kyGold, unlit: true);
+
+                // Длинные развевающиеся полы рыцарского редингота и плащ Короля Иллирии
+                foreach (int s in new[] { -1, 1 })
+                {
+                    var coatFlap = new Entity(parent: kyTorso, position: new(s * 0.22f, -0.28f, -0.14f), rotation: new(14f, s * 6f, s * -6f));
+                    new Entity(parent: coatFlap, model: "diamond", scale: new(0.42f, 0.96f, 0.16f), position: new(0, -0.36f, -0.06f), color: kyWhite);
+                    new Entity(parent: coatFlap, model: "diamond", scale: new(0.44f, 0.18f, 0.18f), position: new(0, -0.74f, -0.06f), color: kyBlue);
+                    new Entity(parent: coatFlap, model: "cube", scale: new(0.32f, 0.05f, 0.18f), position: new(0, -0.66f, -0.06f), color: kyGold, unlit: true);
+                    parts.Tails.Add(coatFlap);
+                }
+
+                // Голова Кая Киске со светлыми золотистыми волосами и хвостиком
+                var kyHead = new Entity(parent: kyTorso, position: new(0, 0.60f, 0));
+                new Entity(parent: kyHead, model: "sphere", scale: new(0.46f, 0.49f, 0.46f), color: kySkin);
+                new Entity(parent: kyHead, model: "sphere", scale: new(0.54f, 0.44f, 0.54f), position: new(0, 0.13f, -0.02f), color: kyBlonde);
+                foreach (float bx in new[] { -0.15f, 0f, 0.15f })
+                    new Entity(parent: kyHead, model: "diamond", scale: new(0.18f, 0.28f, 0.16f), position: new(bx, 0.16f, 0.22f), rotation: new(-14f, 0, bx * -24f), color: kyBlonde);
+                foreach (int s in new[] { -1, 1 })
+                    new Entity(parent: kyHead, model: "sphere", scaleUniform: 0.09f, position: new(s * 0.11f, 0.04f, 0.22f), color: kyCyan, unlit: true);
+                var ponytail = new Entity(parent: kyHead, position: new(0, -0.02f, -0.24f), rotation: new(22f, 0, 0));
+                new Entity(parent: ponytail, model: "diamond", scale: new(0.24f, 0.64f, 0.22f), position: new(0, -0.22f, -0.10f), color: kyBlonde);
+                new Entity(parent: ponytail, model: "cube", scale: new(0.16f, 0.06f, 0.16f), position: new(0, -0.02f, -0.04f), color: kyBlue);
+                parts.Tails.Add(ponytail);
+
+                // Элементы Dragon Install Кая Киске (Весы Юноны): сияющее левое крыло молнии, корона грома и пылающий глаз Гира!
+                var kyDiNode = new Entity(parent: kyTorso, enabled: false);
+                new Entity(parent: kyDiNode, model: "diamond", scale: new(0.48f, 0.26f, 0.14f), position: new(0, 0.94f, 0.18f), color: kyGold, unlit: true);
+                new Entity(parent: kyDiNode, model: "sphere", scaleUniform: 0.15f, position: new(-0.12f, 0.64f, 0.25f), color: Color.Gold, unlit: true);
+                foreach (float ang in new[] { 46f, 20f, -6f, -32f })
+                {
+                    var wingBolt = new Entity(parent: kyDiNode, position: new(-0.34f, 0.26f, -0.24f), rotation: new(0, 14f, ang));
+                    new Entity(parent: wingBolt, model: "diamond", scale: new(1.45f, 0.18f, 0.10f), position: new(-0.72f, 0, 0), color: kyCyan, unlit: true);
+                    new Entity(parent: wingBolt, model: "diamond", scale: new(0.95f, 0.10f, 0.12f), position: new(-0.56f, 0, 0), color: kyGold, unlit: true);
+                }
+                parts.UltFormNodes.Add(kyDiNode);
+
+                parts.Head = kyHead;
+                parts.Torso = kyTorso;
+
+                var kyLSh = new Entity(parent: kyTorso, position: new(-0.46f, 0.25f, 0));
+                var kyRSh = new Entity(parent: kyTorso, position: new(0.46f, 0.25f, 0));
+                foreach (var (side, sh) in new[] { (-1, kyLSh), (1, kyRSh) })
+                {
+                    // Золотые эполеты Святого Ордена
+                    new Entity(parent: sh, model: "diamond", scale: new(0.40f, 0.28f, 0.38f), position: new(0, 0.10f, 0), color: kyBlue);
+                    new Entity(parent: sh, model: "diamond", scale: new(0.44f, 0.12f, 0.42f), position: new(0, 0.14f, 0), color: kyGold, unlit: true);
+                    new Entity(parent: sh, model: "cube", scale: new(0.18f, 0.28f, 0.18f), position: new(0, -0.15f, 0.02f), color: kyWhite);
+                    new Entity(parent: sh, model: "sphere", scaleUniform: 0.16f, position: new(0, -0.29f, 0.02f), color: kyBlue);
+                    new Entity(parent: sh, model: "cube", scale: new(0.17f, 0.17f, 0.36f), position: new(0, -0.29f, 0.22f), color: kyWhite);
+                    new Entity(parent: sh, model: "cube", scale: new(0.16f, 0.16f, 0.15f), position: new(0, -0.29f, 0.41f), color: kyBlue);
+                }
+
+                // Правая рука: Священный Меч-Реликвия «Thunderseal» (Громовая Печать / Magnolia Éclair)
+                var thunderSword = new Entity(parent: kyRSh, position: new(0, -0.28f, 0.44f), rotation: new(12f, 0, 0));
+                // Широкая золотая крестовина с бирюзовым кристаллом Грома
+                new Entity(parent: thunderSword, model: "diamond", scale: new(0.48f, 0.12f, 0.20f), position: new(0, 0, 0.10f), color: kyGold, unlit: true);
+                new Entity(parent: thunderSword, model: "sphere", scaleUniform: 0.15f, position: new(0, 0, 0.10f), color: kyCyan, unlit: true);
+                // Изящный серебряно-лазурный клинок с продольным энергетическим желобом
+                new Entity(parent: thunderSword, model: "diamond", scale: new(0.10f, 0.18f, 1.72f), position: new(0, 0, 0.94f), color: kyWhite);
+                new Entity(parent: thunderSword, model: "diamond", scale: new(0.12f, 0.07f, 1.62f), position: new(0, 0, 0.90f), color: kyCyan, unlit: true);
+
+                parts.LeftArm = kyLSh;
+                parts.RightArm = kyRSh;
+                return;
+            }
+
             Color diCrimson = Rgb(125, 22, 36);
             Color diGlow = Rgb(255, 175, 65);
             Color diFlame = Rgb(255, 245, 165);
@@ -3499,6 +5575,1022 @@ namespace RiskOfCSharp2.Models
             new Entity(parent: orb, model: "sphere", scaleUniform: 0.24f, color: Color.White, unlit: true);
             new Entity(parent: orb, model: "diamond", scale: new(0.56f, 0.12f, 0.56f), rotation: new(22f, 0, 22f), color: Rgb(165, 240, 255), unlit: true);
             new Entity(parent: orb, model: "diamond", scale: new(0.56f, 0.12f, 0.56f), rotation: new(-22f, 45f, -22f), color: Rgb(115, 195, 255), unlit: true);
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 21. ЛАППЛАНД / ЛАППЛАНД ДЕКАДЕНЦА (ARKNIGHTS)
+        // ==========================================
+        private static void BuildLappland(Entity root, SurvivorConfig cfg, SurvivorParts parts, int skinIdx)
+        {
+            bool isDecadenza = skinIdx == 2;
+            Color skinTone = Rgb(250, 232, 222);
+            Color hairSilver = Rgb(238, 242, 250);
+            Color coatCol = isDecadenza ? Rgb(26, 24, 36) : (skinIdx == 1 ? Rgb(175, 32, 46) : Rgb(32, 34, 44));
+            Color trimCol = isDecadenza ? Rgb(235, 190, 65) : cfg.VisorColor;
+            Color bladeCol = isDecadenza ? Rgb(245, 205, 80) : Rgb(235, 242, 255);
+
+            var lHip = new Entity(parent: root, position: new(-0.19f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.19f, 0.86f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.18f, 0.42f, 0.20f), position: new(0, -0.20f, 0), color: Rgb(28, 30, 38));
+                new Entity(parent: hip, model: "cube", scale: new(0.17f, 0.42f, 0.19f), position: new(0, -0.60f, 0), color: Rgb(24, 26, 34));
+                new Entity(parent: hip, model: "cube", scale: new(0.19f, 0.05f, 0.21f), position: new(0, -0.44f, 0), color: trimCol, unlit: true);
+                new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.15f, 0.36f), position: new(0, -0.80f, 0.05f), color: coatCol);
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.50f, 0.58f, 0.34f), position: new(0, 0.06f, 0), color: coatCol);
+            new Entity(parent: torso, model: "diamond", scale: new(0.32f, 0.50f, 0.36f), position: new(0, 0.10f, 0.02f), color: hairSilver);
+            new Entity(parent: torso, model: "cube", scale: new(0.54f, 0.10f, 0.38f), position: new(0, -0.24f, 0), color: trimCol);
+
+            // Плащ Сиракуз и пушистый волчий хвост Лупо
+            new Entity(parent: torso, model: "diamond", scale: new(0.76f, 0.96f, 0.22f), position: new(0, -0.38f, -0.18f), rotation: new(14, 0, 0), color: coatCol);
+            var wolfTail = new Entity(parent: torso, position: new(0, -0.26f, -0.22f), rotation: new(-28, 0, 0));
+            new Entity(parent: wolfTail, model: "diamond", scale: new(0.30f, 0.30f, 0.88f), position: new(0, 0, -0.38f), color: hairSilver);
+            new Entity(parent: wolfTail, model: "diamond", scale: new(0.22f, 0.22f, 0.42f), position: new(0, 0.04f, -0.68f), color: coatCol);
+            parts.Tails.Add(wolfTail);
+
+            var head = new Entity(parent: torso, position: new(0, 0.58f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.46f, 0.48f, 0.46f), color: skinTone);
+            new Entity(parent: head, model: "sphere", scale: new(0.52f, 0.42f, 0.52f), position: new(0, 0.10f, -0.04f), color: hairSilver);
+            new Entity(parent: head, model: "diamond", scale: new(0.44f, 0.85f, 0.28f), position: new(0, -0.24f, -0.22f), rotation: new(14, 0, 0), color: hairSilver);
+            foreach (int s in new[] { -1, 1 })
+            {
+                // Серебристые волчьи ушки Лупо
+                var ear = new Entity(parent: head, position: new(s * 0.18f, 0.34f, 0.02f), rotation: new(-6, 0, s * -16f));
+                new Entity(parent: ear, model: "diamond", scale: new(0.20f, 0.42f, 0.16f), position: new(0, 0.12f, 0), color: hairSilver);
+                new Entity(parent: ear, model: "diamond", scale: new(0.12f, 0.26f, 0.12f), position: new(0, 0.10f, 0.03f), color: coatCol);
+                new Entity(parent: head, model: "sphere", scale: new(0.10f, 0.09f, 0.06f), position: new(s * 0.11f, 0.04f, 0.21f), color: Rgb(235, 225, 240), unlit: true);
+            }
+
+            if (isDecadenza)
+            {
+                // Лаппланд Декаденца: карнавальная шляпа Сиракуз с золотым пером и 2 парящих Призрачных Волка (Signori dei Lupi)!
+                new Entity(parent: head, model: "diamond", scale: new(0.86f, 0.12f, 0.86f), position: new(0, 0.32f, 0), rotation: new(-8, 0, 8), color: coatCol);
+                new Entity(parent: head, model: "diamond", scale: new(0.18f, 0.54f, 0.14f), position: new(0.26f, 0.52f, -0.06f), rotation: new(0, 0, -24f), color: trimCol, unlit: true);
+
+                foreach (int s in new[] { -1, 1 })
+                {
+                    var lupoSpirit = new Entity(parent: torso, position: new(s * 0.78f, 0.62f, -0.18f));
+                    new Entity(parent: lupoSpirit, model: "diamond", scale: new(0.32f, 0.28f, 0.58f), color: Rgb(175, 95, 255), unlit: true);
+                    new Entity(parent: lupoSpirit, model: "diamond", scale: new(0.22f, 0.34f, 0.24f), position: new(0, 0.16f, 0.12f), color: trimCol, unlit: true);
+                    foreach (int es in new[] { -1, 1 })
+                        new Entity(parent: lupoSpirit, model: "sphere", scaleUniform: 0.07f, position: new(es * 0.09f, 0.05f, 0.24f), color: Color.Gold, unlit: true);
+                    parts.Tails.Add(lupoSpirit);
+                }
+            }
+
+            parts.Head = head;
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.42f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.42f, 0.24f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "diamond", scale: new(0.34f, 0.32f, 0.34f), position: new(0, 0.06f, 0), color: coatCol);
+                new Entity(parent: sh, model: "cube", scale: new(0.15f, 0.26f, 0.15f), position: new(0, -0.15f, 0), color: coatCol);
+                new Entity(parent: sh, model: "cube", scale: new(0.14f, 0.14f, 0.34f), position: new(0, -0.28f, 0.20f), color: skinTone);
+
+                // Изящный меч Сиракуз в каждой руке
+                var sword = new Entity(parent: sh, position: new(0, -0.28f, 0.42f));
+                new Entity(parent: sword, model: "diamond", scale: new(0.28f, 0.08f, 0.18f), color: trimCol, unlit: true);
+                new Entity(parent: sword, model: "diamond", scale: new(0.06f, 0.12f, 0.95f), position: new(0, 0, 0.52f), color: bladeCol, unlit: true);
+            }
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 22. W / ВИШАДЕЛЬ (ARKNIGHTS)
+        // ==========================================
+        private static void BuildWArknights(Entity root, SurvivorConfig cfg, SurvivorParts parts, int skinIdx)
+        {
+            bool isWisadel = skinIdx == 2;
+            Color skinTone = Rgb(250, 232, 224);
+            Color hairAsh = Rgb(218, 214, 222);
+            Color redAcc = Rgb(225, 38, 54);
+            Color darkCoat = isWisadel ? Rgb(195, 32, 46) : (skinIdx == 1 ? Rgb(235, 232, 240) : Rgb(34, 34, 42));
+
+            var lHip = new Entity(parent: root, position: new(-0.19f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.19f, 0.86f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.18f, 0.42f, 0.20f), position: new(0, -0.20f, 0), color: Rgb(32, 32, 40));
+                new Entity(parent: hip, model: "cube", scale: new(0.17f, 0.42f, 0.19f), position: new(0, -0.60f, 0), color: Rgb(24, 24, 30));
+                new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.16f, 0.36f), position: new(0, -0.80f, 0.05f), color: redAcc);
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.50f, 0.58f, 0.34f), position: new(0, 0.06f, 0), color: darkCoat);
+            new Entity(parent: torso, model: "cube", scale: new(0.52f, 0.10f, 0.36f), position: new(0, -0.22f, 0), color: redAcc);
+            // Тонкий хвост Сарказа
+            var sarkazTail = new Entity(parent: torso, position: new(0, -0.28f, -0.20f), rotation: new(-20, 0, 0));
+            new Entity(parent: sarkazTail, model: "cube", scale: new(0.06f, 0.06f, 0.78f), position: new(0, 0, -0.36f), color: Rgb(28, 26, 34));
+            new Entity(parent: sarkazTail, model: "diamond", scale: new(0.18f, 0.08f, 0.24f), position: new(0, 0, -0.78f), color: redAcc, unlit: true);
+            parts.Tails.Add(sarkazTail);
+
+            var head = new Entity(parent: torso, position: new(0, 0.58f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.46f, 0.48f, 0.46f), color: skinTone);
+            new Entity(parent: head, model: "sphere", scale: new(0.52f, 0.42f, 0.52f), position: new(0, 0.10f, -0.04f), color: hairAsh);
+            new Entity(parent: head, model: "diamond", scale: new(0.42f, 0.82f, 0.28f), position: new(0, -0.22f, -0.22f), rotation: new(14, 0, 0), color: hairAsh);
+            foreach (int s in new[] { -1, 1 })
+            {
+                // Рога Сарказа с багровыми кончиками
+                var horn = new Entity(parent: head, position: new(s * 0.18f, 0.34f, 0.04f), rotation: new(16, 0, s * -22f));
+                new Entity(parent: horn, model: "diamond", scale: new(0.10f, 0.42f, 0.10f), position: new(0, 0.14f, 0), color: Rgb(28, 26, 34));
+                new Entity(parent: horn, model: "diamond", scale: new(0.08f, 0.18f, 0.08f), position: new(0, 0.32f, 0), color: redAcc, unlit: true);
+                new Entity(parent: head, model: "sphere", scale: new(0.10f, 0.09f, 0.06f), position: new(s * 0.11f, 0.04f, 0.21f), color: redAcc, unlit: true);
+            }
+
+            if (isWisadel)
+            {
+                // Вишадель (Wiš'adel): корона Каздела и 2 парящих артиллерийских пилона «Тень Восставших» за спиной!
+                new Entity(parent: head, model: "diamond", scale: new(0.38f, 0.22f, 0.14f), position: new(0, 0.38f, 0.16f), color: Color.Gold, unlit: true);
+                foreach (int s in new[] { -1, 1 })
+                {
+                    var pylon = new Entity(parent: torso, position: new(s * 0.76f, 0.46f, -0.28f), rotation: new(0, 0, s * -14f));
+                    new Entity(parent: pylon, model: "diamond", scale: new(0.28f, 1.15f, 0.28f), color: Rgb(36, 32, 44));
+                    new Entity(parent: pylon, model: "diamond", scale: new(0.34f, 0.42f, 0.34f), position: new(0, 0.12f, 0), color: redAcc, unlit: true);
+                    new Entity(parent: pylon, model: "sphere", scaleUniform: 0.18f, position: new(0, 0.46f, 0), color: Color.Gold, unlit: true);
+                    parts.Tails.Add(pylon);
+                }
+            }
+
+            parts.Head = head;
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.42f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.42f, 0.24f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "cube", scale: new(0.16f, 0.28f, 0.16f), position: new(0, -0.14f, 0), color: darkCoat);
+                new Entity(parent: sh, model: "cube", scale: new(0.14f, 0.14f, 0.34f), position: new(0, -0.28f, 0.20f), color: skinTone);
+            }
+            // В левой руке — Детонатор D12
+            var det = new Entity(parent: lShoulder, position: new(0, -0.24f, 0.40f));
+            new Entity(parent: det, model: "cube", scale: new(0.12f, 0.20f, 0.10f), color: Rgb(38, 38, 46));
+            new Entity(parent: det, model: "sphere", scaleUniform: 0.09f, position: new(0, 0.12f, 0), color: redAcc, unlit: true);
+
+            // В правой руке — Гранатомёт / Орудие Предков Вишадель
+            var launcher = new Entity(parent: rShoulder, position: new(0, -0.28f, 0.46f));
+            new Entity(parent: launcher, model: "cube", scale: new(0.22f, 0.24f, 0.78f), position: new(0, 0.04f, 0.18f), color: isWisadel ? redAcc : Rgb(48, 50, 60));
+            new Entity(parent: launcher, model: "sphere", scaleUniform: 0.18f, position: new(0, 0.04f, 0.58f), color: Color.Gold, unlit: true);
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 23. ГОЛД ШИП (UMAMUSUME: PRETTY DERBY)
+        // ==========================================
+        private static void BuildGoldShip(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        {
+            Color skinTone = Rgb(252, 232, 220);
+            Color hairSilver = Rgb(220, 225, 238);
+            Color coatRed = cfg.BodyColor;
+            Color whiteTrim = cfg.ArmorColor;
+            Color goldCol = cfg.VisorColor;
+
+            var lHip = new Entity(parent: root, position: new(-0.20f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.20f, 0.86f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.19f, 0.42f, 0.20f), position: new(0, -0.20f, 0), color: whiteTrim);
+                new Entity(parent: hip, model: "cube", scale: new(0.18f, 0.42f, 0.19f), position: new(0, -0.60f, 0), color: coatRed);
+                new Entity(parent: hip, model: "cube", scale: new(0.21f, 0.16f, 0.38f), position: new(0, -0.80f, 0.06f), color: Rgb(42, 34, 38));
+                new Entity(parent: hip, model: "cube", scale: new(0.22f, 0.05f, 0.40f), position: new(0, -0.86f, 0.06f), color: goldCol, unlit: true);
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.52f, 0.60f, 0.36f), position: new(0, 0.06f, 0), color: coatRed);
+            new Entity(parent: torso, model: "cube", scale: new(0.26f, 0.56f, 0.38f), position: new(0, 0.06f, 0.02f), color: whiteTrim);
+            // Золотые пуговицы мундира и ремни
+            foreach (float py in new[] { -0.08f, 0.08f, 0.24f })
+                foreach (float px in new[] { -0.14f, 0.14f })
+                    new Entity(parent: torso, model: "sphere", scaleUniform: 0.07f, position: new(px, py, 0.20f), color: goldCol, unlit: true);
+
+            // Длинный серебристый конский хвост
+            var horseTail = new Entity(parent: torso, position: new(0, -0.24f, -0.20f), rotation: new(-24, 0, 0));
+            new Entity(parent: horseTail, model: "diamond", scale: new(0.28f, 0.28f, 0.92f), position: new(0, 0, -0.40f), color: hairSilver);
+            parts.Tails.Add(horseTail);
+
+            var head = new Entity(parent: torso, position: new(0, 0.58f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.46f, 0.48f, 0.46f), color: skinTone);
+            new Entity(parent: head, model: "sphere", scale: new(0.52f, 0.42f, 0.52f), position: new(0, 0.10f, -0.04f), color: hairSilver);
+            new Entity(parent: head, model: "diamond", scale: new(0.48f, 0.92f, 0.28f), position: new(0, -0.26f, -0.22f), rotation: new(14, 0, 0), color: hairSilver);
+            // Фирменный красно-золотой головной убор-ободок Голд Шип и лошадиные ушки!
+            new Entity(parent: head, model: "cube", scale: new(0.56f, 0.14f, 0.48f), position: new(0, 0.20f, 0.02f), color: coatRed);
+            new Entity(parent: head, model: "cube", scale: new(0.58f, 0.05f, 0.50f), position: new(0, 0.20f, 0.02f), color: goldCol, unlit: true);
+            foreach (int s in new[] { -1, 1 })
+            {
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.14f, position: new(s * 0.28f, 0.16f, 0.04f), color: goldCol, unlit: true);
+                var uEar = new Entity(parent: head, position: new(s * 0.16f, 0.36f, 0.02f), rotation: new(-4, 0, s * -12f));
+                new Entity(parent: uEar, model: "diamond", scale: new(0.14f, 0.38f, 0.14f), position: new(0, 0.12f, 0), color: hairSilver);
+                new Entity(parent: head, model: "sphere", scale: new(0.10f, 0.09f, 0.06f), position: new(s * 0.11f, 0.04f, 0.21f), color: goldCol, unlit: true);
+            }
+            parts.Head = head;
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.42f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.42f, 0.24f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "diamond", scale: new(0.32f, 0.28f, 0.32f), position: new(0, 0.06f, 0), color: goldCol);
+                new Entity(parent: sh, model: "cube", scale: new(0.16f, 0.28f, 0.16f), position: new(0, -0.15f, 0), color: coatRed);
+                new Entity(parent: sh, model: "cube", scale: new(0.15f, 0.15f, 0.34f), position: new(0, -0.28f, 0.20f), color: whiteTrim);
+            }
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 24. АЛЕКСАНДР ПУШНОЙ (ГАЛИЛЕО)
+        // ==========================================
+        private static void BuildPushnoy(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        {
+            Color skinTone = Rgb(245, 215, 192);
+            Color hairBrown = Rgb(78, 52, 34);
+            Color galileoOrange = cfg.BodyColor;
+            Color jacketCol = cfg.ArmorColor;
+
+            var lHip = new Entity(parent: root, position: new(-0.20f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.20f, 0.86f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.21f, 0.42f, 0.22f), position: new(0, -0.20f, 0), color: Rgb(48, 62, 92));
+                new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.42f, 0.21f), position: new(0, -0.60f, 0), color: Rgb(42, 54, 82));
+                new Entity(parent: hip, model: "cube", scale: new(0.22f, 0.15f, 0.38f), position: new(0, -0.80f, 0.06f), color: Rgb(32, 34, 40));
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.58f, 0.60f, 0.38f), position: new(0, 0.06f, 0), color: jacketCol);
+            new Entity(parent: torso, model: "cube", scale: new(0.34f, 0.56f, 0.40f), position: new(0, 0.06f, 0.02f), color: galileoOrange);
+            // Светящаяся эмблема атома «Галилео» на груди и колба с жидким азотом на поясе
+            new Entity(parent: torso, model: "diamond", scale: new(0.26f, 0.26f, 0.08f), position: new(0, 0.14f, 0.22f), color: cfg.VisorColor, unlit: true);
+            new Entity(parent: torso, model: "sphere", scaleUniform: 0.20f, position: new(-0.32f, -0.22f, 0.16f), color: Rgb(95, 240, 255), unlit: true);
+
+            // Огнетушитель за спиной для реактивных рывков
+            var ext = new Entity(parent: torso, position: new(0, 0.08f, -0.28f));
+            new Entity(parent: ext, model: "cube", scale: new(0.24f, 0.52f, 0.24f), color: Rgb(215, 38, 42));
+
+            var head = new Entity(parent: torso, position: new(0, 0.58f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.48f, 0.50f, 0.48f), color: skinTone);
+            // Фирменная пышная шевелюра и бородка Александра Пушного!
+            new Entity(parent: head, model: "sphere", scale: new(0.58f, 0.46f, 0.56f), position: new(0, 0.12f, -0.04f), color: hairBrown);
+            foreach (int s in new[] { -1, 1 })
+            {
+                new Entity(parent: head, model: "diamond", scale: new(0.22f, 0.56f, 0.26f), position: new(s * 0.26f, -0.06f, -0.04f), color: hairBrown);
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.08f, position: new(s * 0.11f, 0.05f, 0.22f), color: Color.White, unlit: true);
+            }
+            new Entity(parent: head, model: "cube", scale: new(0.26f, 0.14f, 0.16f), position: new(0, -0.16f, 0.20f), color: hairBrown);
+            parts.Head = head;
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.44f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.44f, 0.24f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "cube", scale: new(0.18f, 0.28f, 0.18f), position: new(0, -0.15f, 0), color: jacketCol);
+                new Entity(parent: sh, model: "cube", scale: new(0.16f, 0.16f, 0.34f), position: new(0, -0.28f, 0.20f), color: skinTone);
+            }
+
+            // Рок-электрогитара Gibson Explorer в руках!
+            var guitar = new Entity(parent: rShoulder, position: new(-0.18f, -0.26f, 0.42f), rotation: new(0, -25f, 18f));
+            new Entity(parent: guitar, model: "diamond", scale: new(0.54f, 0.42f, 0.12f), color: Rgb(225, 38, 48));
+            new Entity(parent: guitar, model: "cube", scale: new(0.78f, 0.10f, 0.08f), position: new(-0.46f, 0.08f, 0), color: Rgb(62, 42, 28));
+            new Entity(parent: guitar, model: "cube", scale: new(0.82f, 0.04f, 0.10f), position: new(-0.32f, 0.08f, 0.04f), color: cfg.VisorColor, unlit: true);
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 25. МИШКА ФРЕДДИ (FIVE NIGHTS AT FREDDY'S)
+        // ==========================================
+        private static void BuildFreddy(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        {
+            Color furBrown = cfg.BodyColor;
+            Color bellyTan = Rgb(205, 155, 98);
+            Color endoDark = Rgb(36, 38, 44);
+            Color hatBlack = cfg.ArmorColor;
+
+            var lHip = new Entity(parent: root, position: new(-0.24f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.24f, 0.86f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.26f, 0.38f, 0.26f), position: new(0, -0.18f, 0), color: furBrown);
+                new Entity(parent: hip, model: "sphere", scaleUniform: 0.20f, position: new(0, -0.40f, 0), color: endoDark);
+                new Entity(parent: hip, model: "cube", scale: new(0.25f, 0.36f, 0.25f), position: new(0, -0.60f, 0), color: furBrown);
+                new Entity(parent: hip, model: "cube", scale: new(0.28f, 0.16f, 0.42f), position: new(0, -0.80f, 0.06f), color: furBrown);
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            new Entity(parent: torso, model: "sphere", scale: new(0.76f, 0.78f, 0.58f), position: new(0, 0.06f, 0), color: furBrown);
+            new Entity(parent: torso, model: "sphere", scale: new(0.56f, 0.58f, 0.26f), position: new(0, 0.04f, 0.22f), color: bellyTan);
+            // Чёрный галстук-бабочка и 2 пуговицы на груди Фредди
+            new Entity(parent: torso, model: "diamond", scale: new(0.34f, 0.14f, 0.12f), position: new(0, 0.34f, 0.28f), color: hatBlack);
+            new Entity(parent: torso, model: "sphere", scaleUniform: 0.07f, position: new(0, 0.18f, 0.32f), color: hatBlack);
+            new Entity(parent: torso, model: "sphere", scaleUniform: 0.07f, position: new(0, 0.04f, 0.33f), color: hatBlack);
+
+            var head = new Entity(parent: torso, position: new(0, 0.64f, 0));
+            new Entity(parent: head, model: "cube", scale: new(0.58f, 0.54f, 0.54f), color: furBrown);
+            new Entity(parent: head, model: "cube", scale: new(0.42f, 0.22f, 0.26f), position: new(0, -0.10f, 0.26f), color: bellyTan);
+            new Entity(parent: head, model: "sphere", scaleUniform: 0.12f, position: new(0, -0.02f, 0.38f), color: Rgb(20, 20, 24));
+            // Светящиеся глаза аниматроника и круглые медвежьи уши
+            foreach (int s in new[] { -1, 1 })
+            {
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.13f, position: new(s * 0.14f, 0.08f, 0.26f), color: cfg.VisorColor, unlit: true);
+                new Entity(parent: head, model: "sphere", scale: new(0.22f, 0.22f, 0.10f), position: new(s * 0.32f, 0.30f, 0), color: furBrown);
+            }
+            // Фирменный чёрный цилиндр Фредди Фазбера!
+            new Entity(parent: head, model: "cube", scale: new(0.42f, 0.06f, 0.42f), position: new(0, 0.30f, 0), color: hatBlack);
+            new Entity(parent: head, model: "cube", scale: new(0.28f, 0.32f, 0.28f), position: new(0, 0.46f, 0), color: hatBlack);
+            parts.Head = head;
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.50f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.50f, 0.24f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "sphere", scaleUniform: 0.24f, position: new(0, 0.04f, 0), color: furBrown);
+                new Entity(parent: sh, model: "cube", scale: new(0.20f, 0.28f, 0.20f), position: new(0, -0.16f, 0), color: furBrown);
+                new Entity(parent: sh, model: "sphere", scaleUniform: 0.16f, position: new(0, -0.30f, 0.04f), color: endoDark);
+                new Entity(parent: sh, model: "cube", scale: new(0.20f, 0.20f, 0.36f), position: new(0, -0.30f, 0.22f), color: furBrown);
+            }
+            // Концертный микрофон в правой лапе Фредди
+            var mic = new Entity(parent: rShoulder, position: new(0, -0.24f, 0.46f));
+            new Entity(parent: mic, model: "cube", scale: new(0.08f, 0.28f, 0.08f), color: Rgb(40, 42, 48));
+            new Entity(parent: mic, model: "sphere", scaleUniform: 0.18f, position: new(0, 0.18f, 0), color: Rgb(195, 205, 220));
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 26. СТИВ (MINECRAFT) — ВОКСЕЛЬНАЯ МОДЕЛЬ
+        // ==========================================
+        private static void BuildSteve(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        {
+            Color skinBlock = Rgb(186, 134, 102);
+            Color hairBlock = Rgb(62, 40, 26);
+            Color cyanShirt = cfg.BodyColor;
+            Color indigoPants = cfg.ArmorColor;
+            Color diamondCol = cfg.VisorColor;
+
+            // Истинно кубические ноги Стива
+            var lHip = new Entity(parent: root, position: new(-0.14f, 0.84f, 0));
+            var rHip = new Entity(parent: root, position: new(0.14f, 0.84f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.26f, 0.72f, 0.26f), position: new(0, -0.38f, 0), color: indigoPants);
+                new Entity(parent: hip, model: "cube", scale: new(0.27f, 0.16f, 0.27f), position: new(0, -0.78f, 0), color: Rgb(92, 94, 98));
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            // Кубический торс Стива
+            var torso = new Entity(parent: root, position: new(0, 1.24f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.54f, 0.74f, 0.28f), position: new(0, 0.02f, 0), color: cyanShirt);
+
+            // Кубическая голова 8x8x8 пикселей
+            var head = new Entity(parent: torso, position: new(0, 0.64f, 0));
+            new Entity(parent: head, model: "cube", scale: new(0.52f, 0.52f, 0.52f), color: skinBlock);
+            new Entity(parent: head, model: "cube", scale: new(0.54f, 0.18f, 0.54f), position: new(0, 0.19f, 0), color: hairBlock);
+            new Entity(parent: head, model: "cube", scale: new(0.54f, 0.36f, 0.16f), position: new(0, 0.08f, -0.20f), color: hairBlock);
+            foreach (int s in new[] { -1, 1 })
+            {
+                new Entity(parent: head, model: "cube", scale: new(0.12f, 0.07f, 0.04f), position: new(s * 0.12f, 0.02f, 0.26f), color: Color.White, unlit: true);
+                new Entity(parent: head, model: "cube", scale: new(0.06f, 0.07f, 0.05f), position: new(s * 0.10f, 0.02f, 0.27f), color: Rgb(58, 72, 175), unlit: true);
+            }
+            new Entity(parent: head, model: "cube", scale: new(0.20f, 0.08f, 0.04f), position: new(0, -0.14f, 0.26f), color: hairBlock);
+            parts.Head = head;
+            parts.Torso = torso;
+
+            // Кубические руки Стива + Алмазная Кирка в правой руке!
+            var lShoulder = new Entity(parent: torso, position: new(-0.40f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.40f, 0.24f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "cube", scale: new(0.26f, 0.24f, 0.26f), position: new(0, 0.02f, 0), color: cyanShirt);
+                new Entity(parent: sh, model: "cube", scale: new(0.24f, 0.50f, 0.24f), position: new(0, -0.32f, 0.06f), rotation: new(-25, 0, 0), color: skinBlock);
+            }
+
+            // Алмазная кирка / меч в правой руке Стива
+            var pick = new Entity(parent: rShoulder, position: new(0, -0.42f, 0.36f));
+            new Entity(parent: pick, model: "cube", scale: new(0.07f, 0.07f, 0.78f), position: new(0, 0, 0.22f), color: Rgb(135, 92, 48));
+            new Entity(parent: pick, model: "cube", scale: new(0.09f, 0.62f, 0.14f), position: new(0, 0, 0.58f), color: diamondCol, unlit: true);
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 27. ДЖОТАРО КУДЖО + STAR PLATINUM (JOJO)
+        // ==========================================
+        private static void BuildJotaro(Entity root, SurvivorConfig cfg, SurvivorParts parts, int skinIdx)
+        {
+            Color skinTone = Rgb(245, 218, 198);
+            Color coatCol = cfg.BodyColor;
+            Color standCol = skinIdx == 2 ? Rgb(242, 245, 255) : cfg.ArmorColor;
+            Color goldCol = cfg.VisorColor;
+
+            var lHip = new Entity(parent: root, position: new(-0.20f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.20f, 0.86f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.21f, 0.42f, 0.22f), position: new(0, -0.20f, 0), color: coatCol);
+                new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.42f, 0.21f), position: new(0, -0.60f, 0), color: coatCol);
+                new Entity(parent: hip, model: "cube", scale: new(0.22f, 0.15f, 0.38f), position: new(0, -0.80f, 0.06f), color: Rgb(28, 28, 34));
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.58f, 0.62f, 0.38f), position: new(0, 0.06f, 0), color: coatCol);
+            // Длинные полы плаща Гакуран и массивная золотая цепь на воротнике!
+            new Entity(parent: torso, model: "diamond", scale: new(0.74f, 0.98f, 0.24f), position: new(0, -0.42f, -0.16f), rotation: new(12, 0, 0), color: coatCol);
+            new Entity(parent: torso, model: "cube", scale: new(0.10f, 0.38f, 0.10f), position: new(0.22f, 0.22f, 0.22f), rotation: new(0, 0, -18f), color: goldCol, unlit: true);
+
+            var head = new Entity(parent: torso, position: new(0, 0.60f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.46f, 0.48f, 0.46f), color: skinTone);
+            // Знаменитая фуражка Джотаро, переходящая в волосы, с золотым значком ладони
+            new Entity(parent: head, model: "cube", scale: new(0.52f, 0.26f, 0.54f), position: new(0, 0.20f, 0), color: coatCol);
+            new Entity(parent: head, model: "cube", scale: new(0.48f, 0.06f, 0.26f), position: new(0, 0.12f, 0.28f), color: Rgb(22, 24, 30));
+            new Entity(parent: head, model: "cube", scale: new(0.54f, 0.06f, 0.55f), position: new(0, 0.15f, 0), color: goldCol, unlit: true);
+            parts.Head = head;
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.44f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.44f, 0.24f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "cube", scale: new(0.20f, 0.30f, 0.20f), position: new(0, -0.15f, 0), color: coatCol);
+                new Entity(parent: sh, model: "cube", scale: new(0.18f, 0.18f, 0.36f), position: new(0, -0.28f, 0.20f), color: coatCol);
+                new Entity(parent: sh, model: "sphere", scaleUniform: 0.15f, position: new(0, -0.28f, 0.40f), color: skinTone);
+            }
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+
+            // 3D-СТЕНД «STAR PLATINUM» за правым плечом Джотаро!
+            var stand = new Entity(parent: torso, position: new(0.68f, 0.24f, -0.55f));
+            new Entity(parent: stand, model: "diamond", scale: new(0.66f, 0.68f, 0.42f), position: new(0, 0.14f, 0), color: standCol, unlit: true);
+            foreach (int s in new[] { -1, 1 })
+            {
+                new Entity(parent: stand, model: "sphere", scaleUniform: 0.26f, position: new(s * 0.40f, 0.34f, 0), color: goldCol, unlit: true);
+                new Entity(parent: stand, model: "cube", scale: new(0.20f, 0.20f, 0.48f), position: new(s * 0.42f, 0.08f, 0.32f), color: standCol, unlit: true);
+                new Entity(parent: stand, model: "sphere", scaleUniform: 0.22f, position: new(s * 0.42f, 0.08f, 0.58f), color: goldCol, unlit: true);
+            }
+            var sHead = new Entity(parent: stand, position: new(0, 0.62f, 0));
+            new Entity(parent: sHead, model: "sphere", scaleUniform: 0.42f, color: standCol, unlit: true);
+            new Entity(parent: sHead, model: "cube", scale: new(0.46f, 0.08f, 0.46f), position: new(0, 0.12f, 0), color: goldCol, unlit: true);
+            new Entity(parent: sHead, model: "diamond", scale: new(0.48f, 0.56f, 0.44f), position: new(0, 0.26f, -0.10f), rotation: new(-24, 0, 0), color: Rgb(25, 25, 35));
+            parts.ShieldAura = stand;
+        }
+
+        // ==========================================
+        // 28. ВАЙПЕР (DEADLOCK)
+        // ==========================================
+        private static void BuildVyper(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        {
+            Color scaleGreen = cfg.BodyColor;
+            Color vestCol = cfg.ArmorColor;
+            Color venomGlow = cfg.VisorColor;
+
+            var lHip = new Entity(parent: root, position: new(-0.19f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.19f, 0.86f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.18f, 0.40f, 0.20f), position: new(0, -0.20f, 0), color: Rgb(42, 46, 38));
+                new Entity(parent: hip, model: "cube", scale: new(0.17f, 0.40f, 0.19f), position: new(0, -0.58f, 0), color: scaleGreen);
+                new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.14f, 0.36f), position: new(0, -0.78f, 0.06f), color: vestCol);
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.24f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.48f, 0.56f, 0.34f), position: new(0, 0.06f, 0), color: vestCol);
+            new Entity(parent: torso, model: "sphere", scaleUniform: 0.22f, position: new(0, 0.12f, -0.22f), color: venomGlow, unlit: true);
+
+            // Длинный змеиный хвост Вайпер
+            var viperTail = new Entity(parent: torso, position: new(0, -0.28f, -0.18f), rotation: new(-14, 0, 0));
+            new Entity(parent: viperTail, model: "diamond", scale: new(0.24f, 0.22f, 1.05f), position: new(0, -0.08f, -0.48f), color: scaleGreen);
+            parts.Tails.Add(viperTail);
+
+            var head = new Entity(parent: torso, position: new(0, 0.56f, 0.04f));
+            new Entity(parent: head, model: "diamond", scale: new(0.44f, 0.42f, 0.56f), color: scaleGreen);
+            new Entity(parent: head, model: "diamond", scale: new(0.56f, 0.12f, 0.56f), position: new(0, 0.20f, 0), color: vestCol);
+            foreach (int s in new[] { -1, 1 })
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.10f, position: new(s * 0.13f, 0.05f, 0.22f), color: Color.Yellow, unlit: true);
+            parts.Head = head;
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.40f, 0.22f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.40f, 0.22f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "cube", scale: new(0.15f, 0.26f, 0.15f), position: new(0, -0.14f, 0), color: vestCol);
+                new Entity(parent: sh, model: "cube", scale: new(0.14f, 0.14f, 0.34f), position: new(0, -0.26f, 0.20f), color: scaleGreen);
+            }
+            var smg = new Entity(parent: rShoulder, position: new(0, -0.26f, 0.44f));
+            new Entity(parent: smg, model: "cube", scale: new(0.12f, 0.18f, 0.58f), color: Rgb(36, 40, 46));
+            new Entity(parent: smg, model: "sphere", scaleUniform: 0.12f, position: new(0, 0.06f, 0.30f), color: venomGlow, unlit: true);
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 29. ХЕЙЗ (DEADLOCK)
+        // ==========================================
+        private static void BuildHaze(Entity root, SurvivorConfig cfg, SurvivorParts parts)
+        {
+            Color suitDark = cfg.BodyColor;
+            Color vestGold = cfg.ArmorColor;
+            Color dreamGlow = cfg.VisorColor;
+
+            var lHip = new Entity(parent: root, position: new(-0.18f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.18f, 0.86f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.18f, 0.42f, 0.19f), position: new(0, -0.20f, 0), color: suitDark);
+                new Entity(parent: hip, model: "cube", scale: new(0.17f, 0.42f, 0.18f), position: new(0, -0.60f, 0), color: suitDark);
+                new Entity(parent: hip, model: "cube", scale: new(0.19f, 0.14f, 0.35f), position: new(0, -0.80f, 0.05f), color: vestGold);
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.48f, 0.58f, 0.32f), position: new(0, 0.06f, 0), color: suitDark);
+            new Entity(parent: torso, model: "diamond", scale: new(0.36f, 0.52f, 0.34f), position: new(0, 0.08f, 0.02f), color: vestGold);
+
+            // Голова Хейз из золотистого тумана снов OSIC со светящимся оком Фиксации!
+            var head = new Entity(parent: torso, position: new(0, 0.58f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.46f, 0.50f, 0.46f), color: Rgb(32, 28, 44));
+            new Entity(parent: head, model: "diamond", scale: new(0.38f, 0.56f, 0.38f), position: new(0, 0.22f, -0.06f), color: dreamGlow, unlit: true);
+            new Entity(parent: head, model: "diamond", scale: new(0.28f, 0.10f, 0.10f), position: new(0, 0.06f, 0.24f), color: Color.White, unlit: true);
+            parts.Head = head;
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.40f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.40f, 0.24f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "cube", scale: new(0.15f, 0.28f, 0.15f), position: new(0, -0.14f, 0), color: suitDark);
+                new Entity(parent: sh, model: "cube", scale: new(0.14f, 0.14f, 0.34f), position: new(0, -0.28f, 0.20f), color: vestGold);
+                // Парные пистолеты-пулемёты Хейз в обеих руках
+                var gun = new Entity(parent: sh, position: new(0, -0.28f, 0.42f));
+                new Entity(parent: gun, model: "cube", scale: new(0.10f, 0.16f, 0.48f), color: Rgb(34, 36, 44));
+                new Entity(parent: gun, model: "cube", scale: new(0.06f, 0.04f, 0.44f), position: new(0, 0.09f, 0), color: dreamGlow, unlit: true);
+            }
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // ==========================================
+        // 30. ТРИО DMC (0: ДАНТЕ | 1: НЕРО | 2: ВЕРГИЛИЙ)
+        // ==========================================
+        private static void BuildDmcTrio(Entity root, SurvivorConfig cfg, SurvivorParts parts, int skinIdx)
+        {
+            // skinIdx: 0 = Dante, 1 = Nero, 2 = Vergil
+            Color skinTone = Rgb(248, 224, 210);
+            Color hairWhite = Rgb(240, 244, 252);
+            Color coatCol = skinIdx == 0 ? Rgb(195, 32, 46) : (skinIdx == 1 ? Rgb(36, 62, 132) : Rgb(28, 58, 128));
+            Color innerCol = skinIdx == 0 ? Rgb(34, 36, 44) : (skinIdx == 1 ? Rgb(175, 32, 46) : Rgb(235, 238, 248));
+            Color glowCol = skinIdx == 0 ? Rgb(255, 75, 85) : Rgb(75, 220, 255);
+
+            var lHip = new Entity(parent: root, position: new(-0.20f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.20f, 0.86f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.42f, 0.21f), position: new(0, -0.20f, 0), color: Rgb(30, 32, 40));
+                new Entity(parent: hip, model: "cube", scale: new(0.19f, 0.42f, 0.20f), position: new(0, -0.60f, 0), color: Rgb(24, 26, 34));
+                new Entity(parent: hip, model: "cube", scale: new(0.21f, 0.15f, 0.38f), position: new(0, -0.80f, 0.06f), color: Rgb(20, 22, 28));
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.54f, 0.60f, 0.36f), position: new(0, 0.06f, 0), color: coatCol);
+            new Entity(parent: torso, model: "cube", scale: new(0.26f, 0.56f, 0.38f), position: new(0, 0.06f, 0.02f), color: innerCol);
+            new Entity(parent: torso, model: "diamond", scale: new(0.76f, 0.96f, 0.22f), position: new(0, -0.40f, -0.18f), rotation: new(14, 0, 0), color: coatCol);
+
+            var head = new Entity(parent: torso, position: new(0, 0.58f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.46f, 0.48f, 0.46f), color: skinTone);
+            if (skinIdx == 2)
+            {
+                // Зачёсанные назад белые волосы Вергилия
+                new Entity(parent: head, model: "diamond", scale: new(0.52f, 0.48f, 0.56f), position: new(0, 0.20f, -0.06f), rotation: new(-22, 0, 0), color: hairWhite);
+            }
+            else
+            {
+                // Причёска Данте / Неро
+                new Entity(parent: head, model: "sphere", scale: new(0.52f, 0.44f, 0.52f), position: new(0, 0.12f, -0.02f), color: hairWhite);
+            }
+            foreach (int s in new[] { -1, 1 })
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.08f, position: new(s * 0.11f, 0.05f, 0.21f), color: glowCol, unlit: true);
+            parts.Head = head;
+            parts.Torso = torso;
+
+            var lShoulder = new Entity(parent: torso, position: new(-0.44f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.44f, 0.24f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "cube", scale: new(0.18f, 0.28f, 0.18f), position: new(0, -0.15f, 0), color: coatCol);
+                Color armCol = (skinIdx == 1 && side == 1) ? glowCol : coatCol;
+                new Entity(parent: sh, model: "cube", scale: new(0.16f, 0.16f, 0.36f), position: new(0, -0.28f, 0.20f), color: armCol, unlit: skinIdx == 1 && side == 1);
+            }
+
+            if (skinIdx == 0)
+            {
+                // ДАНТЕ: Меч Rebellion в правой руке и пистолет Ebony в левой
+                var reb = new Entity(parent: rShoulder, position: new(0, -0.28f, 0.44f));
+                new Entity(parent: reb, model: "diamond", scale: new(0.36f, 0.10f, 0.18f), color: Color.Gold);
+                new Entity(parent: reb, model: "diamond", scale: new(0.10f, 0.16f, 1.15f), position: new(0, 0, 0.62f), color: Rgb(220, 228, 240), unlit: true);
+                var ebony = new Entity(parent: lShoulder, position: new(0, -0.26f, 0.42f));
+                new Entity(parent: ebony, model: "cube", scale: new(0.09f, 0.14f, 0.38f), color: Rgb(28, 30, 36));
+            }
+            else if (skinIdx == 1)
+            {
+                // НЕРО: Меч Red Queen с двигателем Exceed и револьвер Blue Rose
+                var rq = new Entity(parent: rShoulder, position: new(0, -0.28f, 0.44f));
+                new Entity(parent: rq, model: "cube", scale: new(0.16f, 0.20f, 0.28f), color: Rgb(215, 42, 48));
+                new Entity(parent: rq, model: "diamond", scale: new(0.09f, 0.16f, 1.08f), position: new(0, 0, 0.58f), color: Rgb(255, 145, 55), unlit: true);
+                var br = new Entity(parent: lShoulder, position: new(0, -0.26f, 0.42f));
+                new Entity(parent: br, model: "cube", scale: new(0.10f, 0.16f, 0.42f), color: Rgb(215, 225, 240));
+            }
+            else
+            {
+                // ВЕРГИЛИЙ: Катана Ямато + ножны и парящее кольцо Призрачных Клинков (Spiral Swords)
+                var scabbard = new Entity(parent: lShoulder, position: new(0, -0.28f, 0.36f));
+                new Entity(parent: scabbard, model: "cube", scale: new(0.06f, 0.08f, 0.96f), color: Rgb(28, 34, 48));
+                var yamato = new Entity(parent: rShoulder, position: new(0, -0.28f, 0.44f));
+                new Entity(parent: yamato, model: "diamond", scale: new(0.24f, 0.08f, 0.16f), color: Color.Gold);
+                new Entity(parent: yamato, model: "diamond", scale: new(0.05f, 0.10f, 1.12f), position: new(0, 0, 0.58f), color: Rgb(155, 235, 255), unlit: true);
+
+                var mRing = new Entity(parent: torso, position: new(0, 0.20f, -0.24f));
+                for (int i = 0; i < 6; i++)
+                {
+                    float ang = i * (MathF.PI / 3f);
+                    new Entity(parent: mRing, model: "diamond", scale: new(0.08f, 0.48f, 0.08f),
+                        position: new(MathF.Cos(ang) * 0.72f, MathF.Sin(ang) * 0.72f, 0),
+                        rotation: new(0, 0, i * 60f), color: glowCol, unlit: true);
+                }
+                parts.Halo = mRing;
+            }
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+        }
+
+        // =========================================================================
+        // 31. СЕКРЕТНЫЙ ПОДАРОЧНЫЙ ПЕРСОНАЖ: БРИГАДНЫЙ ГЕНЕРАЛ (SANABI) + МАРИ
+        // Особо детализированная 3D-модель: армейский плащ с развевающимися полами,
+        // тактический разгрузочный жилет, кибер-повязка со световым шлейфом,
+        // гигантская сегментированная Механическая Рука-Крюк с реактором, лебёдкой
+        // и трёхпалым гарпунным захватом, а также парящий дрон-голограмма Мари!
+        // =========================================================================
+        private static void BuildSanabi(Entity root, SurvivorConfig cfg, SurvivorParts parts, int skinIdx)
+        {
+            Color skinTone = Rgb(242, 208, 184);
+            Color coatCol = cfg.BodyColor;
+            Color armorCol = cfg.ArmorColor;
+            Color neonCol = cfg.VisorColor;
+            Color brassGold = Rgb(245, 192, 62);
+            Color coreOrange = skinIdx == 1 ? Rgb(255, 55, 155) : Rgb(255, 145, 35);
+            Color darkSteel = Rgb(30, 34, 42);
+
+            // 1. Ноги в армейских тактических брюках с наколенниками, экзо-скобами и реактивными ботинками
+            var lHip = new Entity(parent: root, position: new(-0.21f, 0.86f, 0));
+            var rHip = new Entity(parent: root, position: new(0.21f, 0.86f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                // Бедро и кобура/подсумки на ремнях
+                new Entity(parent: hip, model: "cube", scale: new(0.22f, 0.44f, 0.24f), position: new(0, -0.20f, 0), color: Rgb(36, 40, 48));
+                new Entity(parent: hip, model: "cube", scale: new(0.07f, 0.24f, 0.18f), position: new(side * 0.13f, -0.18f, 0.02f), color: armorCol);
+                // Бронированный наколенник с неоновым индикатором
+                new Entity(parent: hip, model: "diamond", scale: new(0.26f, 0.26f, 0.28f), position: new(0, -0.42f, 0.06f), color: armorCol);
+                new Entity(parent: hip, model: "cube", scale: new(0.10f, 0.06f, 0.06f), position: new(0, -0.42f, 0.18f), color: neonCol, unlit: true);
+                // Голень с экзоскелетной шиной
+                new Entity(parent: hip, model: "cube", scale: new(0.20f, 0.42f, 0.22f), position: new(0, -0.62f, 0), color: Rgb(28, 32, 40));
+                new Entity(parent: hip, model: "cube", scale: new(0.06f, 0.36f, 0.08f), position: new(side * 0.11f, -0.60f, 0), color: brassGold);
+                // Тяжёлые десантные ботинки с магнитными подошвами и микро-соплами
+                new Entity(parent: hip, model: "cube", scale: new(0.24f, 0.18f, 0.42f), position: new(0, -0.80f, 0.06f), color: darkSteel);
+                new Entity(parent: hip, model: "diamond", scale: new(0.22f, 0.12f, 0.18f), position: new(0, -0.80f, 0.24f), color: armorCol);
+                new Entity(parent: hip, model: "cube", scale: new(0.18f, 0.05f, 0.10f), position: new(0, -0.78f, -0.15f), color: neonCol, unlit: true);
+            }
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            // 2. Торс: Офицерский плащ Бригадного Генерала, тактический нагрудник и пояс с боеприпасами
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            // Пояс с пряжкой Генерала и тактическими подсумками
+            new Entity(parent: torso, model: "cube", scale: new(0.62f, 0.18f, 0.42f), position: new(0, -0.32f, 0), color: darkSteel);
+            new Entity(parent: torso, model: "diamond", scale: new(0.20f, 0.16f, 0.46f), position: new(0, -0.32f, 0.02f), color: brassGold, unlit: true);
+            foreach (float px in new[] { -0.24f, 0.24f })
+                new Entity(parent: torso, model: "cube", scale: new(0.12f, 0.16f, 0.12f), position: new(px, -0.32f, 0.20f), color: armorCol);
+
+            // Основа плаща и бронежилет
+            new Entity(parent: torso, model: "cube", scale: new(0.66f, 0.64f, 0.42f), position: new(0, 0.06f, 0), color: coatCol);
+            new Entity(parent: torso, model: "cube", scale: new(0.54f, 0.52f, 0.22f), position: new(0, 0.08f, 0.14f), color: armorCol);
+            // Лацканы офицерского плаща и золотой знак отличия Бригадного Генерала
+            foreach (int s in new[] { -1, 1 })
+                new Entity(parent: torso, model: "diamond", scale: new(0.22f, 0.48f, 0.14f), position: new(s * 0.20f, 0.14f, 0.22f), rotation: new(0, 0, s * -14f), color: coatCol);
+            new Entity(parent: torso, model: "diamond", scale: new(0.14f, 0.14f, 0.08f), position: new(-0.20f, 0.26f, 0.27f), color: brassGold, unlit: true);
+            // Высокий стоячий воротник плаща со светящимся контуром
+            new Entity(parent: torso, model: "cube", scale: new(0.58f, 0.22f, 0.44f), position: new(0, 0.40f, -0.04f), color: coatCol);
+            new Entity(parent: torso, model: "cube", scale: new(0.60f, 0.05f, 0.46f), position: new(0, 0.49f, -0.04f), color: brassGold, unlit: true);
+
+            // Спинной энергоблок и гидравлический привод Цепной Руки
+            var backRig = new Entity(parent: torso, position: new(0.08f, 0.12f, -0.28f));
+            new Entity(parent: backRig, model: "cube", scale: new(0.46f, 0.50f, 0.22f), color: armorCol);
+            new Entity(parent: backRig, model: "sphere", scaleUniform: 0.24f, position: new(0.10f, 0.06f, -0.10f), color: coreOrange, unlit: true);
+            new Entity(parent: backRig, model: "cube", scale: new(0.32f, 0.10f, 0.14f), position: new(0.22f, 0.18f, 0), rotation: new(0, 0, -24f), color: brassGold);
+
+            // Две динамически развевающиеся полы офицерского плаща (анимируются через parts.Tails!)
+            foreach (int s in new[] { -1, 1 })
+            {
+                var coatTail = new Entity(parent: torso, position: new(s * 0.19f, -0.26f, -0.16f), rotation: new(16f, s * 6f, s * -5f));
+                new Entity(parent: coatTail, model: "diamond", scale: new(0.42f, 0.88f, 0.14f), position: new(0, -0.34f, -0.06f), color: coatCol);
+                new Entity(parent: coatTail, model: "diamond", scale: new(0.44f, 0.14f, 0.15f), position: new(0, -0.70f, -0.06f), color: brassGold, unlit: true);
+                parts.Tails.Add(coatTail);
+            }
+
+            // 3. Голова: суровое лицо ветерана с бородой, взъерошенные волосы и кибер-визор со световым шлейфом
+            var head = new Entity(parent: torso, position: new(0, 0.60f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.48f, 0.50f, 0.48f), color: skinTone);
+            // Густая короткая борода и усы Генерала
+            new Entity(parent: head, model: "cube", scale: new(0.42f, 0.22f, 0.36f), position: new(0, -0.14f, 0.10f), color: Rgb(34, 32, 38));
+            new Entity(parent: head, model: "diamond", scale: new(0.32f, 0.14f, 0.20f), position: new(0, -0.06f, 0.22f), color: Rgb(42, 40, 48));
+            // Взъерошенные тёмные волосы с седыми прядями
+            new Entity(parent: head, model: "sphere", scale: new(0.54f, 0.44f, 0.54f), position: new(0, 0.14f, -0.02f), color: Rgb(28, 28, 34));
+            foreach (var (hx, hy, hz, rx) in new[] {
+                (0f, 0.34f, -0.12f, 28f), (-0.22f, 0.24f, -0.14f, 24f), (0.22f, 0.24f, -0.14f, 24f),
+                (-0.16f, 0.28f, 0.14f, -18f), (0.16f, 0.28f, 0.14f, -18f) })
+            {
+                new Entity(parent: head, model: "diamond", scale: new(0.22f, 0.42f, 0.28f), position: new(hx, hy, hz), rotation: new(rx, 0, 0), color: Rgb(34, 34, 42));
+            }
+            // Кибернетическая боевая повязка-визор на глазах со светящимся прицелом
+            new Entity(parent: head, model: "cube", scale: new(0.54f, 0.12f, 0.46f), position: new(0, 0.06f, 0.06f), color: darkSteel);
+            new Entity(parent: head, model: "cube", scale: new(0.48f, 0.08f, 0.14f), position: new(0, 0.06f, 0.24f), color: neonCol, unlit: true);
+            new Entity(parent: head, model: "diamond", scale: new(0.16f, 0.14f, 0.10f), position: new(0.12f, 0.06f, 0.28f), color: Color.White, unlit: true);
+            // Развевающаяся неоновая лента повязки за головой
+            var headbandTail = new Entity(parent: head, position: new(0, 0.06f, -0.24f), rotation: new(22f, 0, 0));
+            new Entity(parent: headbandTail, model: "diamond", scale: new(0.16f, 0.68f, 0.08f), position: new(-0.08f, -0.26f, -0.14f), color: neonCol, unlit: true);
+            new Entity(parent: headbandTail, model: "diamond", scale: new(0.12f, 0.56f, 0.08f), position: new(0.10f, -0.22f, -0.12f), color: coreOrange, unlit: true);
+            parts.Tails.Add(headbandTail);
+
+            parts.Head = head;
+            parts.Torso = torso;
+
+            // 4. Левая рука: Офицерский рукав, тактический наруч-коммуникатор Мари и табельный револьвер Чосона
+            var lShoulder = new Entity(parent: torso, position: new(-0.46f, 0.25f, 0));
+            new Entity(parent: lShoulder, model: "diamond", scale: new(0.38f, 0.34f, 0.38f), position: new(0, 0.06f, 0), color: coatCol);
+            new Entity(parent: lShoulder, model: "cube", scale: new(0.18f, 0.28f, 0.18f), position: new(0, -0.16f, 0.02f), color: coatCol);
+            new Entity(parent: lShoulder, model: "sphere", scaleUniform: 0.16f, position: new(0, -0.30f, 0.02f), color: armorCol);
+            new Entity(parent: lShoulder, model: "cube", scale: new(0.17f, 0.17f, 0.36f), position: new(0, -0.30f, 0.22f), color: coatCol);
+            // Голографический наруч связи с Мари на левом предплечье
+            new Entity(parent: lShoulder, model: "cube", scale: new(0.21f, 0.12f, 0.20f), position: new(0, -0.26f, 0.24f), color: darkSteel);
+            new Entity(parent: lShoulder, model: "cube", scale: new(0.16f, 0.04f, 0.16f), position: new(0, -0.19f, 0.24f), color: neonCol, unlit: true);
+            new Entity(parent: lShoulder, model: "cube", scale: new(0.15f, 0.15f, 0.14f), position: new(0, -0.30f, 0.40f), color: darkSteel);
+
+            // 5. Правая рука: ИСПОЛИНСКАЯ МЕХАНИЧЕСКАЯ РУКА-КРЮК (SANABI CHAIN-ARM)
+            var rShoulder = new Entity(parent: torso, position: new(0.52f, 0.26f, 0));
+            // Массивный бронированный наплечник с гидравликой и сигнальными полосами
+            new Entity(parent: rShoulder, model: "cube", scale: new(0.46f, 0.42f, 0.48f), position: new(0.06f, 0.08f, 0), color: armorCol);
+            new Entity(parent: rShoulder, model: "diamond", scale: new(0.52f, 0.22f, 0.52f), position: new(0.08f, 0.18f, 0), color: brassGold);
+            new Entity(parent: rShoulder, model: "sphere", scaleUniform: 0.22f, position: new(0.16f, 0.08f, 0.18f), color: coreOrange, unlit: true);
+            // Плечевой гидроцилиндр и титановый локоть
+            new Entity(parent: rShoulder, model: "cube", scale: new(0.26f, 0.32f, 0.26f), position: new(0.04f, -0.16f, 0.02f), color: darkSteel);
+            foreach (float pz in new[] { -0.09f, 0.09f })
+                new Entity(parent: rShoulder, model: "cube", scale: new(0.07f, 0.30f, 0.07f), position: new(0.16f, -0.16f, pz), color: brassGold);
+            new Entity(parent: rShoulder, model: "sphere", scaleUniform: 0.26f, position: new(0.04f, -0.32f, 0.04f), color: brassGold);
+
+            // Гигантский корпус предплечья с барабаном стальной цепи, реактором и поршнями
+            var chainForearm = new Entity(parent: rShoulder, position: new(0.05f, -0.32f, 0.32f));
+            new Entity(parent: chainForearm, model: "cube", scale: new(0.36f, 0.34f, 0.62f), color: armorCol);
+            new Entity(parent: chainForearm, model: "cube", scale: new(0.40f, 0.14f, 0.48f), position: new(0, 0.14f, -0.02f), color: darkSteel);
+            // Светящееся плазменное ядро лебёдки
+            new Entity(parent: chainForearm, model: "sphere", scale: new(0.42f, 0.26f, 0.26f), position: new(0, 0, -0.04f), color: coreOrange, unlit: true);
+            new Entity(parent: chainForearm, model: "cube", scale: new(0.41f, 0.06f, 0.56f), position: new(0, 0.08f, 0.02f), color: neonCol, unlit: true);
+            // Барабан с намотанным тросом
+            new Entity(parent: chainForearm, model: "sphere", scale: new(0.32f, 0.32f, 0.24f), position: new(0, -0.06f, 0.18f), color: brassGold);
+            // Массивный трёхпалый гарпунный захват (Когти Крюка-Кошки) на конце руки!
+            var clawHub = new Entity(parent: chainForearm, position: new(0, -0.02f, 0.42f));
+            new Entity(parent: clawHub, model: "sphere", scaleUniform: 0.30f, color: darkSteel);
+            new Entity(parent: clawHub, model: "sphere", scaleUniform: 0.20f, position: new(0, 0, 0.10f), color: neonCol, unlit: true);
+            // 3 стальных когтя гарпуна + центральное остриё
+            new Entity(parent: clawHub, model: "diamond", scale: new(0.14f, 0.14f, 0.58f), position: new(0, 0, 0.28f), color: Color.White, unlit: true);
+            for (int c = 0; c < 3; c++)
+            {
+                float ang = c * 120f * (MathF.PI / 180f);
+                float cx = MathF.Cos(ang) * 0.18f;
+                float cy = MathF.Sin(ang) * 0.18f;
+                var claw = new Entity(parent: clawHub, position: new(cx, cy, 0.14f), rotation: new(0, 0, c * 120f));
+                new Entity(parent: claw, model: "diamond", scale: new(0.12f, 0.24f, 0.52f), position: new(0, 0.06f, 0.18f), rotation: new(-18f, 0, 0), color: brassGold);
+                new Entity(parent: claw, model: "diamond", scale: new(0.08f, 0.14f, 0.30f), position: new(0, 0.02f, 0.40f), rotation: new(22f, 0, 0), color: coreOrange, unlit: true);
+            }
+
+            parts.LeftArm = lShoulder;
+            parts.RightArm = rShoulder;
+
+            // 6. Парящий компаньон МАРИ (Хакерский Дрон + Голограмма Мари) рядом с левым плечом Генерала!
+            var mariDrone = new Entity(parent: torso, position: new(-0.68f, 0.56f, 0.10f));
+            // Корпус дрона Мари с ушками-антеннами и голографическим экраном-смайликом
+            new Entity(parent: mariDrone, model: "sphere", scale: new(0.34f, 0.32f, 0.34f), color: Rgb(240, 244, 252));
+            new Entity(parent: mariDrone, model: "cube", scale: new(0.28f, 0.20f, 0.12f), position: new(0, 0.02f, 0.16f), color: darkSteel);
+            // Светящееся экранное личико/сердечко Мари
+            new Entity(parent: mariDrone, model: "diamond", scale: new(0.18f, 0.12f, 0.08f), position: new(0, 0.02f, 0.21f), color: Rgb(255, 105, 195), unlit: true);
+            foreach (int s in new[] { -1, 1 })
+            {
+                // Неоновые ушки-антенны и боковые стабилизаторы дрона Мари
+                new Entity(parent: mariDrone, model: "diamond", scale: new(0.09f, 0.26f, 0.10f), position: new(s * 0.12f, 0.24f, 0), rotation: new(0, 0, s * -20f), color: neonCol, unlit: true);
+                new Entity(parent: mariDrone, model: "diamond", scale: new(0.32f, 0.08f, 0.20f), position: new(s * 0.26f, 0, -0.04f), rotation: new(0, 0, s * 16f), color: brassGold);
+            }
+            // Вращающееся голографическое кольцо взлома вокруг Генерала
+            var hackHalo = new Entity(parent: torso, position: new(0, 0.22f, -0.24f));
+            for (int i = 0; i < 4; i++)
+            {
+                float ang = i * (MathF.PI * 0.5f);
+                new Entity(parent: hackHalo, model: "diamond", scale: new(0.12f, 0.32f, 0.08f),
+                    position: new(MathF.Cos(ang) * 0.76f, MathF.Sin(ang) * 0.76f, 0),
+                    rotation: new(0, 0, i * 90f), color: neonCol, unlit: true);
+            }
+            parts.Halo = hackHalo;
+            parts.ShieldAura = mariDrone;
+        }
+
+        // =========================================================================
+        // 32. ДЖЕК-О ВАЛЕНТАЙН (GUILTY GEAR -STRIVE-)
+        // Белоснежный расклешённый комбинезон с чёрными ремнями и золотой пряжкой-тыквой,
+        // чёрные туфли на шпильке с ярко-красной подошвой, двухцветные ало-белые волосы,
+        // расколотый золотой нимб, трёхглазая железная маска, кандалы на левой лодыжке
+        // с цепным шаром «Железная Тыква» и Командный Флаг для призыва/баффа Слуг!
+        // =========================================================================
+        private static void BuildJackO(Entity root, SurvivorConfig cfg, SurvivorParts parts, int skinIdx)
+        {
+            Color skinTone = Rgb(252, 228, 216);
+            Color suitCol = cfg.BodyColor;                       // Белоснежный комбинезон Strive
+            Color crimsonHair = skinIdx == 1 ? Rgb(235, 110, 32) : Rgb(198, 28, 46); // Внешний алый слой волос
+            Color innerWhiteHair = Rgb(246, 248, 255);           // Внутренний белоснежный слой волос
+            Color strapDark = Rgb(28, 30, 38);                   // Чёрные ремни, полосы и каблуки
+            Color redSole = Rgb(225, 32, 44);                    // Фирменная алая подошва каблуков и кресты
+            Color goldTrim = Rgb(245, 196, 62);                  // Золотая пряжка-тыква и расколотый нимб
+            Color ironDark = Rgb(44, 48, 58);                    // Тёмный чугун маски и Железной Тыквы
+            Color limeGlow = cfg.VisorColor;                     // Светящаяся лаймовая ухмылка Тыквы и глаз маски
+
+            // 1. Ноги: облегающие бёдра, расклешённые книзу брюки-клёш с чёрными лампасами и каблуки с красной подошвой!
+            var lHip = new Entity(parent: root, position: new(-0.19f, 0.88f, 0));
+            var rHip = new Entity(parent: root, position: new(0.19f, 0.88f, 0));
+            foreach (var (side, hip) in new[] { (-1, lHip), (1, rHip) })
+            {
+                // Верх бедра с чёрным ремешком
+                new Entity(parent: hip, model: "cube", scale: new(0.19f, 0.42f, 0.21f), position: new(0, -0.20f, 0), color: suitCol);
+                new Entity(parent: hip, model: "cube", scale: new(0.21f, 0.05f, 0.23f), position: new(0, -0.14f, 0), color: strapDark);
+                // Вертикальный чёрный лампас сбоку штанины
+                new Entity(parent: hip, model: "cube", scale: new(0.05f, 0.72f, 0.09f), position: new(side * 0.09f, -0.44f, 0), color: strapDark);
+                // Расклешённый низ брючины (Bell-bottom flare из GGST) + золотая пуговица
+                new Entity(parent: hip, model: "diamond", scale: new(0.32f, 0.46f, 0.34f), position: new(0, -0.62f, 0.01f), color: suitCol);
+                new Entity(parent: hip, model: "sphere", scaleUniform: 0.06f, position: new(side * 0.11f, -0.66f, 0.08f), color: goldTrim, unlit: true);
+                // Остроносая чёрная туфля на высоком каблуке с ЯРКО-КРАСНОЙ ПОДОШВОЙ (по референсу пинка!)
+                new Entity(parent: hip, model: "diamond", scale: new(0.18f, 0.14f, 0.38f), position: new(0, -0.81f, 0.08f), color: strapDark);
+                new Entity(parent: hip, model: "diamond", scale: new(0.17f, 0.05f, 0.36f), position: new(0, -0.85f, 0.08f), color: redSole, unlit: true);
+                new Entity(parent: hip, model: "cube", scale: new(0.05f, 0.13f, 0.05f), position: new(0, -0.82f, -0.07f), color: redSole, unlit: true);
+            }
+
+            // Тяжёлый чугунный браслет-кандалы на левой лодыжке + цепь и покоящаяся «Железная Тыква»!
+            new Entity(parent: lHip, model: "cube", scale: new(0.26f, 0.10f, 0.26f), position: new(0, -0.73f, 0), color: ironDark);
+            new Entity(parent: lHip, model: "sphere", scaleUniform: 0.08f, position: new(-0.13f, -0.73f, 0.04f), color: goldTrim, unlit: true);
+
+            // Покоящийся шар на цепи рядом с ногой (скрывается через ShieldAura во время броска/пинка шара!)
+            var restingBallRig = new Entity(parent: root, position: new(-0.62f, 0.32f, -0.18f));
+            // Звенья цепи от левой лодыжки к шару
+            new Entity(parent: restingBallRig, model: "cube", scale: new(0.10f, 0.07f, 0.22f), position: new(0.32f, -0.12f, 0.12f), rotation: new(0, -32f, 12f), color: ironDark);
+            new Entity(parent: restingBallRig, model: "cube", scale: new(0.10f, 0.07f, 0.22f), position: new(0.18f, -0.08f, 0.06f), rotation: new(0, -28f, -8f), color: Rgb(68, 74, 88));
+            // Чугунный шар «Железная Тыква» с лаймовыми светящимися глазами, зубастой ухмылкой и золотым черенком-крестом
+            new Entity(parent: restingBallRig, model: "sphere", scale: new(0.64f, 0.58f, 0.64f), color: ironDark);
+            new Entity(parent: restingBallRig, model: "diamond", scale: new(0.68f, 0.20f, 0.68f), color: Rgb(34, 38, 46));
+            // Золотой черенок-крест сверху тыквы
+            new Entity(parent: restingBallRig, model: "cube", scale: new(0.10f, 0.20f, 0.10f), position: new(0, 0.32f, 0), color: goldTrim, unlit: true);
+            new Entity(parent: restingBallRig, model: "cube", scale: new(0.22f, 0.07f, 0.08f), position: new(0, 0.35f, 0), color: goldTrim, unlit: true);
+            // Светящееся зелёное лицо тыквы (2 треугольных глаза + зигзагообразная улыбка)
+            foreach (int es in new[] { -1, 1 })
+                new Entity(parent: restingBallRig, model: "diamond", scale: new(0.13f, 0.12f, 0.08f), position: new(es * 0.13f, 0.08f, 0.29f), rotation: new(0, 0, es * -12f), color: limeGlow, unlit: true);
+            for (int m = -2; m <= 2; m++)
+                new Entity(parent: restingBallRig, model: "diamond", scale: new(0.09f, 0.08f, 0.08f), position: new(m * 0.07f, -0.08f + (Math.Abs(m) % 2) * 0.03f, 0.29f), color: limeGlow, unlit: true);
+            parts.ShieldAura = restingBallRig;
+
+            parts.LeftLeg = lHip;
+            parts.RightLeg = rHip;
+
+            // 2. Торс: облегающий белый комбинезон, чёрные ремни на поясе, золотая пряжка-череп тыквы и красные кресты
+            var torso = new Entity(parent: root, position: new(0, 1.26f, 0));
+            new Entity(parent: torso, model: "cube", scale: new(0.46f, 0.56f, 0.32f), position: new(0, 0.06f, 0), color: suitCol);
+            new Entity(parent: torso, model: "sphere", scale: new(0.48f, 0.30f, 0.34f), position: new(0, 0.16f, 0.04f), color: suitCol);
+            // Тёмная центральная молния и высокий воротник с золотой застёжкой
+            new Entity(parent: torso, model: "cube", scale: new(0.05f, 0.52f, 0.06f), position: new(0, 0.08f, 0.16f), color: strapDark);
+            new Entity(parent: torso, model: "cube", scale: new(0.28f, 0.12f, 0.28f), position: new(0, 0.36f, 0), color: strapDark);
+            new Entity(parent: torso, model: "diamond", scale: new(0.12f, 0.12f, 0.08f), position: new(0, 0.34f, 0.16f), color: redSole, unlit: true);
+            // Перекрёстные чёрные ремни на талии и бёдрах + золотая пряжка-тыква спереди!
+            new Entity(parent: torso, model: "cube", scale: new(0.52f, 0.10f, 0.36f), position: new(0, -0.22f, 0), rotation: new(0, 0, -6f), color: strapDark);
+            new Entity(parent: torso, model: "cube", scale: new(0.50f, 0.07f, 0.35f), position: new(0, -0.30f, 0), rotation: new(0, 0, 8f), color: strapDark);
+            new Entity(parent: torso, model: "sphere", scale: new(0.18f, 0.16f, 0.10f), position: new(0.04f, -0.23f, 0.19f), color: goldTrim, unlit: true);
+            // Красные кресты Валентайн по бокам плеч/воротника
+            foreach (int s in new[] { -1, 1 })
+                new Entity(parent: torso, model: "diamond", scale: new(0.10f, 0.10f, 0.08f), position: new(s * 0.20f, 0.26f, 0.16f), color: redSole, unlit: true);
+
+            // 3. Голова: изумрудные глаза, двухслойные ало-белые длинные волосы, расколотый золотой нимб и 3-глазая маска!
+            var head = new Entity(parent: torso, position: new(0, 0.58f, 0));
+            new Entity(parent: head, model: "sphere", scale: new(0.46f, 0.48f, 0.46f), color: skinTone);
+            // Изумрудно-зелёные глаза Jack-O'
+            foreach (int s in new[] { -1, 1 })
+            {
+                new Entity(parent: head, model: "sphere", scale: new(0.11f, 0.10f, 0.07f), position: new(s * 0.11f, 0.04f, 0.21f), color: Rgb(65, 215, 110), unlit: true);
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.04f, position: new(s * 0.11f + 0.02f, 0.06f, 0.24f), color: Color.White, unlit: true);
+            }
+
+            // Шапка алых волос сверху + чёлка и боковые пряди с белой внутренней подкладкой!
+            new Entity(parent: head, model: "sphere", scale: new(0.54f, 0.46f, 0.54f), position: new(0, 0.12f, -0.03f), color: crimsonHair);
+            new Entity(parent: head, model: "diamond", scale: new(0.18f, 0.26f, 0.14f), position: new(-0.04f, 0.18f, 0.22f), rotation: new(12f, 0, 8f), color: crimsonHair);
+            foreach (int s in new[] { -1, 1 })
+            {
+                new Entity(parent: head, model: "diamond", scale: new(0.15f, 0.52f, 0.16f), position: new(s * 0.24f, -0.10f, 0.10f), rotation: new(-6f, 0, s * 8f), color: crimsonHair);
+                new Entity(parent: head, model: "diamond", scale: new(0.11f, 0.44f, 0.12f), position: new(s * 0.20f, -0.12f, 0.08f), rotation: new(-6f, 0, s * 6f), color: innerWhiteHair);
+            }
+
+            // Длинные развевающиеся двухцветные пряди волос сзади (алый верх + белоснежный внутренний слой, анимируются в Tails!)
+            foreach (int s in new[] { -1, 0, 1 })
+            {
+                var hairLock = new Entity(parent: head, position: new(s * 0.16f, -0.06f, -0.20f), rotation: new(16f, s * 8f, 0));
+                new Entity(parent: hairLock, model: "diamond", scale: new(0.32f, 0.96f, 0.20f), position: new(0, -0.38f, -0.06f), color: crimsonHair);
+                new Entity(parent: hairLock, model: "diamond", scale: new(0.26f, 0.88f, 0.16f), position: new(0, -0.40f, 0.03f), color: innerWhiteHair);
+                parts.Tails.Add(hairLock);
+            }
+
+            // РАСКОЛОТЫЙ ЗОЛОТОЙ НИМБ (Broken Halo) над/за головой (вращается через parts.Halo)
+            var brokenHalo = new Entity(parent: head, position: new(0, 0.34f, -0.18f), rotation: new(24f, 0, 0));
+            for (int i = 0; i < 6; i++)
+            {
+                if (skinIdx != 2 && i == 2) continue; // Характерный скол нимба у классической Jack-O'!
+                float ang = i * (MathF.PI / 3f);
+                new Entity(parent: brokenHalo, model: "diamond", scale: new(0.24f, 0.10f, 0.08f),
+                    position: new(MathF.Cos(ang) * 0.44f, MathF.Sin(ang) * 0.44f, 0),
+                    rotation: new(0, 0, i * 60f + 90f), color: goldTrim, unlit: true);
+            }
+            parts.Halo = brokenHalo;
+
+            // ФИРМЕННАЯ ТРЁХГЛАЗАЯ ЖЕЛЕЗНАЯ МАСКА JACK-O':
+            // а) В обычном состоянии — сдвинута набок на макушке (NormalFormNodes)
+            var maskSide = new Entity(parent: head, position: new(0.22f, 0.24f, 0.10f), rotation: new(-22f, 34f, -26f));
+            new Entity(parent: maskSide, model: "sphere", scale: new(0.36f, 0.38f, 0.18f), color: ironDark);
+            foreach (float mx in new[] { -0.08f, 0f, 0.08f })
+                new Entity(parent: maskSide, model: "diamond", scale: new(0.05f, 0.11f, 0.06f), position: new(mx, 0.04f, 0.09f), color: limeGlow, unlit: true);
+            new Entity(parent: maskSide, model: "cube", scale: new(0.18f, 0.03f, 0.06f), position: new(0, -0.07f, 0.09f), color: limeGlow, unlit: true);
+            parts.NormalFormNodes.Add(maskSide);
+
+            // б) В боевом/ульт-режиме — надета прямо на лицо (UltFormNodes)!
+            var maskFace = new Entity(parent: head, position: new(0, 0.03f, 0.22f), enabled: false);
+            new Entity(parent: maskFace, model: "sphere", scale: new(0.46f, 0.48f, 0.18f), color: ironDark);
+            foreach (float mx in new[] { -0.10f, 0f, 0.10f })
+                new Entity(parent: maskFace, model: "diamond", scale: new(0.06f, 0.14f, 0.08f), position: new(mx, 0.05f, 0.09f), color: limeGlow, unlit: true);
+            new Entity(parent: maskFace, model: "cube", scale: new(0.22f, 0.04f, 0.08f), position: new(0, -0.09f, 0.09f), color: limeGlow, unlit: true);
+            parts.UltFormNodes.Add(maskFace);
+
+            parts.Head = head;
+            parts.Torso = torso;
+
+            // 4. Руки в белых рукавах с тёмными манжетами и красными крестами + Командный Флаг в правой руке (для Shift)!
+            var lShoulder = new Entity(parent: torso, position: new(-0.38f, 0.24f, 0));
+            var rShoulder = new Entity(parent: torso, position: new(0.38f, 0.24f, 0));
+            foreach (var (side, sh) in new[] { (-1, lShoulder), (1, rShoulder) })
+            {
+                new Entity(parent: sh, model: "sphere", scaleUniform: 0.19f, position: new(0, 0.03f, 0), color: suitCol);
+                new Entity(parent: sh, model: "cube", scale: new(0.15f, 0.28f, 0.15f), position: new(0, -0.14f, 0), color: suitCol);
+                new Entity(parent: sh, model: "diamond", scale: new(0.22f, 0.16f, 0.22f), position: new(0, -0.26f, 0.14f), color: suitCol);
+                new Entity(parent: sh, model: "cube", scale: new(0.16f, 0.06f, 0.16f), position: new(0, -0.27f, 0.24f), color: strapDark);
+                new Entity(parent: sh, model: "sphere", scaleUniform: 0.12f, position: new(0, -0.28f, 0.34f), color: strapDark);
+            }
+
+            // Командный Флаг в правой руке (отображается во время прыжка Shift через parts.Shield!)
+            var handFlag = new Entity(parent: rShoulder, position: new(0, -0.28f, 0.38f), rotation: new(75f, 0, 0), enabled: false);
+            new Entity(parent: handFlag, model: "cube", scale: new(0.06f, 1.45f, 0.06f), position: new(0, 0.55f, 0), color: goldTrim, unlit: true);
+            new Entity(parent: handFlag, model: "diamond", scale: new(0.18f, 0.22f, 0.18f), position: new(0, 1.32f, 0), color: goldTrim, unlit: true);
+            new Entity(parent: handFlag, model: "diamond", scale: new(0.72f, 0.46f, 0.08f), position: new(0.36f, 1.02f, 0), color: redSole, unlit: true);
+            new Entity(parent: handFlag, model: "diamond", scale: new(0.26f, 0.26f, 0.10f), position: new(0.34f, 1.02f, 0), color: limeGlow, unlit: true);
+            parts.Shield = handFlag;
 
             parts.LeftArm = lShoulder;
             parts.RightArm = rShoulder;

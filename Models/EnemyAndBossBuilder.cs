@@ -683,6 +683,170 @@ namespace RiskOfCSharp2.Models
                 parts.LeftArm = lArm;
                 parts.RightArm = rArm;
             }
+            else if (enemyType == "hell_drone")
+            {
+                Color hullPurple = Rgb(78, 34, 86);
+                Color darkSteel = Rgb(36, 32, 44);
+                Color bloodGlow = Rgb(255, 42, 65);
+                Color lensGold = Rgb(255, 215, 55);
+
+                var core = new Entity(parent: root, position: new(0, 2.35f, 0));
+                new Entity(parent: core, model: "sphere", scale: new(1.15f, 1.05f, 1.25f), color: hullPurple);
+                new Entity(parent: core, model: "diamond", scale: new(1.38f, 0.36f, 1.42f), color: darkSteel);
+                new Entity(parent: core, model: "cube", scale: new(0.68f, 0.56f, 0.25f), position: new(0, 0.04f, 0.52f), color: Rgb(195, 195, 210));
+                new Entity(parent: core, model: "sphere", scaleUniform: 0.36f, position: new(0, 0.05f, 0.62f), color: lensGold, unlit: true);
+                new Entity(parent: core, model: "sphere", scaleUniform: 0.16f, position: new(0, 0.05f, 0.75f), color: Color.White, unlit: true);
+                foreach (int s in new[] { -1, 1 })
+                {
+                    var wing = new Entity(parent: core, position: new(s * 0.72f, 0.08f, -0.05f), rotation: new(0, 0, s * -18f));
+                    new Entity(parent: wing, model: "diamond", scale: new(0.62f, 0.18f, 0.85f), color: hullPurple);
+                    new Entity(parent: wing, model: "cube", scale: new(0.45f, 0.08f, 0.65f), position: new(s * 0.12f, 0, -0.10f), color: bloodGlow, unlit: true);
+                }
+                parts.Core = core;
+                parts.Ring1 = new Entity(parent: core, model: "diamond", scale: new(1.85f, 0.14f, 1.85f), color: bloodGlow, unlit: true);
+                parts.Ring2 = new Entity(parent: core, model: "diamond", scale: new(0.14f, 1.75f, 1.75f), color: darkSteel);
+            }
+            else if (enemyType == "combine_soldier")
+            {
+                Color armorWhite = Rgb(178, 190, 204);
+                Color suitDark = Rgb(36, 44, 56);
+                Color visorCyan = Rgb(65, 225, 255);
+
+                var lLeg = new Entity(parent: root, position: new(-0.24f, 0.88f, 0));
+                var rLeg = new Entity(parent: root, position: new(0.24f, 0.88f, 0));
+                foreach (var leg in new[] { lLeg, rLeg })
+                {
+                    new Entity(parent: leg, model: "cube", scale: new(0.26f, 0.82f, 0.28f), position: new(0, -0.40f, 0), color: suitDark);
+                    new Entity(parent: leg, model: "cube", scale: new(0.30f, 0.28f, 0.32f), position: new(0, -0.44f, 0.04f), color: armorWhite);
+                    new Entity(parent: leg, model: "cube", scale: new(0.28f, 0.18f, 0.42f), position: new(0, -0.82f, 0.08f), color: Rgb(24, 28, 34));
+                }
+                parts.LeftLeg = lLeg;
+                parts.RightLeg = rLeg;
+
+                var torso = new Entity(parent: root, position: new(0, 1.38f, 0));
+                new Entity(parent: torso, model: "cube", scale: new(0.76f, 0.94f, 0.48f), color: suitDark);
+                new Entity(parent: torso, model: "diamond", scale: new(0.86f, 0.64f, 0.56f), position: new(0, 0.14f, 0.04f), color: armorWhite);
+                new Entity(parent: torso, model: "cube", scale: new(0.18f, 0.24f, 0.58f), position: new(0, 0.16f, 0.04f), color: visorCyan, unlit: true);
+
+                var head = new Entity(parent: torso, position: new(0, 0.68f, 0.04f));
+                new Entity(parent: head, model: "sphere", scale: new(0.50f, 0.54f, 0.54f), color: armorWhite);
+                new Entity(parent: head, model: "cube", scale: new(0.24f, 0.22f, 0.28f), position: new(0, -0.10f, 0.22f), color: suitDark);
+                foreach (float ex in new[] { -0.11f, 0.11f })
+                    new Entity(parent: head, model: "sphere", scaleUniform: 0.12f, position: new(ex, 0.05f, 0.23f), color: visorCyan, unlit: true);
+
+                var lArm = new Entity(parent: torso, position: new(-0.50f, 0.26f, 0));
+                var rArm = new Entity(parent: torso, position: new(0.50f, 0.26f, 0));
+                foreach (var (s, arm) in new[] { (-1, lArm), (1, rArm) })
+                {
+                    new Entity(parent: arm, model: "diamond", scale: new(0.34f, 0.30f, 0.34f), position: new(s * 0.04f, 0.08f, 0), color: armorWhite);
+                    new Entity(parent: arm, model: "cube", scale: new(0.22f, 0.62f, 0.22f), position: new(0, -0.26f, 0.16f), rotation: new(-38f, 0, 0), color: suitDark);
+                }
+                new Entity(parent: rArm, model: "cube", scale: new(0.12f, 0.18f, 0.92f), position: new(-0.08f, -0.42f, 0.52f), color: Rgb(42, 52, 68));
+                new Entity(parent: rArm, model: "sphere", scaleUniform: 0.15f, position: new(-0.08f, -0.40f, 0.72f), color: visorCyan, unlit: true);
+
+                parts.Torso = torso;
+                parts.Crown = head;
+                parts.LeftArm = lArm;
+                parts.RightArm = rArm;
+            }
+            else if (enemyType == "sarkaz_mercenary")
+            {
+                Color coatBlack = Rgb(32, 28, 36);
+                Color sarkazSkin = Rgb(185, 168, 172);
+                Color origFlame = Rgb(255, 78, 35);
+
+                var lLeg = new Entity(parent: root, position: new(-0.26f, 0.90f, 0));
+                var rLeg = new Entity(parent: root, position: new(0.26f, 0.90f, 0));
+                foreach (var leg in new[] { lLeg, rLeg })
+                    new Entity(parent: leg, model: "cube", scale: new(0.26f, 0.86f, 0.28f), position: new(0, -0.42f, 0), color: coatBlack);
+                parts.LeftLeg = lLeg;
+                parts.RightLeg = rLeg;
+
+                var torso = new Entity(parent: root, position: new(0, 1.42f, 0));
+                new Entity(parent: torso, model: "cube", scale: new(0.80f, 1.02f, 0.48f), color: coatBlack);
+                new Entity(parent: torso, model: "diamond", scale: new(0.26f, 0.62f, 0.54f), position: new(0, 0.12f, 0.04f), color: origFlame, unlit: true);
+                var tail = new Entity(parent: torso, position: new(0, -0.38f, -0.24f));
+                new Entity(parent: tail, model: "diamond", scale: new(0.14f, 0.14f, 0.85f), position: new(0, -0.10f, -0.38f), rotation: new(-18f, 0, 0), color: coatBlack);
+                parts.Tail = tail;
+
+                var head = new Entity(parent: torso, position: new(0, 0.72f, 0.04f));
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.48f, color: sarkazSkin);
+                new Entity(parent: head, model: "cube", scale: new(0.46f, 0.14f, 0.28f), position: new(0, 0.04f, 0.16f), color: origFlame, unlit: true);
+                foreach (int s in new[] { -1, 1 })
+                    new Entity(parent: head, model: "diamond", scale: new(0.16f, 0.68f, 0.18f), position: new(s * 0.22f, 0.38f, -0.05f), rotation: new(-18f, 0, s * -22f), color: Rgb(48, 22, 26));
+
+                var lArm = new Entity(parent: torso, position: new(-0.52f, 0.28f, 0));
+                var rArm = new Entity(parent: torso, position: new(0.52f, 0.28f, 0));
+                new Entity(parent: lArm, model: "cube", scale: new(0.22f, 0.68f, 0.22f), position: new(0, -0.30f, 0.10f), color: coatBlack);
+                new Entity(parent: rArm, model: "cube", scale: new(0.24f, 0.68f, 0.24f), position: new(0, -0.30f, 0.12f), color: coatBlack);
+                var blade = new Entity(parent: rArm, position: new(0, -0.58f, 0.35f), rotation: new(48f, 0, 0));
+                new Entity(parent: blade, model: "diamond", scale: new(0.14f, 1.75f, 0.38f), position: new(0, 0.72f, 0), color: Rgb(45, 36, 42));
+                new Entity(parent: blade, model: "diamond", scale: new(0.16f, 1.55f, 0.16f), position: new(0, 0.76f, 0.12f), color: origFlame, unlit: true);
+
+                parts.Torso = torso;
+                parts.Crown = head;
+                parts.LeftArm = lArm;
+                parts.RightArm = rArm;
+            }
+            else if (enemyType == "hollow_shadow")
+            {
+                Color pitchShadow = Rgb(18, 16, 26);
+                Color maskWhite = Rgb(242, 236, 222);
+                Color arcanaGold = Rgb(255, 205, 65);
+                Color eerieRed = Rgb(235, 42, 85);
+
+                var torso = new Entity(parent: root, position: new(0, 1.25f, 0));
+                new Entity(parent: root, model: "sphere", scale: new(1.65f, 0.18f, 1.65f), position: new(0, 0.12f, 0), color: Rgb(22, 16, 34, 210), unlit: true);
+                new Entity(parent: torso, model: "diamond", scale: new(1.15f, 1.65f, 0.95f), color: pitchShadow);
+                new Entity(parent: torso, model: "sphere", scale: new(0.95f, 0.95f, 0.85f), position: new(0, 0.25f, 0), color: pitchShadow);
+
+                var mask = new Entity(parent: torso, position: new(0, 0.42f, 0.44f));
+                new Entity(parent: mask, model: "diamond", scale: new(0.76f, 0.96f, 0.22f), color: maskWhite);
+                new Entity(parent: mask, model: "diamond", scale: new(0.84f, 0.16f, 0.24f), position: new(0, 0.26f, 0), color: arcanaGold, unlit: true);
+                foreach (float ex in new[] { -0.16f, 0.16f })
+                    new Entity(parent: mask, model: "sphere", scaleUniform: 0.13f, position: new(ex, 0.08f, 0.10f), color: eerieRed, unlit: true);
+                parts.Crown = mask;
+
+                var lArm = new Entity(parent: torso, position: new(-0.68f, 0.20f, 0.10f));
+                var rArm = new Entity(parent: torso, position: new(0.68f, 0.20f, 0.10f));
+                foreach (var (s, arm) in new[] { (-1, lArm), (1, rArm) })
+                {
+                    new Entity(parent: arm, model: "diamond", scale: new(0.24f, 1.05f, 0.24f), position: new(0, -0.35f, 0.25f), rotation: new(-48f, 0, s * 12f), color: pitchShadow);
+                    new Entity(parent: arm, model: "diamond", scale: new(0.14f, 0.45f, 0.14f), position: new(0, -0.75f, 0.55f), rotation: new(-68f, 0, 0), color: eerieRed, unlit: true);
+                }
+                parts.Torso = torso;
+                parts.Core = torso;
+                parts.LeftArm = lArm;
+                parts.RightArm = rArm;
+            }
+            else if (enemyType == "nether_blaze")
+            {
+                Color blazeGold = Rgb(255, 195, 35);
+                Color blazeOrange = Rgb(255, 105, 18);
+                Color smokeDark = Rgb(62, 38, 28);
+
+                var core = new Entity(parent: root, position: new(0, 2.35f, 0));
+                new Entity(parent: core, model: "cube", scaleUniform: 0.78f, position: new(0, 0.38f, 0), color: blazeGold, unlit: true);
+                new Entity(parent: core, model: "cube", scale: new(0.82f, 0.24f, 0.82f), position: new(0, 0.15f, 0), color: blazeOrange, unlit: true);
+                foreach (float ex in new[] { -0.18f, 0.18f })
+                    new Entity(parent: core, model: "cube", scale: new(0.16f, 0.10f, 0.08f), position: new(ex, 0.42f, 0.40f), color: Color.White, unlit: true);
+                new Entity(parent: core, model: "sphere", scaleUniform: 0.55f, position: new(0, -0.32f, 0), color: smokeDark);
+
+                var ring1 = new Entity(parent: core, position: new(0, 0.02f, 0));
+                var ring2 = new Entity(parent: core, position: new(0, -0.48f, 0));
+                for (int i = 0; i < 4; i++)
+                {
+                    float ang = i * (MathF.PI * 0.5f);
+                    new Entity(parent: ring1, model: "cube", scale: new(0.16f, 0.92f, 0.16f),
+                        position: new(MathF.Cos(ang) * 0.92f, 0, MathF.Sin(ang) * 0.92f), color: blazeGold, unlit: true);
+                    float ang2 = ang + MathF.PI * 0.25f;
+                    new Entity(parent: ring2, model: "cube", scale: new(0.14f, 0.76f, 0.14f),
+                        position: new(MathF.Cos(ang2) * 0.64f, 0, MathF.Sin(ang2) * 0.64f), color: blazeOrange, unlit: true);
+                }
+                parts.Core = core;
+                parts.Ring1 = ring1;
+                parts.Ring2 = ring2;
+            }
             else
             {
                 return BuildBossMesh(parentEntity, enemyType, root, parts);
@@ -1256,6 +1420,297 @@ namespace RiskOfCSharp2.Models
                 new Entity(parent: headBlock, model: "diamond", scale: new(1.55f, 0.12f, 2.85f), rotation: new(0, 0, 45), color: Rgb(95, 245, 255, 100), unlit: true);
                 parts.Hammer = hammer;
                 parts.PhaseRing = new Entity(parent: torso, model: "diamond", scale: new(3.6f, 0.15f, 3.6f), position: new(0, -0.2f, 0), color: cyanFire, unlit: true, enabled: false);
+            }
+            else if (enemyType == "zurg_mech")
+            {
+                Color zurgPurple = Rgb(98, 36, 148);
+                Color zurgDark = Rgb(34, 24, 48);
+                Color zurgYellow = Rgb(255, 215, 45);
+                Color zurgRed = Rgb(255, 38, 55);
+
+                var lLeg = new Entity(parent: root, position: new(-0.75f, 1.55f, 0));
+                var rLeg = new Entity(parent: root, position: new(0.75f, 1.55f, 0));
+                foreach (var leg in new[] { lLeg, rLeg })
+                {
+                    new Entity(parent: leg, model: "cube", scale: new(0.76f, 1.45f, 0.82f), position: new(0, -0.72f, 0), color: zurgDark);
+                    new Entity(parent: leg, model: "cube", scale: new(0.86f, 0.36f, 1.05f), position: new(0, -1.42f, 0.12f), color: zurgPurple);
+                }
+                parts.LeftLeg = lLeg;
+                parts.RightLeg = rLeg;
+
+                var torso = new Entity(parent: root, position: new(0, 2.95f, 0));
+                new Entity(parent: torso, model: "diamond", scale: new(2.55f, 2.45f, 1.65f), color: zurgPurple);
+                new Entity(parent: torso, model: "cube", scale: new(1.65f, 0.42f, 1.72f), position: new(0, 0.55f, 0.05f), color: zurgDark);
+                parts.Core = new Entity(parent: torso, model: "diamond", scale: new(0.68f, 0.68f, 0.45f), position: new(0, 0.35f, 0.78f), color: zurgYellow, unlit: true);
+
+                var cape = new Entity(parent: torso, position: new(0, 0.95f, -0.62f), rotation: new(14f, 0, 0));
+                new Entity(parent: cape, model: "diamond", scale: new(2.45f, 3.15f, 0.22f), position: new(0, -1.45f, -0.15f), color: Rgb(155, 18, 36));
+                parts.Cape = cape;
+
+                var head = new Entity(parent: torso, position: new(0, 1.55f, 0.06f));
+                new Entity(parent: head, model: "cube", scale: new(0.88f, 0.95f, 0.88f), color: zurgPurple);
+                new Entity(parent: head, model: "cube", scale: new(0.72f, 0.18f, 0.18f), position: new(0, 0.16f, 0.42f), color: zurgRed, unlit: true);
+                foreach (float gx in new[] { -0.22f, -0.07f, 0.07f, 0.22f })
+                    new Entity(parent: head, model: "cube", scale: new(0.08f, 0.26f, 0.16f), position: new(gx, -0.18f, 0.42f), color: zurgYellow, unlit: true);
+                foreach (int s in new[] { -1, 1 })
+                    new Entity(parent: head, model: "diamond", scale: new(0.24f, 0.92f, 0.24f), position: new(s * 0.42f, 0.68f, -0.05f), rotation: new(0, 0, s * -18f), color: Rgb(185, 192, 208));
+                parts.Crown = head;
+
+                var lArm = new Entity(parent: torso, position: new(-1.62f, 0.55f, 0));
+                var rArm = new Entity(parent: torso, position: new(1.62f, 0.55f, 0));
+                foreach (var (s, arm) in new[] { (-1, lArm), (1, rArm) })
+                {
+                    new Entity(parent: arm, model: "diamond", scale: new(1.05f, 0.78f, 1.05f), position: new(s * 0.12f, 0.22f, 0), color: zurgPurple);
+                    new Entity(parent: arm, model: "cube", scale: new(0.56f, 1.25f, 0.56f), position: new(0, -0.58f, 0.18f), color: zurgDark);
+                }
+                var blaster = new Entity(parent: rArm, position: new(0, -1.05f, 0.85f));
+                new Entity(parent: blaster, model: "cube", scale: new(0.68f, 0.68f, 1.55f), color: zurgYellow);
+                foreach (var (bx, by) in new[] { (0f, 0.22f), (-0.20f, -0.16f), (0.20f, -0.16f) })
+                    new Entity(parent: blaster, model: "sphere", scaleUniform: 0.26f, position: new(bx, by, 0.82f), color: zurgRed, unlit: true);
+
+                parts.Torso = torso;
+                parts.LeftArm = lArm;
+                parts.RightArm = rArm;
+            }
+            else if (enemyType == "justice_gear")
+            {
+                Color armorPearl = Rgb(232, 238, 248);
+                Color crimsonBio = Rgb(205, 36, 58);
+                Color gammaCyan = Rgb(75, 235, 255);
+                Color goldTrim = Rgb(255, 205, 65);
+
+                var lLeg = new Entity(parent: root, position: new(-0.68f, 1.75f, 0));
+                var rLeg = new Entity(parent: root, position: new(0.68f, 1.75f, 0));
+                foreach (var leg in new[] { lLeg, rLeg })
+                {
+                    new Entity(parent: leg, model: "diamond", scale: new(0.66f, 1.75f, 0.72f), position: new(0, -0.85f, 0), color: armorPearl);
+                    new Entity(parent: leg, model: "diamond", scale: new(0.38f, 0.75f, 0.78f), position: new(0, -0.92f, 0.12f), color: crimsonBio);
+                }
+                parts.LeftLeg = lLeg;
+                parts.RightLeg = rLeg;
+
+                var torso = new Entity(parent: root, position: new(0, 3.05f, 0));
+                new Entity(parent: torso, model: "diamond", scale: new(2.15f, 2.35f, 1.35f), color: armorPearl);
+                new Entity(parent: torso, model: "diamond", scale: new(1.25f, 1.65f, 1.42f), color: crimsonBio);
+                parts.Core = new Entity(parent: torso, model: "sphere", scaleUniform: 0.68f, position: new(0, 0.25f, 0.62f), color: gammaCyan, unlit: true);
+
+                var tail = new Entity(parent: torso, position: new(0, -0.85f, -0.55f));
+                new Entity(parent: tail, model: "diamond", scale: new(0.45f, 0.45f, 2.65f), position: new(0, -0.25f, -1.25f), rotation: new(-18f, 0, 0), color: armorPearl);
+                new Entity(parent: tail, model: "diamond", scale: new(0.32f, 0.65f, 0.85f), position: new(0, -0.55f, -2.55f), color: goldTrim, unlit: true);
+                parts.Tail = tail;
+
+                var wings = new Entity(parent: torso, position: new(0, 0.55f, -0.55f));
+                foreach (int s in new[] { -1, 1 })
+                {
+                    for (int w = 0; w < 3; w++)
+                    {
+                        new Entity(parent: wings, model: "diamond", scale: new(2.35f - w * 0.35f, 0.28f, 0.35f),
+                            position: new(s * (1.55f + w * 0.25f), 0.55f - w * 0.52f, -0.15f),
+                            rotation: new(0, 0, s * (24f - w * 14f)),
+                            color: w == 1 ? Rgb(255, 75, 185, 195) : Rgb(75, 235, 255, 195), unlit: true);
+                    }
+                }
+                parts.Cape = wings;
+
+                var head = new Entity(parent: torso, position: new(0, 1.52f, 0.08f));
+                new Entity(parent: head, model: "diamond", scale: new(0.76f, 0.98f, 0.82f), color: armorPearl);
+                new Entity(parent: head, model: "cube", scale: new(0.58f, 0.16f, 0.25f), position: new(0, 0.08f, 0.36f), color: gammaCyan, unlit: true);
+                new Entity(parent: head, model: "diamond", scale: new(0.24f, 1.15f, 0.38f), position: new(0, 0.72f, -0.05f), color: goldTrim);
+                parts.Crown = head;
+
+                var lArm = new Entity(parent: torso, position: new(-1.45f, 0.55f, 0));
+                var rArm = new Entity(parent: torso, position: new(1.45f, 0.55f, 0));
+                foreach (var (s, arm) in new[] { (-1, lArm), (1, rArm) })
+                {
+                    new Entity(parent: arm, model: "diamond", scale: new(0.95f, 0.95f, 0.85f), position: new(s * 0.18f, 0.28f, 0), color: goldTrim);
+                    new Entity(parent: arm, model: "diamond", scale: new(0.48f, 1.55f, 0.48f), position: new(0, -0.68f, 0.18f), color: armorPearl);
+                    new Entity(parent: arm, model: "diamond", scale: new(0.28f, 0.85f, 0.55f), position: new(0, -1.35f, 0.45f), rotation: new(-42f, 0, 0), color: gammaCyan, unlit: true);
+                }
+                parts.Torso = torso;
+                parts.LeftArm = lArm;
+                parts.RightArm = rArm;
+            }
+            else if (enemyType == "shadow_reaper")
+            {
+                Color cloakTeal = Rgb(22, 42, 46);
+                Color chainIron = Rgb(125, 136, 150);
+                Color bloodWrap = Rgb(168, 28, 42);
+                Color eyeGold = Rgb(255, 215, 55);
+
+                var torso = new Entity(parent: root, position: new(0, 2.85f, 0));
+                new Entity(parent: torso, model: "diamond", scale: new(2.15f, 3.35f, 1.75f), position: new(0, -0.55f, 0), color: cloakTeal);
+                var cape = new Entity(parent: torso, position: new(0, 0.65f, -0.52f), rotation: new(12f, 0, 0));
+                new Entity(parent: cape, model: "diamond", scale: new(2.35f, 3.05f, 0.24f), position: new(0, -1.35f, -0.12f), color: Rgb(14, 28, 32));
+                parts.Cape = cape;
+
+                var chains = new Entity(parent: torso, position: new(0, -0.35f, 0));
+                for (int i = 0; i < 8; i++)
+                {
+                    float ang = (i / 8f) * MathF.PI * 2f;
+                    new Entity(parent: chains, model: "cube", scale: new(0.28f, 0.16f, 0.48f),
+                        position: new(MathF.Cos(ang) * 1.55f, MathF.Sin(ang * 2f) * 0.25f, MathF.Sin(ang) * 1.55f),
+                        rotation: new(25f, ang * (180f / MathF.PI), 0), color: chainIron);
+                }
+                parts.Ring1 = chains;
+
+                var head = new Entity(parent: torso, position: new(0, 1.42f, 0.08f));
+                new Entity(parent: head, model: "sphere", scale: new(0.76f, 0.86f, 0.78f), color: bloodWrap);
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.22f, position: new(0.14f, 0.06f, 0.36f), color: eyeGold, unlit: true);
+                parts.Crown = head;
+
+                var lArm = new Entity(parent: torso, position: new(-1.32f, 0.52f, 0.12f));
+                var rArm = new Entity(parent: torso, position: new(1.32f, 0.52f, 0.12f));
+                foreach (var arm in new[] { lArm, rArm })
+                {
+                    new Entity(parent: arm, model: "cube", scale: new(0.42f, 1.25f, 0.42f), position: new(0, -0.52f, 0.22f), rotation: new(-42f, 0, 0), color: cloakTeal);
+                    new Entity(parent: arm, model: "cube", scale: new(0.20f, 0.28f, 1.48f), position: new(0, -0.92f, 0.95f), color: chainIron);
+                    new Entity(parent: arm, model: "sphere", scaleUniform: 0.20f, position: new(0, -0.88f, 1.68f), color: Rgb(85, 255, 165), unlit: true);
+                }
+                parts.Torso = torso;
+                parts.Core = torso;
+                parts.LeftArm = lArm;
+                parts.RightArm = rArm;
+            }
+            else if (enemyType == "vergil_mirage")
+            {
+                Color mirageBlue = Rgb(42, 135, 235, 225);
+                Color mirageGlow = Rgb(115, 235, 255);
+                Color darkCoat = Rgb(18, 36, 72);
+
+                var lLeg = new Entity(parent: root, position: new(-0.34f, 1.35f, 0));
+                var rLeg = new Entity(parent: root, position: new(0.34f, 1.35f, 0));
+                foreach (var leg in new[] { lLeg, rLeg })
+                    new Entity(parent: leg, model: "cube", scale: new(0.34f, 1.32f, 0.36f), position: new(0, -0.66f, 0), color: darkCoat);
+                parts.LeftLeg = lLeg;
+                parts.RightLeg = rLeg;
+
+                var torso = new Entity(parent: root, position: new(0, 2.15f, 0));
+                new Entity(parent: torso, model: "cube", scale: new(0.96f, 1.35f, 0.56f), color: darkCoat);
+                new Entity(parent: torso, model: "diamond", scale: new(0.48f, 1.15f, 0.62f), color: mirageGlow, unlit: true);
+                var cape = new Entity(parent: torso, position: new(0, 0.15f, -0.32f), rotation: new(12f, 0, 0));
+                new Entity(parent: cape, model: "diamond", scale: new(1.42f, 2.25f, 0.20f), position: new(0, -1.05f, -0.10f), color: mirageBlue, unlit: true);
+                parts.Cape = cape;
+
+                var head = new Entity(parent: torso, position: new(0, 0.98f, 0.04f));
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.58f, color: Rgb(215, 235, 255));
+                for (int h = -2; h <= 2; h++)
+                    new Entity(parent: head, model: "diamond", scale: new(0.16f, 0.48f, 0.42f), position: new(h * 0.10f, 0.28f, -0.12f), rotation: new(-38f, 0, h * -8f), color: Color.White, unlit: true);
+                foreach (int s in new[] { -1, 1 })
+                    new Entity(parent: head, model: "diamond", scale: new(0.14f, 0.68f, 0.18f), position: new(s * 0.26f, 0.42f, 0.05f), rotation: new(18f, 0, s * -22f), color: mirageGlow, unlit: true);
+                parts.Crown = head;
+
+                var ring = new Entity(parent: torso, position: new(0, 0.45f, 0));
+                for (int i = 0; i < 6; i++)
+                {
+                    float ang = (i / 6f) * MathF.PI * 2f;
+                    new Entity(parent: ring, model: "diamond", scale: new(0.12f, 0.14f, 1.25f),
+                        position: new(MathF.Cos(ang) * 1.95f, 0.25f, MathF.Sin(ang) * 1.95f),
+                        color: mirageGlow, unlit: true);
+                }
+                parts.Ring1 = ring;
+
+                var lArm = new Entity(parent: torso, position: new(-0.68f, 0.42f, 0));
+                var rArm = new Entity(parent: torso, position: new(0.68f, 0.42f, 0));
+                new Entity(parent: lArm, model: "cube", scale: new(0.28f, 0.95f, 0.28f), position: new(0, -0.42f, 0.15f), color: darkCoat);
+                new Entity(parent: rArm, model: "cube", scale: new(0.28f, 0.95f, 0.28f), position: new(0, -0.42f, 0.15f), color: darkCoat);
+                var yamato = new Entity(parent: rArm, position: new(0, -0.85f, 0.35f), rotation: new(58f, 0, 0));
+                new Entity(parent: yamato, model: "diamond", scale: new(0.08f, 2.45f, 0.18f), position: new(0, 1.15f, 0), color: Color.White, unlit: true);
+                parts.Hammer = yamato;
+
+                parts.Torso = torso;
+                parts.Core = torso;
+                parts.LeftArm = lArm;
+                parts.RightArm = rArm;
+            }
+            else if (enemyType == "animatronic_endo")
+            {
+                Color endoSteel = Rgb(158, 166, 178);
+                Color goldShell = Rgb(205, 158, 42);
+                Color darkJoint = Rgb(36, 38, 46);
+                Color sparkPurple = Rgb(215, 75, 255);
+
+                var lLeg = new Entity(parent: root, position: new(-0.62f, 1.65f, 0));
+                var rLeg = new Entity(parent: root, position: new(0.62f, 1.65f, 0));
+                foreach (var leg in new[] { lLeg, rLeg })
+                {
+                    new Entity(parent: leg, model: "cube", scale: new(0.32f, 1.55f, 0.32f), position: new(0, -0.78f, 0), color: endoSteel);
+                    new Entity(parent: leg, model: "sphere", scaleUniform: 0.44f, position: new(0, -0.78f, 0.05f), color: goldShell);
+                    new Entity(parent: leg, model: "cube", scale: new(0.56f, 0.24f, 0.82f), position: new(0, -1.52f, 0.16f), color: endoSteel);
+                }
+                parts.LeftLeg = lLeg;
+                parts.RightLeg = rLeg;
+
+                var torso = new Entity(parent: root, position: new(0, 2.85f, 0));
+                new Entity(parent: torso, model: "cube", scale: new(1.55f, 1.95f, 0.92f), color: goldShell);
+                for (int r = -2; r <= 2; r++)
+                    new Entity(parent: torso, model: "cube", scale: new(1.25f, 0.10f, 0.98f), position: new(0, r * 0.28f, 0), color: endoSteel);
+                parts.Core = new Entity(parent: torso, model: "sphere", scaleUniform: 0.56f, position: new(0, 0.12f, 0.38f), color: sparkPurple, unlit: true);
+
+                var head = new Entity(parent: torso, position: new(0, 1.42f, 0.05f));
+                new Entity(parent: head, model: "cube", scale: new(0.96f, 0.88f, 0.88f), color: goldShell);
+                new Entity(parent: head, model: "cube", scale: new(0.72f, 0.24f, 0.76f), position: new(0, -0.48f, 0.08f), color: endoSteel);
+                foreach (float ex in new[] { -0.22f, 0.22f })
+                {
+                    new Entity(parent: head, model: "sphere", scaleUniform: 0.28f, position: new(ex, 0.10f, 0.38f), color: darkJoint);
+                    new Entity(parent: head, model: "sphere", scaleUniform: 0.11f, position: new(ex, 0.10f, 0.49f), color: Color.White, unlit: true);
+                }
+                new Entity(parent: head, model: "cube", scale: new(0.46f, 0.52f, 0.46f), position: new(0, 0.68f, 0), color: darkJoint);
+                foreach (int s in new[] { -1, 1 })
+                    new Entity(parent: head, model: "sphere", scale: new(0.32f, 0.32f, 0.14f), position: new(s * 0.55f, 0.52f, 0), color: goldShell);
+                parts.Crown = head;
+
+                var lArm = new Entity(parent: torso, position: new(-1.18f, 0.62f, 0));
+                var rArm = new Entity(parent: torso, position: new(1.18f, 0.62f, 0));
+                foreach (var arm in new[] { lArm, rArm })
+                {
+                    new Entity(parent: arm, model: "sphere", scaleUniform: 0.46f, color: darkJoint);
+                    new Entity(parent: arm, model: "cube", scale: new(0.32f, 1.45f, 0.32f), position: new(0, -0.72f, 0.12f), color: endoSteel);
+                    foreach (float cx in new[] { -0.14f, 0f, 0.14f })
+                        new Entity(parent: arm, model: "diamond", scale: new(0.10f, 0.48f, 0.14f), position: new(cx, -1.52f, 0.28f), rotation: new(-35f, 0, 0), color: endoSteel);
+                }
+                parts.Torso = torso;
+                parts.LeftArm = lArm;
+                parts.RightArm = rArm;
+            }
+            else if (enemyType == "warden_reef")
+            {
+                Color reefArmor = Rgb(34, 68, 78);
+                Color abyssGold = Rgb(175, 148, 72);
+                Color bioTeal = Rgb(65, 245, 215);
+
+                var lLeg = new Entity(parent: root, position: new(-0.82f, 1.55f, 0));
+                var rLeg = new Entity(parent: root, position: new(0.82f, 1.55f, 0));
+                foreach (var leg in new[] { lLeg, rLeg })
+                {
+                    new Entity(parent: leg, model: "cube", scale: new(0.82f, 1.48f, 0.86f), position: new(0, -0.74f, 0), color: reefArmor);
+                    new Entity(parent: leg, model: "diamond", scale: new(0.92f, 0.38f, 1.05f), position: new(0, -1.42f, 0.12f), color: abyssGold);
+                }
+                parts.LeftLeg = lLeg;
+                parts.RightLeg = rLeg;
+
+                var torso = new Entity(parent: root, position: new(0, 2.95f, 0));
+                new Entity(parent: torso, model: "sphere", scale: new(2.65f, 2.45f, 2.05f), color: reefArmor);
+                new Entity(parent: torso, model: "diamond", scale: new(2.85f, 0.75f, 2.15f), position: new(0, 0.72f, 0), color: abyssGold);
+                parts.Core = new Entity(parent: torso, model: "sphere", scaleUniform: 0.78f, position: new(0, 0.18f, 0.88f), color: bioTeal, unlit: true);
+
+                var head = new Entity(parent: torso, position: new(0, 1.48f, 0.12f));
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.98f, color: abyssGold);
+                new Entity(parent: head, model: "sphere", scaleUniform: 0.56f, position: new(0, 0.04f, 0.36f), color: bioTeal, unlit: true);
+                parts.Crown = head;
+
+                var lArm = new Entity(parent: torso, position: new(-1.72f, 0.52f, 0));
+                var rArm = new Entity(parent: torso, position: new(1.72f, 0.52f, 0));
+                new Entity(parent: lArm, model: "cube", scale: new(0.55f, 1.35f, 0.55f), position: new(0, -0.62f, 0.18f), color: reefArmor);
+                new Entity(parent: lArm, model: "cube", scale: new(0.22f, 1.75f, 1.35f), position: new(-0.35f, -0.85f, 0.45f), color: abyssGold);
+                new Entity(parent: rArm, model: "cube", scale: new(0.58f, 1.35f, 0.58f), position: new(0, -0.62f, 0.18f), color: reefArmor);
+                var anchor = new Entity(parent: rArm, position: new(0, -1.25f, 0.55f), rotation: new(48f, 0, 0));
+                new Entity(parent: anchor, model: "cube", scale: new(0.22f, 2.35f, 0.22f), position: new(0, 0.95f, 0), color: abyssGold);
+                new Entity(parent: anchor, model: "diamond", scale: new(1.55f, 0.45f, 0.38f), position: new(0, 2.05f, 0), color: bioTeal, unlit: true);
+                parts.Hammer = anchor;
+
+                parts.Torso = torso;
+                parts.LeftArm = lArm;
+                parts.RightArm = rArm;
             }
 
             return parts;

@@ -23,6 +23,7 @@ namespace RiskOfCSharp2.Entities
         public LunarShockwaveRing(Vector3 centerPos, float damage, float maxRadius = 54.0f, float speed = 19.5f)
             : base(position: new Vector3(centerPos.X, centerPos.Y + 0.12f, centerPos.Z))
         {
+            SoundManager.Play("mithrix_slam");
             _damage = damage;
             _maxRadius = maxRadius;
             _speed = speed;
@@ -119,6 +120,7 @@ namespace RiskOfCSharp2.Entities
         private void Detonate(IPlayerContext g)
         {
             _detonated = true;
+            SoundManager.Play("railgun", 0.90f, 0.85f);
             foreach (var ln in _lines)
             {
                 ln.ScaleY = 22.0f;
@@ -181,6 +183,8 @@ namespace RiskOfCSharp2.Entities
         public float SlowTimer = 0f;
         public float StunTimer = 0f;
         public float ArmorBreakTimer = 0f;
+        public float PetrifyTimer = 0f;
+        public int FixationStacks = 0;
         public float AttackTimer;
         public float SpecialTimer;
         public float SecondaryTimer = 1.6f;
@@ -222,6 +226,17 @@ namespace RiskOfCSharp2.Entities
         public readonly EnemyParts Parts;
         protected readonly Entity LabelEnt;
         private readonly float _seedOffset;
+        public float HitFlinchTimer = 0f;
+
+        // Поля тренировочного манекена на полигоне UES «Safe Travels»
+        public bool IsTrainingDummy = false;
+        public string DummyTitle = "";
+        public Vector3 DummyAnchorPos = Vector3.Zero;
+        public float DummyAnchorRotY = 180f;
+        public float LastHitDmg = 0f;
+        public float MaxHitDmg = 0f;
+        public float SessionTotalDmg = 0f;
+        private readonly List<(float Time, float Dmg)> _dpsSamples = new();
 
         public CombatTarget(Vector3 pos, string enemyType, float coeff = 1.0f, int? forcedNetId = null) : base(position: pos)
         {
@@ -235,7 +250,7 @@ namespace RiskOfCSharp2.Entities
                 NetId = _nextId++;
             }
             EnemyType = enemyType;
-            IsBoss = Array.IndexOf(GameData.BossTypes, enemyType) >= 0 || enemyType == "mithrix";
+            IsBoss = GameData.IsKnownBossType(enemyType);
             Coeff = coeff;
             _seedOffset = (NetId * 1.37f) % 10.0f;
             _steerSide = (NetId % 2 == 0) ? 1f : -1f;
@@ -260,12 +275,23 @@ namespace RiskOfCSharp2.Entities
                 "parent" => (240f, 27.0f, 6.2f, 48, 2.3f, 1.75f),
                 "elder_lemurian" => (290f, 26.0f, 5.8f, 54, 2.2f, 1.80f),
                 "lunar_chimera" => (215f, 23.0f, 6.5f, 45, 2.5f, 1.45f),
+                "hell_drone" => (92f, 16.5f, 8.4f, 26, 2.35f, 1.30f),
+                "combine_soldier" => (135f, 18.5f, 6.4f, 32, 1.50f, 1.25f),
+                "sarkaz_mercenary" => (160f, 21.0f, 7.6f, 36, 1.55f, 1.30f),
+                "hollow_shadow" => (130f, 19.0f, 7.0f, 30, 1.45f, 1.30f),
+                "nether_blaze" => (120f, 19.5f, 5.8f, 32, 2.35f, 1.35f),
                 "boss" => (2100f, 32.0f, 4.2f, 185, 2.8f, 2.70f),
                 "vagrant" => (2250f, 30.0f, 4.4f, 195, 3.8f, 2.90f),
                 "overlord" => (2400f, 34.0f, 5.8f, 210, 2.9f, 2.75f),
                 "magma_worm" => (2600f, 35.0f, 7.4f, 225, 3.2f, 2.95f),
                 "dunestrider" => (2350f, 31.0f, 4.5f, 205, 3.3f, 2.85f),
                 "solus_control" => (2300f, 32.0f, 5.0f, 205, 3.8f, 2.80f),
+                "zurg_mech" => (1850f, 29.0f, 5.2f, 200, 3.0f, 2.55f),
+                "justice_gear" => (2150f, 33.0f, 6.8f, 220, 3.1f, 2.60f),
+                "shadow_reaper" => (2050f, 32.0f, 5.8f, 215, 2.9f, 2.50f),
+                "vergil_mirage" => (2200f, 34.0f, 8.6f, 240, 2.2f, 2.20f),
+                "animatronic_endo" => (1900f, 30.0f, 6.4f, 205, 2.9f, 2.45f),
+                "warden_reef" => (1950f, 31.0f, 5.0f, 210, 3.0f, 2.65f),
                 "mithrix" => (3600f, 38.0f, 8.8f, 650, 2.8f, 2.55f),
                 _ => (65f, 12.0f, 6.8f, 16, 1.1f, 1.15f)
             };
@@ -301,7 +327,7 @@ namespace RiskOfCSharp2.Entities
             HitHeight = hh;
             HitRadius = hr;
 
-            float barY = IsBoss ? 6.0f : (enemyType is "golem" or "greater_wisp" or "lunar_chimera" or "parent" or "elder_lemurian" or "brass_contraption" ? 3.8f : 2.5f);
+            float barY = IsBoss ? 6.0f : (enemyType is "golem" or "greater_wisp" or "lunar_chimera" or "parent" or "elder_lemurian" or "brass_contraption" or "hell_drone" or "nether_blaze" or "sarkaz_mercenary" ? 3.8f : 2.7f);
 
             if (GameData.HasArtifact("evolution") && enemyType != "mithrix")
             {
@@ -324,6 +350,8 @@ namespace RiskOfCSharp2.Entities
             Hp = MaxHp;
             LabelEnt = new Entity(parent: this, position: new(0, barY, 0), color: Color.Red);
             UpdateHpBillboard();
+            if (WorldContext.Game != null)
+                SoundManager.Play3D(IsBoss ? "boss_roar" : "enemy_spawn", pos, WorldContext.Game.PlayerPos, 65f);
         }
 
         public void MakeDoppelganger()
@@ -352,31 +380,110 @@ namespace RiskOfCSharp2.Entities
             WindupIndicator = null;
         }
 
+        public void ConfigureAsTrainingDummy(string title, float customHp, float facingRotY = 180f)
+        {
+            IsTrainingDummy = true;
+            DummyTitle = title;
+            DummyAnchorPos = Position;
+            DummyAnchorRotY = facingRotY;
+            RotationY = facingRotY;
+            MaxHp = customHp;
+            Hp = customHp;
+            Damage = 0f;
+            Speed = 0f;
+            GoldReward = 0;
+            new Entity(parent: this, model: "diamond", scale: new(HitRadius * 1.95f, 0.14f, HitRadius * 1.95f),
+                position: new(0, 0.08f, 0), color: IsBoss ? Rgb(255, 175, 45) : Rgb(65, 225, 255), unlit: true);
+            UpdateHpBillboard();
+        }
+
+        public float GetCurrentDps()
+        {
+            float nowT = (float)Raylib.GetTime();
+            _dpsSamples.RemoveAll(s => nowT - s.Time > 5.0f);
+            if (_dpsSamples.Count == 0) return 0f;
+            float sum = 0f;
+            for (int i = 0; i < _dpsSamples.Count; i++)
+                sum += _dpsSamples[i].Dmg;
+            float span = Math.Clamp(nowT - _dpsSamples[0].Time, 1.0f, 5.0f);
+            return sum / span;
+        }
+
+        public void ResetDummyStats()
+        {
+            LastHitDmg = 0f;
+            MaxHitDmg = 0f;
+            SessionTotalDmg = 0f;
+            _dpsSamples.Clear();
+            Hp = MaxHp;
+            BleedTimer = 0f;
+            LiandryBurnTimer = 0f;
+            CharmTimer = 0f;
+            StunTimer = 0f;
+            SlowTimer = 0f;
+            ArmorBreakTimer = 0f;
+            PetrifyTimer = 0f;
+            FixationStacks = 0;
+            UpdateHpBillboard();
+        }
+
         public void UpdateHpBillboard()
         {
             if (IsDestroyed) return;
             int bars = Math.Clamp((int)MathF.Ceiling((Hp / MathF.Max(1f, MaxHp)) * 10f), 0, 10);
             string barStr = new string('█', bars) + new string('░', 10 - bars);
-            string prefix = IsAlly ? "[СОЮЗНИК МЕДИКА ✓]\n"
+            bool timeStopped = !IsAlly && CombatManager.Controller != null && CombatManager.Controller.ZaWarudoTimer > 0f;
+
+            if (IsTrainingDummy)
+            {
+                string dTitle = string.IsNullOrEmpty(DummyTitle) ? "МАНЕКЕН UES" : DummyTitle;
+                string bossTag = IsBoss ? " [БОСС-БРОНЯ]" : "";
+                string debuffs = "";
+                if (timeStopped) debuffs += "[⏱ ZA WARUDO] ";
+                if (PetrifyTimer > 0f) debuffs += "[ОКАМЕНЕЛ] ";
+                if (ArmorBreakTimer > 0f) debuffs += "[РАСКОЛ БРОНИ] ";
+                if (CharmTimer > 0f) debuffs += "[♥ ОЧАРОВАН] ";
+                if (BleedTimer > 0f) debuffs += "[КРОВЬ] ";
+                if (LiandryBurnTimer > 0f) debuffs += "[ОЖОГ] ";
+                if (FixationStacks > 0) debuffs += $"[ФИКС:{FixationStacks}] ";
+                string debuffLine = debuffs.Length > 0 ? debuffs.TrimEnd() + "\n" : "";
+
+                LabelEnt.Color = timeStopped ? Rgb(215, 165, 255)
+                    : (CharmTimer > 0f ? Rgb(255, 115, 205)
+                    : (PetrifyTimer > 0f ? Rgb(185, 225, 195)
+                    : (IsBoss ? Color.Gold : Rgb(95, 235, 255))));
+                LabelEnt.BillboardText =
+                    $"{debuffLine}{dTitle}{bossTag} [{(int)MathF.Max(0, Hp)}/{(int)MaxHp}]\n" +
+                    $"{barStr}\n" +
+                    $"DPS: {GetCurrentDps():F0} | УДАР: {LastHitDmg:F0} | МАКС: {MaxHitDmg:F0}";
+                return;
+            }
+
+            string prefix = IsAlly ? "[СОЮЗНИК ✓]\n"
+                : (timeStopped ? "[★ ZA WARUDO: ВРЕМЯ ОСТАНОВЛЕНО ★]\n"
+                : (PetrifyTimer > 0f ? "[ОКАМЕНЕЛ (УЯЗВИМ +25%)]\n"
                 : (CharmTimer > 0f ? "[♥ ОЧАРОВАН ♥]\n"
                 : (IsDoppelganger ? "★ ТЕНЕВОЙ ДОППЕЛЬГАНГЕР ★\n"
-                : (IsElite ? "[ЭЛИТНЫЙ] " : "")));
+                : (IsElite ? "[ЭЛИТНЫЙ] " : "")))));
+            string fixLine = FixationStacks > 0 ? $"[ФИКСАЦИЯ: {FixationStacks}/20] " : "";
             string warnLine = (!string.IsNullOrEmpty(WindupTag) && WindupType > 0) ? $"⚠ {WindupTag} ⚠\n" : "";
             string phaseTag = EnemyType == "mithrix" ? $" [Ф{Phase}/4]" : "";
             string displayName = GameData.MonsterLog.TryGetValue(EnemyType, out var mLog)
                 ? mLog.Name.ToUpper()
                 : EnemyType.ToUpper();
             LabelEnt.Color = IsAlly ? Color.Lime
+                : (timeStopped ? Rgb(215, 165, 255)
+                : (PetrifyTimer > 0f ? Rgb(185, 225, 195)
                 : (CharmTimer > 0f ? Rgb(255, 115, 205)
                 : (IsDoppelganger ? Rgb(215, 75, 255)
                 : (WindupType > 0 ? Color.Yellow
-                : (EnemyType == "mithrix" ? Color.SkyBlue : (IsElite ? Rgb(255, 165, 45) : Color.Red)))));
-            LabelEnt.BillboardText = $"{prefix}{warnLine}{displayName}{phaseTag} [{(int)MathF.Max(0, Hp)}/{(int)MaxHp}]\n{barStr}";
+                : (EnemyType == "mithrix" ? Color.SkyBlue : (IsElite ? Rgb(255, 165, 45) : Color.Red)))))));
+            LabelEnt.BillboardText = $"{prefix}{warnLine}{fixLine}{displayName}{phaseTag} [{(int)MathF.Max(0, Hp)}/{(int)MaxHp}]\n{barStr}";
         }
 
         public void ConvertToAlly()
         {
-            if (IsAlly) return;
+            if (IsAlly || IsTrainingDummy) return;
             IsAlly = true;
             Hp = MaxHp;
             Damage *= 1.85f;
@@ -412,6 +519,7 @@ namespace RiskOfCSharp2.Entities
             var g = WorldContext.Game;
             if (g == null) return;
 
+            SoundManager.Play("boss_roar");
             ClearWindup();
             RecentDamageTaken = 0f;
             Phase++;
@@ -486,9 +594,13 @@ namespace RiskOfCSharp2.Entities
 
             if (CharmTimer > 0f && !fromNetwork)
                 amount *= 1.25f;
+            if ((PetrifyTimer > 0f || ArmorBreakTimer > 0f) && !fromNetwork)
+                amount *= 1.25f;
+            if (FixationStacks > 0 && !fromNetwork)
+                amount *= 1.0f + FixationStacks * 0.03f;
 
             var g = WorldContext.Game;
-            if (IsBoss && !fromNetwork)
+            if (IsBoss && !IsTrainingDummy && !fromNetwork)
             {
                 // 1. Ограничение максимального урона с одного удара (защита от ваншотов)
                 float maxSingleHit = EnemyType == "mithrix" ? MaxHp * 0.075f : MaxHp * 0.12f;
@@ -509,7 +621,31 @@ namespace RiskOfCSharp2.Entities
                 RecentDamageTimer = 1.6f;
             }
 
+            if (IsTrainingDummy && amount > 0f)
+            {
+                float nowT = (float)Raylib.GetTime();
+                LastHitDmg = amount;
+                if (amount > MaxHitDmg) MaxHitDmg = amount;
+                SessionTotalDmg += amount;
+                _dpsSamples.Add((nowT, amount));
+                _dpsSamples.RemoveAll(s => nowT - s.Time > 5.0f);
+            }
+
             Hp -= amount;
+            HitFlinchTimer = 0.13f;
+
+            if (IsTrainingDummy && Hp <= MaxHp * 0.15f)
+            {
+                Hp = MaxHp;
+                new VisualFX(Position + new Vector3(0, HitHeight, 0), Rgb(80, 255, 190), 1.9f, 0.22f);
+            }
+
+            if (IsBoss && !IsTrainingDummy && !fromNetwork && g is RiskOfCSharp2.GameRunContext grcBoss)
+            {
+                grcBoss.BossDamageDealt += amount;
+                if (grcBoss.BossDamageDealt >= 1200f)
+                    grcBoss.UnlockAchievement("ach_giant_killer");
+            }
 
             if (EnemyType == "mithrix" && Phase == 4 && StolenItems.Count > 0 && g != null)
             {
@@ -526,12 +662,18 @@ namespace RiskOfCSharp2.Entities
                 }
             }
 
-            if (!fromNetwork)
+            if (!fromNetwork && !IsTrainingDummy)
                 g?.NotifyEnemyDamaged(NetId, amount, Hp, Phase);
 
             UpdateHpBillboard();
             if (Hp <= 0f)
             {
+                if (IsTrainingDummy)
+                {
+                    Hp = MaxHp;
+                    UpdateHpBillboard();
+                    return;
+                }
                 if (EnemyType == "mithrix" && Phase < 4)
                 {
                     AdvanceMithrixPhase();
@@ -543,6 +685,12 @@ namespace RiskOfCSharp2.Entities
 
         public virtual void Die(bool fromNetwork = false)
         {
+            if (IsTrainingDummy)
+            {
+                Hp = MaxHp;
+                UpdateHpBillboard();
+                return;
+            }
             if (IsDead || IsDestroyed) return;
             IsDead = true;
             ClearWindup();
@@ -561,7 +709,30 @@ namespace RiskOfCSharp2.Entities
             var g = WorldContext.Game;
             if (g == null || !IsValid(this)) return;
 
+            if (!IsAlly && CombatManager.Controller != null && CombatManager.Controller.ZaWarudoTimer > 0f)
+            {
+                UpdateHpBillboard();
+                return;
+            }
+
+            if (PetrifyTimer > 0f)
+            {
+                PetrifyTimer -= dt;
+                UpdateHpBillboard();
+                return;
+            }
+
             ArmorBreakTimer = MathF.Max(0f, ArmorBreakTimer - dt);
+            if (HitFlinchTimer > 0f)
+            {
+                HitFlinchTimer = MathF.Max(0f, HitFlinchTimer - dt);
+                float flinchZ = MathF.Sin((HitFlinchTimer / 0.13f) * MathF.PI) * (IsBoss ? 4.5f : 11.0f);
+                Parts.Root.RotationZ = flinchZ;
+            }
+            else if (MathF.Abs(Parts.Root.RotationZ) > 0.05f)
+            {
+                Parts.Root.RotationZ = Lerp(Parts.Root.RotationZ, 0f, dt * 16f);
+            }
             if (RecentDamageTimer > 0f)
             {
                 RecentDamageTimer -= dt;
@@ -596,6 +767,19 @@ namespace RiskOfCSharp2.Entities
                     TakeDamage(LiandryBurnDps * 0.45f);
                     if (!IsValid(this)) return;
                 }
+            }
+
+            if (IsTrainingDummy)
+            {
+                if (CharmTimer > 0f) CharmTimer = MathF.Max(0f, CharmTimer - dt);
+                if (StunTimer > 0f) StunTimer = MathF.Max(0f, StunTimer - dt);
+                if (SlowTimer > 0f) SlowTimer = MathF.Max(0f, SlowTimer - dt);
+                Position = DummyAnchorPos;
+                RotationY = DummyAnchorRotY;
+                float nowT = (float)Raylib.GetTime();
+                _dpsSamples.RemoveAll(s => nowT - s.Time > 5.0f);
+                UpdateHpBillboard();
+                return;
             }
 
             if (CharmTimer > 0f)
@@ -642,6 +826,7 @@ namespace RiskOfCSharp2.Entities
             CombatTarget? allyEnemyTarget = null;
             MindustryTurret? structTarget = null;
             DummyClone? cloneTarget = null;
+            JackOServant? servantTarget = null;
 
             if (IsAlly)
             {
@@ -709,7 +894,26 @@ namespace RiskOfCSharp2.Entities
                                 structTarget = st;
                                 allyEnemyTarget = null;
                                 cloneTarget = null;
+                                servantTarget = null;
                                 pPos = st.Position;
+                                targetIsLocal = false;
+                            }
+                        }
+                    }
+
+                    foreach (var sv in CombatManager.Controller.JackOServants)
+                    {
+                        if (IsValid(sv))
+                        {
+                            float d = Vector3.Distance(Position, sv.Position);
+                            if (d < bestTargetDist)
+                            {
+                                bestTargetDist = d;
+                                servantTarget = sv;
+                                structTarget = null;
+                                allyEnemyTarget = null;
+                                cloneTarget = null;
+                                pPos = sv.Position;
                                 targetIsLocal = false;
                             }
                         }
@@ -891,6 +1095,7 @@ namespace RiskOfCSharp2.Entities
                 else if (!IsAlly)
                 {
                     if (IsValid(structTarget)) structTarget!.TakeStructureDamage(dmgVal);
+                    else if (IsValid(servantTarget)) servantTarget!.TakeMinionDamage(dmgVal);
                     else if (IsValid(cloneTarget)) { cloneTarget!.Hp -= dmgVal; if (cloneTarget.Hp <= 0f) Destroy(cloneTarget); }
                     else if (IsValid(allyEnemyTarget)) allyEnemyTarget!.TakeDamage(dmgVal);
                     else if (g.CanPlayerInteract && (targetIsLocal || (localDist <= 2.4f && localHeightDiff <= 2.8f)))
@@ -1446,6 +1651,135 @@ namespace RiskOfCSharp2.Entities
                         if (Parts.RightArm != null) Parts.RightArm.RotationX = 42f;
                         ApplyEnemyMeleeDamage(Damage);
                         new VisualFX(pPos + new Vector3(0, 1.1f, 0), Rgb(245, 35, 70), 2.0f, 0.22f);
+                    }
+                }
+            }
+            else if (EnemyType == "hell_drone")
+            {
+                if (Parts.Ring1 != null) Parts.Ring1.RotationZ += 240f * dt;
+                if (Parts.Ring2 != null) Parts.Ring2.RotationX += 180f * dt;
+                if (Parts.Core != null) Parts.Core.Y = 2.35f + MathF.Sin(t * 6.0f) * 0.28f;
+
+                MoveSmartFlying(pPos, optDist: 12.5f, heightOffset: 1.6f, moveSpd: effSpeed, orbitStrength: 0.92f);
+                AttackTimer -= dt;
+                Vector3 sp = Position + new Vector3(0, 2.35f, 0);
+                Vector3 aimPoint = pPos + new Vector3(0, 1.2f, 0);
+                if (AttackTimer <= 0f && dist < 38.0f && Physics.HasLineOfSight(sp, aimPoint))
+                {
+                    AttackTimer = 1.75f;
+                    foreach (float deg in new[] { -7f, 0f, 7f })
+                    {
+                        float rad = deg * (MathF.PI / 180f);
+                        Vector3 baseAim = aimPoint - sp;
+                        Vector3 d = new(baseAim.X * MathF.Cos(rad) - baseAim.Z * MathF.Sin(rad), baseAim.Y, baseAim.X * MathF.Sin(rad) + baseAim.Z * MathF.Cos(rad));
+                        new Projectile(sp, d, 32f, Damage * 0.72f, 0.34f, Rgb(255, 45, 75), isPlayer: projIsPlayer, canProc: false);
+                    }
+                }
+            }
+            else if (EnemyType == "combine_soldier")
+            {
+                float optDist = 13.5f;
+                if (dist > optDist + 2.5f || heightDiff > 2.4f)
+                {
+                    MoveSmartGround(pPos, effSpeed, 0.75f, strafeFactor: 0.38f, maxJumpH: 6.2f);
+                    float march = MathF.Sin(t * 10f) * 32f;
+                    if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = march;
+                    if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -march;
+                }
+                else
+                {
+                    MoveSmartGround(pPos, effSpeed * 0.55f, 0.75f, strafeFactor: 0.85f, maxJumpH: 5.5f);
+                    float sideStep = MathF.Sin(t * 8f) * 20f;
+                    if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = sideStep;
+                    if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -sideStep;
+                }
+
+                if (Parts.RightArm != null) Parts.RightArm.RotationX = Lerp(Parts.RightArm.RotationX, -28f, dt * 8f);
+                AttackTimer -= dt;
+                Vector3 sp = Position + new Vector3(0, 1.55f, 0) + Forward * 0.85f;
+                Vector3 aimPoint = pPos + new Vector3(0, 1.15f, 0);
+                if (AttackTimer <= 0f && dist < 38.0f && Physics.HasLineOfSight(sp, aimPoint))
+                {
+                    AttackTimer = 1.45f;
+                    if (Parts.RightArm != null) Parts.RightArm.RotationX = -46f;
+                    SoundManager.Play3D("shoot_light", Position, g.PlayerPos, 45f, 0.55f, 0.9f);
+                    new Projectile(sp, aimPoint - sp, 44f, Damage * 0.85f, 0.28f, Rgb(65, 225, 255), isPlayer: projIsPlayer, canProc: false);
+                }
+            }
+            else if (EnemyType == "sarkaz_mercenary")
+            {
+                if (Parts.Tail != null) Parts.Tail.RotationY = MathF.Sin(t * 7f) * 20f;
+                SpecialTimer -= dt;
+                if (SpecialTimer <= 0f && dist is >= 4.5f and <= 14.0f && IsGrounded)
+                {
+                    SpecialTimer = 4.2f;
+                    TriggerJump(1.6f, Forward * (effSpeed * 2.15f), 2.0f);
+                    new VisualFX(Position + new Vector3(0, 1.2f, 0), Rgb(255, 78, 35), 2.4f, 0.22f);
+                }
+
+                if (dist > 2.3f || heightDiff > 2.2f)
+                {
+                    MoveSmartGround(pPos, effSpeed, 0.80f, strafeFactor: 0.25f, maxJumpH: 6.5f);
+                    float swing = MathF.Sin(t * 11f) * 34f;
+                    if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = swing;
+                    if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -swing;
+                    if (Parts.RightArm != null) Parts.RightArm.RotationX = Lerp(Parts.RightArm.RotationX, -20f, dt * 8f);
+                }
+                else
+                {
+                    ApplyVerticalPhysics(0.80f);
+                    AttackTimer -= dt;
+                    if (AttackTimer <= 0.32f && AttackTimer > 0f && Parts.RightArm != null)
+                        Parts.RightArm.RotationX = -110f;
+                    if (AttackTimer <= 0f)
+                    {
+                        AttackTimer = 1.15f;
+                        if (Parts.RightArm != null) Parts.RightArm.RotationX = 45f;
+                        ApplyEnemyMeleeDamage(Damage * 1.15f);
+                        new VisualFX(pPos + new Vector3(0, 1.1f, 0), Rgb(255, 85, 35), 2.8f, 0.25f);
+                    }
+                }
+            }
+            else if (EnemyType == "hollow_shadow")
+            {
+                if (Parts.Crown != null) Parts.Crown.RotationZ = MathF.Sin(t * 4.5f) * 10f;
+                if (Parts.Torso != null) Parts.Torso.Y = 1.25f + MathF.Sin(t * 5.2f) * 0.16f;
+
+                if (dist > 8.5f || heightDiff > 2.4f)
+                    MoveSmartGround(pPos, effSpeed, 0.75f, strafeFactor: 0.65f, maxJumpH: 6.5f);
+                else
+                    MoveSmartGround(pPos, effSpeed * 0.6f, 0.75f, strafeFactor: 0.95f, maxJumpH: 5.5f);
+
+                AttackTimer -= dt;
+                Vector3 sp = Position + new Vector3(0, 1.55f, 0);
+                Vector3 aimPoint = pPos + new Vector3(0, 1.15f, 0);
+                if (AttackTimer <= 0f && dist < 30.0f && Physics.HasLineOfSight(sp, aimPoint))
+                {
+                    AttackTimer = 1.85f;
+                    if (Parts.LeftArm != null) Parts.LeftArm.RotationX = -75f;
+                    if (Parts.RightArm != null) Parts.RightArm.RotationX = -75f;
+                    new Projectile(sp, aimPoint - sp, 28f, Damage, 0.42f, Rgb(215, 45, 95), isPlayer: projIsPlayer, aoe: 1.8f, canProc: false);
+                }
+            }
+            else if (EnemyType == "nether_blaze")
+            {
+                if (Parts.Ring1 != null) Parts.Ring1.RotationY += 220f * dt;
+                if (Parts.Ring2 != null) Parts.Ring2.RotationY -= 310f * dt;
+                if (Parts.Core != null) Parts.Core.Y = 2.35f + MathF.Sin(t * 4.8f) * 0.28f;
+
+                MoveSmartFlying(pPos, optDist: 15.0f, heightOffset: 1.8f, moveSpd: effSpeed, orbitStrength: 0.75f);
+                AttackTimer -= dt;
+                Vector3 sp = Position + new Vector3(0, 2.5f, 0);
+                Vector3 aimPoint = pPos + new Vector3(0, 1.15f, 0);
+                if (AttackTimer <= 0f && dist < 38.0f && Physics.HasLineOfSight(sp, aimPoint))
+                {
+                    AttackTimer = 2.15f;
+                    foreach (float deg in new[] { -9f, 0f, 9f })
+                    {
+                        float rad = deg * (MathF.PI / 180f);
+                        Vector3 baseAim = aimPoint - sp;
+                        Vector3 d = new(baseAim.X * MathF.Cos(rad) - baseAim.Z * MathF.Sin(rad), baseAim.Y, baseAim.X * MathF.Sin(rad) + baseAim.Z * MathF.Cos(rad));
+                        new Projectile(sp, d, 30f, Damage * 0.78f, 0.38f, Rgb(255, 165, 25), isPlayer: projIsPlayer, aoe: 1.6f, canProc: false);
                     }
                 }
             }
@@ -2133,6 +2467,353 @@ namespace RiskOfCSharp2.Entities
             {
                 UpdateMithrixPhases(pPos, dist, effSpeed, t);
             }
+            else if (EnemyType is "zurg_mech" or "justice_gear" or "shadow_reaper" or "vergil_mirage" or "animatronic_endo" or "warden_reef")
+            {
+                UpdateTrialBossAI(g, pPos, dist, effSpeed, t, floorY, projIsPlayer);
+            }
+        }
+
+        private void UpdateTrialBossAI(IPlayerContext g, Vector3 pPos, float dist, float effSpeed, float t, float floorY, bool projIsPlayer)
+        {
+            float dt = TimeDelta();
+            LookAt2D(pPos);
+
+            void ApplyGroundStep(float stopDist, float colRad = 1.45f)
+            {
+                if (dist > stopDist || MathF.Abs(pPos.Y - Y) > 2.6f)
+                {
+                    Vector3 toP = new(pPos.X - X, 0f, pPos.Z - Z);
+                    Vector3 dir = toP.LengthSquared() > 0.01f ? Vector3.Normalize(toP) : Forward;
+                    Vector3 steered = Physics.ComputeSmartSteerDirection(Position, dir, colRad, Y, ref _steerSide);
+                    Position += steered * effSpeed * dt;
+                    float stride = MathF.Sin(t * 7.5f) * 28f;
+                    if (Parts.LeftLeg != null) Parts.LeftLeg.RotationX = stride;
+                    if (Parts.RightLeg != null) Parts.RightLeg.RotationX = -stride;
+                }
+                Y = Lerp(Y, Physics.GetSurfaceHeight(X, Z, Y + 1.5f), dt * 10f);
+                Vector3 res = Physics.ResolveHorizontalCollision(Position, colRad, Y);
+                float wb = Physics.WorldBound - 2.0f;
+                Position = new Vector3(Math.Clamp(res.X, -wb, wb), Y, Math.Clamp(res.Z, -wb, wb));
+            }
+
+            if (EnemyType == "zurg_mech")
+            {
+                if (Parts.Cape != null) Parts.Cape.RotationX = 14f + MathF.Sin(t * 6.0f) * 7f;
+                ApplyGroundStep(12.0f);
+
+                if (WindupType == 1)
+                {
+                    WindupTimer -= dt;
+                    if (Parts.RightArm != null) Parts.RightArm.RotationX = Lerp(Parts.RightArm.RotationX, -62f, dt * 10f);
+                    if (WindupTimer <= 0f)
+                    {
+                        ClearWindup();
+                        UpdateHpBillboard();
+                        AttackTimer = 2.0f;
+                        Vector3 sp = Position + new Vector3(0, 2.8f, 0) + Forward * 1.4f;
+                        Vector3 baseAim = (pPos + new Vector3(0, 1.15f, 0)) - sp;
+                        foreach (float deg in new[] { -16f, -8f, 0f, 8f, 16f })
+                        {
+                            float rad = deg * (MathF.PI / 180f);
+                            Vector3 d = new(baseAim.X * MathF.Cos(rad) - baseAim.Z * MathF.Sin(rad), baseAim.Y, baseAim.X * MathF.Sin(rad) + baseAim.Z * MathF.Cos(rad));
+                            new Projectile(sp, d, 36f, Damage * 0.85f, 0.48f, Rgb(255, 225, 45), isPlayer: projIsPlayer, aoe: 1.8f, canProc: false);
+                        }
+                    }
+                    return;
+                }
+
+                SpecialTimer -= dt;
+                if (SpecialTimer <= 0f && !IsAlly)
+                {
+                    SpecialTimer = 6.2f;
+                    new VisualFX(Position + new Vector3(0, 2.2f, 0), Rgb(185, 55, 255), 11.0f, 0.38f);
+                    new LunarShockwaveRing(Position, Damage * 1.10f, 34.0f, 20.0f);
+                }
+
+                AttackTimer -= dt;
+                if (AttackTimer <= 0f)
+                {
+                    WindupType = 1;
+                    WindupTimer = 0.65f;
+                    WindupTag = "ИОННЫЙ ЗАЛП ЗУРГА!";
+                    UpdateHpBillboard();
+                }
+            }
+            else if (EnemyType == "justice_gear")
+            {
+                if (Parts.Tail != null) Parts.Tail.RotationY = MathF.Sin(t * 6.5f) * 24f;
+                if (Parts.Cape != null) Parts.Cape.RotationZ = MathF.Sin(t * 5.0f) * 8f;
+                Y = Lerp(Y, MathF.Max(floorY + 1.4f, pPos.Y + 1.4f) + MathF.Sin(t * 3.8f) * 0.35f, dt * 4.5f);
+                if (dist > 11.0f)
+                {
+                    Vector3 toP = new(pPos.X - X, 0f, pPos.Z - Z);
+                    Vector3 dir = toP.LengthSquared() > 0.01f ? Vector3.Normalize(toP) : Forward;
+                    Vector3 orbit = new(-dir.Z * _strafeDir, 0f, dir.X * _strafeDir);
+                    Position += Physics.ComputeSmartSteerDirection(Position, Vector3.Normalize(dir + orbit * 0.65f), 1.5f, Y, ref _steerSide) * effSpeed * dt;
+                }
+
+                if (WindupType == 2)
+                {
+                    WindupTimer -= dt;
+                    if (WindupIndicator != null && !WindupIndicator.IsDestroyed)
+                        WindupIndicator.RotationY += 240f * dt;
+                    if (WindupTimer <= 0f)
+                    {
+                        Vector3 rayCenter = LockedAimPos;
+                        ClearWindup();
+                        UpdateHpBillboard();
+                        SpecialTimer = 6.4f;
+                        new LightningBeam(Position + new Vector3(0, 3.2f, 0), rayCenter, Rgb(75, 235, 255), 0.75f);
+                        new VisualFX(rayCenter + new Vector3(0, 1.2f, 0), Rgb(255, 85, 195), 13.5f, 0.45f);
+                        new LunarShockwaveRing(rayCenter, Damage * 1.20f, 36.0f, 22.0f);
+                        if (!IsAlly && Physics.Distance2D(g.PlayerPos, rayCenter) <= 6.8f && MathF.Abs(g.PlayerPos.Y - rayCenter.Y) <= 4.0f)
+                            CombatManager.DamagePlayer(Damage * 1.35f, this);
+                    }
+                    return;
+                }
+
+                SpecialTimer -= dt;
+                if (SpecialTimer <= 0f && !IsAlly)
+                {
+                    WindupType = 2;
+                    WindupTimer = 1.05f;
+                    LockedAimPos = new Vector3(pPos.X, Physics.GetSurfaceHeight(pPos.X, pPos.Z, pPos.Y), pPos.Z);
+                    WindupTag = "ГАММА-ЛУЧ «ДЖАСТИС»!";
+                    WindupIndicator = new Entity(model: "diamond", position: LockedAimPos + new Vector3(0, 0.16f, 0),
+                        scale: new(13.5f, 0.22f, 13.5f), color: Rgb(75, 235, 255, 175), unlit: true);
+                    UpdateHpBillboard();
+                    return;
+                }
+
+                AttackTimer -= dt;
+                if (AttackTimer <= 0f)
+                {
+                    AttackTimer = 1.85f;
+                    Vector3 sp = Position + new Vector3(0, 3.0f, 0);
+                    Vector3 baseAim = (pPos + new Vector3(0, 1.2f, 0)) - sp;
+                    foreach (float deg in new[] { -14f, 0f, 14f })
+                    {
+                        float rad = deg * (MathF.PI / 180f);
+                        Vector3 d = new(baseAim.X * MathF.Cos(rad) - baseAim.Z * MathF.Sin(rad), baseAim.Y, baseAim.X * MathF.Sin(rad) + baseAim.Z * MathF.Cos(rad));
+                        new Projectile(sp, d, 38f, Damage * 0.85f, 0.46f, Rgb(255, 85, 195), isPlayer: projIsPlayer, aoe: 2.2f, canProc: false);
+                    }
+                }
+            }
+            else if (EnemyType == "shadow_reaper")
+            {
+                if (Parts.Ring1 != null) Parts.Ring1.RotationY += 165f * dt;
+                if (Parts.Cape != null) Parts.Cape.RotationX = 12f + MathF.Sin(t * 5.0f) * 6f;
+                ApplyGroundStep(10.5f);
+
+                if (WindupType == 1)
+                {
+                    WindupTimer -= dt;
+                    if (Parts.LeftArm != null) Parts.LeftArm.RotationX = -58f;
+                    if (Parts.RightArm != null) Parts.RightArm.RotationX = -58f;
+                    if (WindupTimer <= 0f)
+                    {
+                        ClearWindup();
+                        UpdateHpBillboard();
+                        AttackTimer = 2.05f;
+                        foreach (float side in new[] { -1.1f, 1.1f })
+                        {
+                            Vector3 sp = Position + new Vector3(0, 2.7f, 0) + Right * side + Forward * 1.2f;
+                            Vector3 aim = (pPos + new Vector3(0, 1.15f, 0)) - sp;
+                            new Projectile(sp, aim, 44f, Damage * 0.95f, 0.50f, Rgb(85, 255, 165), isPlayer: projIsPlayer, aoe: 2.4f, canProc: false);
+                        }
+                    }
+                    return;
+                }
+
+                SpecialTimer -= dt;
+                if (SpecialTimer <= 0f && !IsAlly)
+                {
+                    SpecialTimer = 6.5f;
+                    new VisualFX(Position + new Vector3(0, 2.0f, 0), Rgb(85, 255, 165), 10.5f, 0.35f);
+                    for (int i = 0; i < 8; i++)
+                    {
+                        float ang = (i / 8f) * MathF.PI * 2f;
+                        new Projectile(Position + new Vector3(0, 2.2f, 0), new Vector3(MathF.Cos(ang), 0.04f, MathF.Sin(ang)), 28f, Damage * 0.80f, 0.45f, Rgb(235, 45, 95), isPlayer: projIsPlayer, canProc: false);
+                    }
+                }
+
+                AttackTimer -= dt;
+                if (AttackTimer <= 0f)
+                {
+                    WindupType = 1;
+                    WindupTimer = 0.68f;
+                    WindupTag = "МЕГИДОЛАОН ЖНЕЦА!";
+                    UpdateHpBillboard();
+                }
+            }
+            else if (EnemyType == "vergil_mirage")
+            {
+                if (Parts.Ring1 != null) Parts.Ring1.RotationY += 260f * dt;
+                if (Parts.Cape != null) Parts.Cape.RotationX = 12f + MathF.Sin(t * 8.0f) * 8f;
+                ApplyGroundStep(4.2f, 1.1f);
+
+                if (WindupType == 2)
+                {
+                    WindupTimer -= dt;
+                    if (WindupIndicator != null && !WindupIndicator.IsDestroyed)
+                        WindupIndicator.RotationY += 320f * dt;
+                    if (WindupTimer <= 0f)
+                    {
+                        Vector3 cutCenter = LockedAimPos;
+                        ClearWindup();
+                        UpdateHpBillboard();
+                        SpecialTimer = 5.4f;
+                        for (int s = 0; s < 5; s++)
+                        {
+                            float a = s * 1.25f;
+                            new LightningBeam(cutCenter + new Vector3(MathF.Cos(a) * 5.2f, 3.8f, MathF.Sin(a) * 5.2f),
+                                cutCenter + new Vector3(-MathF.Cos(a) * 5.2f, 0.4f, -MathF.Sin(a) * 5.2f), Rgb(115, 235, 255), 0.35f);
+                        }
+                        new VisualFX(cutCenter + new Vector3(0, 1.5f, 0), Rgb(85, 215, 255), 11.0f, 0.38f);
+                        if (!IsAlly && Physics.Distance2D(g.PlayerPos, cutCenter) <= 6.2f && MathF.Abs(g.PlayerPos.Y - cutCenter.Y) <= 4.0f)
+                            CombatManager.DamagePlayer(Damage * 1.35f, this);
+                    }
+                    return;
+                }
+
+                SpecialTimer -= dt;
+                if (SpecialTimer <= 0f && !IsAlly)
+                {
+                    // Телепорт за спину и пространственный разрез «Judgement Cut»!
+                    new VisualFX(Position + new Vector3(0, 1.6f, 0), Rgb(85, 215, 255), 3.5f, 0.22f);
+                    Vector3 tpDest = Physics.ResolveHorizontalCollision(pPos - Forward * 5.5f, 1.1f, floorY);
+                    Position = new Vector3(tpDest.X, Physics.GetSurfaceHeight(tpDest.X, tpDest.Z, pPos.Y + 1.5f), tpDest.Z);
+                    LookAt2D(pPos);
+                    WindupType = 2;
+                    WindupTimer = 0.85f;
+                    LockedAimPos = new Vector3(pPos.X, Physics.GetSurfaceHeight(pPos.X, pPos.Z, pPos.Y), pPos.Z);
+                    WindupTag = "РАЗРЕЗ СУДА (JUDGEMENT CUT)!";
+                    WindupIndicator = new Entity(model: "sphere", position: LockedAimPos + new Vector3(0, 1.4f, 0),
+                        scaleUniform: 11.5f, color: Rgb(85, 215, 255, 65), unlit: true);
+                    UpdateHpBillboard();
+                    return;
+                }
+
+                AttackTimer -= dt;
+                if (AttackTimer <= 0f)
+                {
+                    AttackTimer = 1.55f;
+                    if (dist <= 4.8f)
+                    {
+                        if (Parts.RightArm != null) Parts.RightArm.RotationX = 52f;
+                        if (!IsAlly && Physics.Distance2D(g.PlayerPos, Position) <= 5.0f)
+                            CombatManager.DamagePlayer(Damage, this);
+                        new VisualFX(pPos + new Vector3(0, 1.2f, 0), Color.SkyBlue, 3.5f, 0.22f);
+                    }
+                    else
+                    {
+                        Vector3 sp = Position + new Vector3(0, 2.4f, 0);
+                        foreach (float offX in new[] { -1.2f, 0f, 1.2f })
+                        {
+                            Vector3 from = sp + Right * offX;
+                            new Projectile(from, (pPos + new Vector3(0, 1.2f, 0)) - from, 48f, Damage * 0.72f, 0.34f, Rgb(115, 235, 255), isPlayer: projIsPlayer, canProc: false);
+                        }
+                    }
+                }
+            }
+            else if (EnemyType == "animatronic_endo")
+            {
+                if (Parts.Crown != null) Parts.Crown.RotationZ = MathF.Sin(t * 18f) * 6.5f;
+                ApplyGroundStep(3.4f, 1.3f);
+
+                if (WindupType == 2)
+                {
+                    WindupTimer -= dt;
+                    if (WindupTimer <= 0f)
+                    {
+                        ClearWindup();
+                        UpdateHpBillboard();
+                        SpecialTimer = 5.8f;
+                        Position = Physics.ResolveHorizontalCollision(Position + Forward * 7.5f, 1.3f, Y);
+                        new VisualFX(Position + new Vector3(0, 2.2f, 0), Rgb(255, 195, 45), 11.0f, 0.35f);
+                        new LunarShockwaveRing(Position, Damage * 1.15f, 28.0f, 21.0f);
+                        if (!IsAlly && Physics.Distance2D(g.PlayerPos, Position) <= 5.5f)
+                            CombatManager.DamagePlayer(Damage * 1.30f, this);
+                    }
+                    return;
+                }
+
+                SpecialTimer -= dt;
+                if (SpecialTimer <= 0f && !IsAlly && dist <= 18.0f)
+                {
+                    WindupType = 2;
+                    WindupTimer = 0.72f;
+                    WindupTag = "ПРЫЖОК ЭНДОСКЕЛЕТА 06:00!";
+                    UpdateHpBillboard();
+                    return;
+                }
+
+                AttackTimer -= dt;
+                if (AttackTimer <= 0f)
+                {
+                    AttackTimer = 1.65f;
+                    if (dist <= 4.2f && !IsAlly)
+                    {
+                        CombatManager.DamagePlayer(Damage, this);
+                        new VisualFX(pPos + new Vector3(0, 1.2f, 0), Color.Gold, 3.0f, 0.22f);
+                    }
+                    else
+                    {
+                        Vector3 sp = Position + new Vector3(0, 2.7f, 0);
+                        foreach (float deg in new[] { -12f, 0f, 12f })
+                        {
+                            float rad = deg * (MathF.PI / 180f);
+                            Vector3 baseAim = (pPos + new Vector3(0, 1.15f, 0)) - sp;
+                            Vector3 d = new(baseAim.X * MathF.Cos(rad) - baseAim.Z * MathF.Sin(rad), baseAim.Y, baseAim.X * MathF.Sin(rad) + baseAim.Z * MathF.Cos(rad));
+                            new Projectile(sp, d, 34f, Damage * 0.80f, 0.42f, Rgb(215, 75, 255), isPlayer: projIsPlayer, canProc: false);
+                        }
+                    }
+                }
+            }
+            else if (EnemyType == "warden_reef")
+            {
+                ApplyGroundStep(5.2f, 1.5f);
+
+                if (WindupType == 2)
+                {
+                    WindupTimer -= dt;
+                    if (Parts.RightArm != null) Parts.RightArm.RotationX = -135f;
+                    if (WindupTimer <= 0f)
+                    {
+                        ClearWindup();
+                        UpdateHpBillboard();
+                        SpecialTimer = 6.2f;
+                        if (Parts.RightArm != null) Parts.RightArm.RotationX = 45f;
+                        new VisualFX(Position + Forward * 2.2f + new Vector3(0, 1.2f, 0), Rgb(65, 245, 215), 13.0f, 0.42f);
+                        new LunarShockwaveRing(Position, Damage * 1.20f, 36.0f, 19.5f);
+                        for (int i = 0; i < 8; i++)
+                        {
+                            float ang = (i / 8f) * MathF.PI * 2f;
+                            new Projectile(Position + new Vector3(0, 2.4f, 0), new Vector3(MathF.Cos(ang), 0.06f, MathF.Sin(ang)), 28f, Damage * 0.85f, 0.52f, Rgb(65, 245, 215), isPlayer: projIsPlayer, canProc: false);
+                        }
+                    }
+                    return;
+                }
+
+                SpecialTimer -= dt;
+                if (SpecialTimer <= 0f && !IsAlly && dist <= 22.0f)
+                {
+                    WindupType = 2;
+                    WindupTimer = 0.90f;
+                    WindupTag = "ПРИЛИВНОЕ ОБРУШЕНИЕ ЯКОРЯ!";
+                    UpdateHpBillboard();
+                    return;
+                }
+
+                AttackTimer -= dt;
+                if (AttackTimer <= 0f)
+                {
+                    AttackTimer = 1.90f;
+                    Vector3 sp = Position + new Vector3(0, 2.8f, 0) + Forward * 1.3f;
+                    Vector3 aim = (pPos + new Vector3(0, 1.15f, 0)) - sp;
+                    new Projectile(sp, aim, 36f, Damage, 0.56f, Rgb(65, 245, 215), isPlayer: projIsPlayer, aoe: 2.6f, canProc: false);
+                }
+            }
         }
 
         private void UpdateMithrixPhases(Vector3 pPos, float dist, float effSpeed, float t)
@@ -2566,10 +3247,10 @@ namespace RiskOfCSharp2.Entities
         private static readonly Random _rng = new();
 
         public ArrowRainZone(Vector3 centerPos, float tickDmg)
-            : base(position: centerPos + new Vector3(0, 0.1f, 0))
+            : base(position: centerPos + new Vector3(0, 0.14f, 0))
         {
             _tickDmg = tickDmg;
-            new Entity(parent: this, model: "sphere", scale: new(_radius * 2f, 0.1f, _radius * 2f), color: Rgb(255, 60, 90, 80), unlit: true);
+            new Entity(parent: this, model: "sphere", scale: new(_radius * 2f, 0.16f, _radius * 2f), color: Rgb(255, 60, 90, 80), unlit: true);
         }
 
         public override void OnUpdate(float dt)
@@ -2619,11 +3300,11 @@ namespace RiskOfCSharp2.Entities
         }
 
         public HallowedMistZone(Vector3 centerPos, float tickDmg)
-            : base(position: centerPos + new Vector3(0, 0.08f, 0))
+            : base(position: centerPos + new Vector3(0, 0.14f, 0))
         {
             _tickDmg = tickDmg;
             ActiveZones.Add(this);
-            new Entity(parent: this, model: "sphere", scale: new(Radius * 2f, 0.08f, Radius * 2f), color: Rgb(75, 210, 255, 70), unlit: true);
+            new Entity(parent: this, model: "sphere", scale: new(Radius * 2f, 0.16f, Radius * 2f), color: Rgb(75, 210, 255, 70), unlit: true);
             _pillarsHub = new Entity(parent: this);
             for (int i = 0; i < 8; i++)
             {
@@ -3153,6 +3834,7 @@ namespace RiskOfCSharp2.Entities
 
                 if (targetPos.HasValue)
                 {
+                    SoundManager.Play3D(BuildType == "salvo" ? "rocket" : (BuildType == "spectre" ? "shoot_heavy" : "shoot_light"), Position, g.PlayerPos, 48f, 0.60f);
                     _head.LookAt2D(targetPos.Value);
                     Vector3 sp = Position + new Vector3(0, 1.0f, 0) + _head.Forward * 1.1f;
                     Vector3 aim = Vector3.Normalize(targetPos.Value - sp);
