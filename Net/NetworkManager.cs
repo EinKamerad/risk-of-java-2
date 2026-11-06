@@ -30,12 +30,14 @@ namespace RiskOfCSharp2.Net
         public static NetworkManager Instance { get; private set; } = null!;
 
         public string? Mode = null; // null, "host", "client"
+        public string Transport = "lan"; // "lan" или "steam"
         public string GameType = "coop"; // "coop" или "pvp"
         public string MyId = "host";
         public string RoomCode = "";
         public string HostIp;
         public int Port = BasePort;
         public volatile bool Connected = false;
+        public volatile bool PendingSteamLobbyScreenTransition = false;
 
         private TcpListener? _server;
         private TcpClient? _client;
@@ -183,6 +185,7 @@ namespace RiskOfCSharp2.Net
                 return (false, "Не удалось открыть порт");
 
             Mode = "host";
+            Transport = "lan";
             MyId = "host";
             Connected = true;
             string rawCode = EncodeRoomCode(HostIp, Port);
@@ -190,6 +193,71 @@ namespace RiskOfCSharp2.Net
             new Thread(AcceptLoop) { IsBackground = true }.Start();
             new Thread(BroadcastLoop) { IsBackground = true }.Start();
             return (true, RoomCode);
+        }
+
+        public (bool Ok, string Info) HostSteamRoom()
+        {
+            StopSession();
+            var (ok, info) = SteamSpacewarService.Instance.HostSteamLobby(GameType, 8);
+            if (!ok)
+                return (false, info);
+
+            Transport = "steam";
+            Mode = "host";
+            MyId = "host";
+            Connected = true;
+            RoomCode = GameType == "pvp" ? "PVP-STEAM..." : "STEAM...";
+            return (true, RoomCode);
+        }
+
+        public void OnSteamLobbyCreated(ulong lobbyId, string gameType)
+        {
+            Transport = "steam";
+            Mode = "host";
+            MyId = "host";
+            GameType = gameType;
+            Connected = true;
+            RoomCode = gameType == "pvp" ? $"PVP-STEAM-{lobbyId}" : $"STEAM-{lobbyId}";
+        }
+
+        public void OnSteamClientEnteredLobby(ulong lobbyId, string gameType)
+        {
+            Transport = "steam";
+            Mode = "client";
+            GameType = gameType;
+            Connected = true;
+            RoomCode = gameType == "pvp" ? $"PVP-STEAM-{lobbyId}" : $"STEAM-{lobbyId}";
+        }
+
+        public (bool Ok, string Info) JoinSteamByInput(string rawInput)
+        {
+            string clean = (rawInput ?? "").Trim();
+            var match = System.Text.RegularExpressions.Regex.Match(clean, @"(\d{10,22})");
+            if (!match.Success || !ulong.TryParse(match.Groups[1].Value, out ulong lobbyId) || lobbyId == 0)
+                return (false, "Введите корректный Steam Lobby ID (число из 17-19 цифр) или выберите лобби в списке");
+
+            return JoinSteamLobby(lobbyId);
+        }
+
+        public (bool Ok, string Info) JoinSteamLobby(ulong lobbyId)
+        {
+            StopSession();
+            var (ok, info) = SteamSpacewarService.Instance.JoinSteamLobby(lobbyId, GameType);
+            if (!ok)
+                return (false, info);
+
+            Transport = "steam";
+            Mode = "client";
+            Connected = true;
+            RoomCode = GameType == "pvp" ? $"PVP-STEAM-{lobbyId}" : $"STEAM-{lobbyId}";
+            return (true, RoomCode);
+        }
+
+        public void JoinSteamLobbyFromInvite(ulong lobbyId)
+        {
+            var (ok, _) = JoinSteamLobby(lobbyId);
+            if (ok)
+                PendingSteamLobbyScreenTransition = true;
         }
 
         private void BroadcastLoop()
@@ -249,6 +317,9 @@ namespace RiskOfCSharp2.Net
             try
             {
                 string trimmed = codeStr.Trim().ToUpperInvariant();
+                if (trimmed.Contains("STEAM") || System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^\d{12,22}$"))
+                    return JoinSteamByInput(codeStr);
+
                 bool isPvpCode = trimmed.StartsWith("PVP-");
                 if (GameType == "pvp" && !isPvpCode && !trimmed.Contains('.'))
                     return (false, "Это код Кооп-комнаты! Для PvP нужен код с префиксом PVP-");
@@ -296,6 +367,7 @@ namespace RiskOfCSharp2.Net
             }
 
             Mode = "client";
+            Transport = "lan";
             Connected = true;
             RoomCode = string.IsNullOrEmpty(displayCode) ? EncodeRoomCode(ip, port) : displayCode;
             new Thread(() => ClientRecvLoop(_client, "host")) { IsBackground = true }.Start();
@@ -352,6 +424,11 @@ namespace RiskOfCSharp2.Net
         public void Broadcast(JsonObject data, string? excludePid = null)
         {
             if (!Connected) return;
+            if (Transport == "steam")
+            {
+                SteamSpacewarService.Instance.Broadcast(data, excludePid);
+                return;
+            }
             if (Mode == "host")
             {
                 List<KeyValuePair<string, TcpClient>> snapshot;
@@ -375,7 +452,14 @@ namespace RiskOfCSharp2.Net
 
         public List<JsonObject> PollMessages()
         {
+            SteamSpacewarService.Instance.Update();
             var list = new List<JsonObject>();
+            while (SteamSpacewarService.Instance.Inbox.TryDequeue(out var sMsg))
+            {
+                if (sMsg["type"]?.GetValue<string>() == "disconnected" && Transport == "steam")
+                    Connected = false;
+                list.Add(sMsg);
+            }
             while (_inbox.TryDequeue(out var msg))
                 list.Add(msg);
             return list;
@@ -383,6 +467,8 @@ namespace RiskOfCSharp2.Net
 
         public void StopSession()
         {
+            Data.GameData.ClearNetClientOverride();
+            SteamSpacewarService.Instance.LeaveLobbyAndClearPeers();
             Connected = false;
             Mode = null;
             lock (_lock)

@@ -1,0 +1,2858 @@
+[
+  {
+    "RunId": "20261031_201419_7647",
+    "PlayedAt": "31.10.2026 20:14",
+    "PlayerName": "Vallka",
+    "CharKey": "enforcer",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 13.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 272946671,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 3,
+    "BossKills": 0,
+    "DamageDealt": 222,
+    "DamageTaken": 90,
+    "HitsTaken": 21,
+    "TotalHealed": 0,
+    "GoldEarned": 45,
+    "ChestsOpened": 0,
+    "AbilityCasts": 3,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_201419_7647.rpl.gz"
+  },
+  {
+    "RunId": "20261031_201405_3223",
+    "PlayedAt": "31.10.2026 20:14",
+    "PlayerName": "Vallka",
+    "CharKey": "commando",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "defeat",
+    "WasSpectatorOnly": false,
+    "DurationSec": 9.2,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+        "SpecialMode": null,
+        "Seed": 272933234,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 0,
+    "BossKills": 0,
+    "DamageDealt": 0,
+    "DamageTaken": 147,
+    "HitsTaken": 15,
+    "TotalHealed": 0,
+    "GoldEarned": 0,
+    "ChestsOpened": 0,
+    "AbilityCasts": 1,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "bison",
+    "KillerName": "\u0420\u043E\u0433\u0430\u0442\u044B\u0439 \u0411\u0438\u0437\u043E\u043D",
+    "KillerRank": "\u041E\u0411\u042B\u0427\u041D\u042B\u0419 \u0412\u0420\u0410\u0413",
+    "KillerDamage": 21.8,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_201405_3223.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200601_9344",
+    "PlayedAt": "31.10.2026 20:06",
+    "PlayerName": "Vallka",
+    "CharKey": "commando",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 3.5,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 272449062,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 0,
+    "BossKills": 0,
+    "DamageDealt": 0,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 0,
+    "GoldEarned": 0,
+    "ChestsOpened": 0,
+    "AbilityCasts": 19,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200601_9344.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200453_2200",
+    "PlayedAt": "31.10.2026 20:04",
+    "PlayerName": "Vallka",
+    "CharKey": "sanabi",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 51.9,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 272381156,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 17,
+    "BossKills": 0,
+    "DamageDealt": 1574,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 202,
+    "GoldEarned": 336,
+    "ChestsOpened": 0,
+    "AbilityCasts": 121,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200453_2200.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200412_8230",
+    "PlayedAt": "31.10.2026 20:04",
+    "PlayerName": "Vallka",
+    "CharKey": "spamton",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 10.6,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 272340484,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 5,
+    "BossKills": 0,
+    "DamageDealt": 408,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 0,
+    "GoldEarned": 97,
+    "ChestsOpened": 0,
+    "AbilityCasts": 39,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200412_8230.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200345_3732",
+    "PlayedAt": "31.10.2026 20:03",
+    "PlayerName": "Vallka",
+    "CharKey": "spamton",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 24.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 272313078,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 13,
+    "BossKills": 0,
+    "DamageDealt": 942,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 0,
+    "GoldEarned": 238,
+    "ChestsOpened": 0,
+    "AbilityCasts": 118,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200345_3732.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200306_4735",
+    "PlayedAt": "31.10.2026 20:03",
+    "PlayerName": "Vallka",
+    "CharKey": "haze",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 23.4,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 272273656,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 13,
+    "BossKills": 0,
+    "DamageDealt": 822,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 90,
+    "GoldEarned": 221,
+    "ChestsOpened": 0,
+    "AbilityCasts": 138,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200306_4735.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200228_5733",
+    "PlayedAt": "31.10.2026 20:02",
+    "PlayerName": "Vallka",
+    "CharKey": "tidehunter",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 22.1,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 272236000,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 13,
+    "BossKills": 0,
+    "DamageDealt": 1030,
+    "DamageTaken": 2,
+    "HitsTaken": 1,
+    "TotalHealed": 83,
+    "GoldEarned": 230,
+    "ChestsOpened": 0,
+    "AbilityCasts": 49,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200228_5733.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200213_9700",
+    "PlayedAt": "31.10.2026 20:02",
+    "PlayerName": "Vallka",
+    "CharKey": "cheburashka",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 11.3,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+        "SpecialMode": null,
+        "Seed": 272221218,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 6,
+    "BossKills": 0,
+    "DamageDealt": 518,
+    "DamageTaken": 32,
+    "HitsTaken": 2,
+    "TotalHealed": 43,
+    "GoldEarned": 121,
+    "ChestsOpened": 0,
+    "AbilityCasts": 48,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200213_9700.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200146_6132",
+    "PlayedAt": "31.10.2026 20:01",
+    "PlayerName": "Vallka",
+    "CharKey": "w_arknights",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 23.5,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 272194171,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 12,
+    "BossKills": 0,
+    "DamageDealt": 1379,
+    "DamageTaken": 14,
+    "HitsTaken": 1,
+    "TotalHealed": 30,
+    "GoldEarned": 225,
+    "ChestsOpened": 0,
+    "AbilityCasts": 58,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200146_6132.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200128_7792",
+    "PlayedAt": "31.10.2026 20:01",
+    "PlayerName": "Vallka",
+    "CharKey": "pushnoy",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 16.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 272175609,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 11,
+    "BossKills": 0,
+    "DamageDealt": 632,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 28,
+    "GoldEarned": 190,
+    "ChestsOpened": 0,
+    "AbilityCasts": 75,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200128_7792.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200112_6628",
+    "PlayedAt": "31.10.2026 20:01",
+    "PlayerName": "Vallka",
+    "CharKey": "vyper",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 13.2,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+        "SpecialMode": null,
+        "Seed": 272160062,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 8,
+    "BossKills": 0,
+    "DamageDealt": 492,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 16,
+    "GoldEarned": 144,
+    "ChestsOpened": 0,
+    "AbilityCasts": 116,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200112_6628.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200047_6846",
+    "PlayedAt": "31.10.2026 20:00",
+    "PlayerName": "Vallka",
+    "CharKey": "jack_o",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 13.2,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 272135328,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 5,
+    "BossKills": 0,
+    "DamageDealt": 375,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 17,
+    "GoldEarned": 82,
+    "ChestsOpened": 0,
+    "AbilityCasts": 15,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200047_6846.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200014_4288",
+    "PlayedAt": "31.10.2026 20:00",
+    "PlayerName": "Vallka",
+    "CharKey": "jack_o",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 27.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+        "SpecialMode": null,
+        "Seed": 272102281,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 16,
+    "BossKills": 0,
+    "DamageDealt": 1311,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 97,
+    "GoldEarned": 287,
+    "ChestsOpened": 0,
+    "AbilityCasts": 86,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200014_4288.rpl.gz"
+  },
+  {
+    "RunId": "20261031_200002_3282",
+    "PlayedAt": "31.10.2026 20:00",
+    "PlayerName": "Vallka",
+    "CharKey": "don_quixote",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 9.6,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 272090156,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 4,
+    "BossKills": 0,
+    "DamageDealt": 295,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 35,
+    "GoldEarned": 68,
+    "ChestsOpened": 0,
+    "AbilityCasts": 36,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_200002_3282.rpl.gz"
+  },
+  {
+    "RunId": "20261031_195946_4490",
+    "PlayedAt": "31.10.2026 19:59",
+    "PlayerName": "Vallka",
+    "CharKey": "apocalypse_bird",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 8.2,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+        "SpecialMode": null,
+        "Seed": 272074187,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 4,
+    "BossKills": 0,
+    "DamageDealt": 385,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 0,
+    "GoldEarned": 65,
+    "ChestsOpened": 0,
+    "AbilityCasts": 30,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_195946_4490.rpl.gz"
+  },
+  {
+    "RunId": "20261031_195925_8900",
+    "PlayedAt": "31.10.2026 19:59",
+    "PlayerName": "Vallka",
+    "CharKey": "false_son",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 19.1,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 272052828,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 11,
+    "BossKills": 0,
+    "DamageDealt": 804,
+    "DamageTaken": 10,
+    "HitsTaken": 1,
+    "TotalHealed": 6,
+    "GoldEarned": 197,
+    "ChestsOpened": 0,
+    "AbilityCasts": 37,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_195925_8900.rpl.gz"
+  },
+  {
+    "RunId": "20261031_195709_5710",
+    "PlayedAt": "31.10.2026 19:57",
+    "PlayerName": "Vallka",
+    "CharKey": "closure",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 108.4,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+        "SpecialMode": null,
+        "Seed": 271917250,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 70,
+    "BossKills": 0,
+    "DamageDealt": 3916,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 352,
+    "GoldEarned": 1278,
+    "ChestsOpened": 14,
+    "AbilityCasts": 427,
+    "TotalItemsCount": 14,
+    "Items": [
+      {
+        "Key": "bundle_fireworks",
+        "Count": 1
+      },
+      {
+        "Key": "ceremonial_dagger",
+        "Count": 1
+      },
+      {
+        "Key": "dorans_blade",
+        "Count": 1
+      },
+      {
+        "Key": "infusion",
+        "Count": 1
+      },
+      {
+        "Key": "ukulele",
+        "Count": 1
+      },
+      {
+        "Key": "golden_apple",
+        "Count": 1
+      },
+      {
+        "Key": "guillotine",
+        "Count": 1
+      },
+      {
+        "Key": "iron_branch",
+        "Count": 1
+      },
+      {
+        "Key": "sad_onion",
+        "Count": 1
+      },
+      {
+        "Key": "focus_crystal",
+        "Count": 1
+      },
+      {
+        "Key": "bear",
+        "Count": 1
+      },
+      {
+        "Key": "originium_prime",
+        "Count": 1
+      },
+      {
+        "Key": "red_whip",
+        "Count": 1
+      },
+      {
+        "Key": "syringe",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_195709_5710.rpl.gz"
+  },
+  {
+    "RunId": "20261031_195656_6003",
+    "PlayedAt": "31.10.2026 19:56",
+    "PlayerName": "Vallka",
+    "CharKey": "priestess",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 11.2,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 271904156,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 6,
+    "BossKills": 0,
+    "DamageDealt": 579,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 0,
+    "GoldEarned": 124,
+    "ChestsOpened": 0,
+    "AbilityCasts": 33,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_195656_6003.rpl.gz"
+  },
+  {
+    "RunId": "20261031_195203_9467",
+    "PlayedAt": "31.10.2026 19:52",
+    "PlayerName": "Vallka",
+    "CharKey": "steve",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 210.2,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 271611203,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 113,
+    "BossKills": 4,
+    "DamageDealt": 24436,
+    "DamageTaken": 449,
+    "HitsTaken": 26,
+    "TotalHealed": 2946,
+    "GoldEarned": 2909,
+    "ChestsOpened": 7,
+    "AbilityCasts": 704,
+    "TotalItemsCount": 57,
+    "Items": [
+      {
+        "Key": "opal",
+        "Count": 1
+      },
+      {
+        "Key": "afterburner",
+        "Count": 1
+      },
+      {
+        "Key": "bundle_fireworks",
+        "Count": 1
+      },
+      {
+        "Key": "rose_buckler",
+        "Count": 1
+      },
+      {
+        "Key": "infinity_edge",
+        "Count": 2
+      },
+      {
+        "Key": "clover",
+        "Count": 1
+      },
+      {
+        "Key": "tarrasque",
+        "Count": 2
+      },
+      {
+        "Key": "alien_head",
+        "Count": 1
+      },
+      {
+        "Key": "hoof",
+        "Count": 2
+      },
+      {
+        "Key": "feather",
+        "Count": 8
+      },
+      {
+        "Key": "syringe",
+        "Count": 1
+      },
+      {
+        "Key": "repulsion_armor",
+        "Count": 10
+      },
+      {
+        "Key": "harvester_scythe",
+        "Count": 7
+      },
+      {
+        "Key": "runald_band",
+        "Count": 5
+      },
+      {
+        "Key": "kjaro_band",
+        "Count": 3
+      },
+      {
+        "Key": "ukulele",
+        "Count": 7
+      },
+      {
+        "Key": "atg_missile",
+        "Count": 3
+      },
+      {
+        "Key": "maelstrom",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_195203_9467.rpl.gz"
+  },
+  {
+    "RunId": "20261031_195106_9670",
+    "PlayedAt": "31.10.2026 19:51",
+    "PlayerName": "Vallka",
+    "CharKey": "dante",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 10.6,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+        "SpecialMode": null,
+        "Seed": 271554484,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 4,
+    "BossKills": 0,
+    "DamageDealt": 435,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 72,
+    "GoldEarned": 97,
+    "ChestsOpened": 0,
+    "AbilityCasts": 52,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_195106_9670.rpl.gz"
+  },
+  {
+    "RunId": "20261031_194528_8555",
+    "PlayedAt": "31.10.2026 19:45",
+    "PlayerName": "Vallka",
+    "CharKey": "slark",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 268.1,
+    "FinalStageNum": 3,
+    "FinalStageName": "\u0417\u043E\u0432 \u0421\u0438\u0440\u0435\u043D\u044B",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 271215953,
+        "EnterTimeSec": 0
+      },
+      {
+        "StageNum": 1,
+        "StageName": "\u0418\u0437\u043D\u0430\u0447\u0430\u043B\u044C\u043D\u044B\u0439 \u041C\u0435\u0440\u0438\u0434\u0438\u0430\u043D",
+        "SpecialMode": "prime_meridian",
+        "Seed": 271242234,
+        "EnterTimeSec": 26.29
+      },
+      {
+        "StageNum": 2,
+        "StageName": "\u0421\u0435\u0440\u043D\u044B\u0435 \u041E\u0437\u0451\u0440\u0430",
+        "SpecialMode": null,
+        "Seed": 271312875,
+        "EnterTimeSec": 95.28
+      },
+      {
+        "StageNum": 2,
+        "StageName": "\u042F\u0434\u0440\u043E \u0410\u0441\u0441\u0438\u043C\u0438\u043B\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u043E\u0439 \u0412\u0441\u0435\u043B\u0435\u043D\u043D\u043E\u0439 (PRTS)",
+        "SpecialMode": "originium_core",
+        "Seed": 271420640,
+        "EnterTimeSec": 201.26
+      },
+      {
+        "StageNum": 3,
+        "StageName": "\u0417\u043E\u0432 \u0421\u0438\u0440\u0435\u043D\u044B",
+        "SpecialMode": null,
+        "Seed": 271461734,
+        "EnterTimeSec": 240.74
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 200,
+    "BossKills": 4,
+    "DamageDealt": 34849,
+    "DamageTaken": 498,
+    "HitsTaken": 23,
+    "TotalHealed": 4152,
+    "GoldEarned": 6235,
+    "ChestsOpened": 26,
+    "AbilityCasts": 884,
+    "TotalItemsCount": 27,
+    "Items": [
+      {
+        "Key": "wax_quill",
+        "Count": 3
+      },
+      {
+        "Key": "ender_pearl",
+        "Count": 2
+      },
+      {
+        "Key": "bear",
+        "Count": 1
+      },
+      {
+        "Key": "guillotine",
+        "Count": 2
+      },
+      {
+        "Key": "topaz_brooch",
+        "Count": 1
+      },
+      {
+        "Key": "dorans_blade",
+        "Count": 4
+      },
+      {
+        "Key": "crowbar",
+        "Count": 1
+      },
+      {
+        "Key": "sticky_bomb",
+        "Count": 1
+      },
+      {
+        "Key": "liandrys_torment",
+        "Count": 1
+      },
+      {
+        "Key": "iron_branch",
+        "Count": 1
+      },
+      {
+        "Key": "ludens_companion",
+        "Count": 2
+      },
+      {
+        "Key": "ceremonial_dagger",
+        "Count": 1
+      },
+      {
+        "Key": "harvester_scythe",
+        "Count": 1
+      },
+      {
+        "Key": "lens",
+        "Count": 1
+      },
+      {
+        "Key": "statikk_shiv",
+        "Count": 1
+      },
+      {
+        "Key": "bundle_fireworks",
+        "Count": 1
+      },
+      {
+        "Key": "sad_onion",
+        "Count": 1
+      },
+      {
+        "Key": "kjaro_band",
+        "Count": 1
+      },
+      {
+        "Key": "stun_grenade",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_194528_8555.rpl.gz"
+  },
+  {
+    "RunId": "20261031_194403_8320",
+    "PlayedAt": "31.10.2026 19:44",
+    "PlayerName": "Vallka",
+    "CharKey": "medic",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 56.3,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 271131343,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 29,
+    "BossKills": 0,
+    "DamageDealt": 1712,
+    "DamageTaken": 26,
+    "HitsTaken": 3,
+    "TotalHealed": 534,
+    "GoldEarned": 475,
+    "ChestsOpened": 0,
+    "AbilityCasts": 249,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_194403_8320.rpl.gz"
+  },
+  {
+    "RunId": "20261031_194222_9454",
+    "PlayedAt": "31.10.2026 19:42",
+    "PlayerName": "Vallka",
+    "CharKey": "jack_o",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 10,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+        "SpecialMode": null,
+        "Seed": 271030578,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 6,
+    "BossKills": 0,
+    "DamageDealt": 447,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 39,
+    "GoldEarned": 110,
+    "ChestsOpened": 0,
+    "AbilityCasts": 33,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_194222_9454.rpl.gz"
+  },
+  {
+    "RunId": "20261031_193943_2837",
+    "PlayedAt": "31.10.2026 19:39",
+    "PlayerName": "Vallka",
+    "CharKey": "mindustry",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 152.3,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 270871187,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 98,
+    "BossKills": 0,
+    "DamageDealt": 7260,
+    "DamageTaken": 19,
+    "HitsTaken": 2,
+    "TotalHealed": 1732,
+    "GoldEarned": 2013,
+    "ChestsOpened": 0,
+    "AbilityCasts": 54,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_193943_2837.rpl.gz"
+  },
+  {
+    "RunId": "20261031_193710_6281",
+    "PlayedAt": "31.10.2026 19:37",
+    "PlayerName": "Vallka",
+    "CharKey": "aigis",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 142.6,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 270718046,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 84,
+    "BossKills": 0,
+    "DamageDealt": 5132,
+    "DamageTaken": 11,
+    "HitsTaken": 1,
+    "TotalHealed": 0,
+    "GoldEarned": 1720,
+    "ChestsOpened": 3,
+    "AbilityCasts": 767,
+    "TotalItemsCount": 3,
+    "Items": [
+      {
+        "Key": "medkit",
+        "Count": 1
+      },
+      {
+        "Key": "sticky_bomb",
+        "Count": 1
+      },
+      {
+        "Key": "liandrys_torment",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_193710_6281.rpl.gz"
+  },
+  {
+    "RunId": "20261031_193656_6591",
+    "PlayedAt": "31.10.2026 19:36",
+    "PlayerName": "Vallka",
+    "CharKey": "enforcer",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 6,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 270703671,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 1,
+    "BossKills": 0,
+    "DamageDealt": 241,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 0,
+    "GoldEarned": 15,
+    "ChestsOpened": 0,
+    "AbilityCasts": 19,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_193656_6591.rpl.gz"
+  },
+  {
+    "RunId": "20261031_193629_4693",
+    "PlayedAt": "31.10.2026 19:36",
+    "PlayerName": "Vallka",
+    "CharKey": "enforcer",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 23.4,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 270677484,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 13,
+    "BossKills": 0,
+    "DamageDealt": 659,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 0,
+    "GoldEarned": 228,
+    "ChestsOpened": 0,
+    "AbilityCasts": 38,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_193629_4693.rpl.gz"
+  },
+  {
+    "RunId": "20261031_193446_1324",
+    "PlayedAt": "31.10.2026 19:34",
+    "PlayerName": "Vallka",
+    "CharKey": "gwen",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "defeat",
+    "WasSpectatorOnly": false,
+    "DurationSec": 92.9,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+        "SpecialMode": null,
+        "Seed": 270574078,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 68,
+    "BossKills": 0,
+    "DamageDealt": 5252,
+    "DamageTaken": 377,
+    "HitsTaken": 15,
+    "TotalHealed": 1032,
+    "GoldEarned": 1412,
+    "ChestsOpened": 5,
+    "AbilityCasts": 434,
+    "TotalItemsCount": 5,
+    "Items": [
+      {
+        "Key": "tesla_coil",
+        "Count": 1
+      },
+      {
+        "Key": "boots_swiftness",
+        "Count": 1
+      },
+      {
+        "Key": "liandrys_torment",
+        "Count": 1
+      },
+      {
+        "Key": "bear",
+        "Count": 1
+      },
+      {
+        "Key": "gasoline",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "elder_lemurian",
+    "KillerName": "\u042D\u043B\u0438\u0442\u043D\u044B\u0439 \u0414\u0440\u0435\u0432\u043D\u0438\u0439 \u041B\u0435\u043C\u0443\u0440\u0438\u0435\u0446",
+    "KillerRank": "\u2605 \u042D\u041B\u0418\u0422\u041D\u042B\u0419 \u041C\u041E\u041D\u0421\u0422\u0420",
+    "KillerDamage": 25.3,
+    "KillerIsBoss": false,
+    "KillerIsElite": true,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_193446_1324.rpl.gz"
+  },
+  {
+    "RunId": "20261031_193433_7350",
+    "PlayedAt": "31.10.2026 19:34",
+    "PlayerName": "Vallka",
+    "CharKey": "sol",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 10.5,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 270561296,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 4,
+    "BossKills": 0,
+    "DamageDealt": 374,
+    "DamageTaken": 11,
+    "HitsTaken": 1,
+    "TotalHealed": 20,
+    "GoldEarned": 86,
+    "ChestsOpened": 0,
+    "AbilityCasts": 29,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_193433_7350.rpl.gz"
+  },
+  {
+    "RunId": "20261031_193400_8968",
+    "PlayedAt": "31.10.2026 19:34",
+    "PlayerName": "Vallka",
+    "CharKey": "buzz",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 30.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 270528031,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 11,
+    "BossKills": 0,
+    "DamageDealt": 630,
+    "DamageTaken": 21,
+    "HitsTaken": 2,
+    "TotalHealed": 0,
+    "GoldEarned": 196,
+    "ChestsOpened": 0,
+    "AbilityCasts": 68,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_193400_8968.rpl.gz"
+  },
+  {
+    "RunId": "20261031_193321_3180",
+    "PlayedAt": "31.10.2026 19:33",
+    "PlayerName": "Vallka",
+    "CharKey": "daitaku_helios",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 36.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 270488703,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 21,
+    "BossKills": 0,
+    "DamageDealt": 1678,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 119,
+    "GoldEarned": 352,
+    "ChestsOpened": 0,
+    "AbilityCasts": 207,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_193321_3180.rpl.gz"
+  },
+  {
+    "RunId": "20261031_192318_8229",
+    "PlayedAt": "31.10.2026 19:23",
+    "PlayerName": "Vallka",
+    "CharKey": "sol",
+    "SkinIdx": 2,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 96.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 269885828,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 86,
+    "BossKills": 0,
+    "DamageDealt": 6827,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 293,
+    "GoldEarned": 1953,
+    "ChestsOpened": 9,
+    "AbilityCasts": 237,
+    "TotalItemsCount": 9,
+    "Items": [
+      {
+        "Key": "infinity_edge",
+        "Count": 1
+      },
+      {
+        "Key": "wax_quill",
+        "Count": 1
+      },
+      {
+        "Key": "ceremonial_dagger",
+        "Count": 1
+      },
+      {
+        "Key": "rabadons_deathcap",
+        "Count": 1
+      },
+      {
+        "Key": "topaz_brooch",
+        "Count": 1
+      },
+      {
+        "Key": "iron_branch",
+        "Count": 1
+      },
+      {
+        "Key": "orirock_cluster",
+        "Count": 1
+      },
+      {
+        "Key": "energy_drink",
+        "Count": 1
+      },
+      {
+        "Key": "backup_mag",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_192318_8229.rpl.gz"
+  },
+  {
+    "RunId": "20261031_192044_1334",
+    "PlayedAt": "31.10.2026 19:20",
+    "PlayerName": "Vallka",
+    "CharKey": "sol",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 14.4,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 269731734,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 8,
+    "BossKills": 0,
+    "DamageDealt": 746,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 36,
+    "GoldEarned": 149,
+    "ChestsOpened": 0,
+    "AbilityCasts": 19,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_192044_1334.rpl.gz"
+  },
+  {
+    "RunId": "20261031_191733_5212",
+    "PlayedAt": "31.10.2026 19:17",
+    "PlayerName": "Vallka",
+    "CharKey": "sol",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 149.9,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 269541281,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 104,
+    "BossKills": 3,
+    "DamageDealt": 15164,
+    "DamageTaken": 58,
+    "HitsTaken": 6,
+    "TotalHealed": 1269,
+    "GoldEarned": 2270,
+    "ChestsOpened": 9,
+    "AbilityCasts": 348,
+    "TotalItemsCount": 10,
+    "Items": [
+      {
+        "Key": "ludens_companion",
+        "Count": 1
+      },
+      {
+        "Key": "medkit",
+        "Count": 1
+      },
+      {
+        "Key": "boots_swiftness",
+        "Count": 1
+      },
+      {
+        "Key": "leeching_seed",
+        "Count": 1
+      },
+      {
+        "Key": "ap_rounds",
+        "Count": 1
+      },
+      {
+        "Key": "infusion",
+        "Count": 1
+      },
+      {
+        "Key": "razorwire",
+        "Count": 1
+      },
+      {
+        "Key": "orirock_cluster",
+        "Count": 1
+      },
+      {
+        "Key": "hoof",
+        "Count": 1
+      },
+      {
+        "Key": "afterburner",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_191733_5212.rpl.gz"
+  },
+  {
+    "RunId": "20261031_191710_5196",
+    "PlayedAt": "31.10.2026 19:17",
+    "PlayerName": "Vallka",
+    "CharKey": "sol",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 21.9,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 269518031,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 3,
+    "BossKills": 0,
+    "DamageDealt": 238,
+    "DamageTaken": 43,
+    "HitsTaken": 3,
+    "TotalHealed": 10,
+    "GoldEarned": 47,
+    "ChestsOpened": 0,
+    "AbilityCasts": 52,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_191703_6524",
+    "PlayedAt": "31.10.2026 19:17",
+    "PlayerName": "Vallka",
+    "CharKey": "sol",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 5.2,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 269511296,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 0,
+    "BossKills": 0,
+    "DamageDealt": 106,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 6,
+    "GoldEarned": 0,
+    "ChestsOpened": 0,
+    "AbilityCasts": 15,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_191257_1202",
+    "PlayedAt": "31.10.2026 19:12",
+    "PlayerName": "Vallka",
+    "CharKey": "sol",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 211.1,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 269264812,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 151,
+    "BossKills": 0,
+    "DamageDealt": 10202,
+    "DamageTaken": 71,
+    "HitsTaken": 8,
+    "TotalHealed": 657,
+    "GoldEarned": 3321,
+    "ChestsOpened": 11,
+    "AbilityCasts": 660,
+    "TotalItemsCount": 11,
+    "Items": [
+      {
+        "Key": "sad_onion",
+        "Count": 1
+      },
+      {
+        "Key": "kjaro_band",
+        "Count": 1
+      },
+      {
+        "Key": "backup_mag",
+        "Count": 1
+      },
+      {
+        "Key": "hoof",
+        "Count": 2
+      },
+      {
+        "Key": "runald_band",
+        "Count": 1
+      },
+      {
+        "Key": "bear",
+        "Count": 1
+      },
+      {
+        "Key": "bandolier",
+        "Count": 1
+      },
+      {
+        "Key": "orirock_cluster",
+        "Count": 1
+      },
+      {
+        "Key": "sticky_bomb",
+        "Count": 1
+      },
+      {
+        "Key": "iron_branch",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_190938_1557",
+    "PlayedAt": "31.10.2026 19:09",
+    "PlayerName": "Vallka",
+    "CharKey": "m4a1",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 122.6,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 269066078,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 82,
+    "BossKills": 4,
+    "DamageDealt": 13937,
+    "DamageTaken": 0,
+    "HitsTaken": 0,
+    "TotalHealed": 142,
+    "GoldEarned": 1977,
+    "ChestsOpened": 16,
+    "AbilityCasts": 339,
+    "TotalItemsCount": 14,
+    "Items": [
+      {
+        "Key": "infusion",
+        "Count": 1
+      },
+      {
+        "Key": "opal",
+        "Count": 2
+      },
+      {
+        "Key": "sad_onion",
+        "Count": 1
+      },
+      {
+        "Key": "backup_mag",
+        "Count": 1
+      },
+      {
+        "Key": "ap_rounds",
+        "Count": 1
+      },
+      {
+        "Key": "will_o_wisp",
+        "Count": 2
+      },
+      {
+        "Key": "statikk_shiv",
+        "Count": 1
+      },
+      {
+        "Key": "maelstrom",
+        "Count": 1
+      },
+      {
+        "Key": "bandolier",
+        "Count": 1
+      },
+      {
+        "Key": "golden_apple",
+        "Count": 1
+      },
+      {
+        "Key": "lens",
+        "Count": 1
+      },
+      {
+        "Key": "ceremonial_dagger",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_190627_4221",
+    "PlayedAt": "31.10.2026 19:06",
+    "PlayerName": "Vallka",
+    "CharKey": "commando",
+    "SkinIdx": 2,
+    "SkillVariants": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "defeat",
+    "WasSpectatorOnly": false,
+    "DurationSec": 183.3,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 268875390,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 112,
+    "BossKills": 0,
+    "DamageDealt": 5883,
+    "DamageTaken": 455,
+    "HitsTaken": 653,
+    "TotalHealed": 0,
+    "GoldEarned": 2309,
+    "ChestsOpened": 5,
+    "AbilityCasts": 765,
+    "TotalItemsCount": 5,
+    "Items": [
+      {
+        "Key": "sad_onion",
+        "Count": 1
+      },
+      {
+        "Key": "liandrys_torment",
+        "Count": 1
+      },
+      {
+        "Key": "bundle_fireworks",
+        "Count": 1
+      },
+      {
+        "Key": "focus_crystal",
+        "Count": 1
+      },
+      {
+        "Key": "opal",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "jellyfish",
+    "KillerName": "\u0411\u043B\u0443\u0436\u0434\u0430\u044E\u0449\u0430\u044F \u041C\u0435\u0434\u0443\u0437\u0430",
+    "KillerRank": "\u041E\u0411\u042B\u0427\u041D\u042B\u0419 \u0412\u0420\u0410\u0413",
+    "KillerDamage": 18.5,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_190513_5018",
+    "PlayedAt": "31.10.2026 19:05",
+    "PlayerName": "Vallka",
+    "CharKey": "commando",
+    "SkinIdx": 2,
+    "SkillVariants": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "abandoned",
+    "WasSpectatorOnly": false,
+    "DurationSec": 70.3,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 268800750,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 44,
+    "BossKills": 2,
+    "DamageDealt": 5138,
+    "DamageTaken": 79,
+    "HitsTaken": 6,
+    "TotalHealed": 128,
+    "GoldEarned": 936,
+    "ChestsOpened": 4,
+    "AbilityCasts": 332,
+    "TotalItemsCount": 5,
+    "Items": [
+      {
+        "Key": "frost_relic",
+        "Count": 1
+      },
+      {
+        "Key": "monster_tooth",
+        "Count": 1
+      },
+      {
+        "Key": "iron_branch",
+        "Count": 1
+      },
+      {
+        "Key": "bundle_fireworks",
+        "Count": 1
+      },
+      {
+        "Key": "bear",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "",
+    "KillerName": "",
+    "KillerRank": "",
+    "KillerDamage": 0,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_190247_1175",
+    "PlayedAt": "31.10.2026 19:02",
+    "PlayerName": "Vallka",
+    "CharKey": "commando",
+    "SkinIdx": 2,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "defeat",
+    "WasSpectatorOnly": false,
+    "DurationSec": 37.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 268655328,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 14,
+    "BossKills": 0,
+    "DamageDealt": 914,
+    "DamageTaken": 240,
+    "HitsTaken": 17,
+    "TotalHealed": 0,
+    "GoldEarned": 235,
+    "ChestsOpened": 1,
+    "AbilityCasts": 161,
+    "TotalItemsCount": 1,
+    "Items": [
+      {
+        "Key": "liandrys_torment",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "shadow_reaper",
+    "KillerName": "\u0416\u043D\u0435\u0446 \u0422\u0430\u0440\u0442\u0430\u0440\u0430",
+    "KillerRank": "\u0411\u041E\u0421\u0421 \u0422\u0415\u041B\u0415\u041F\u041E\u0420\u0422\u0410",
+    "KillerDamage": 21,
+    "KillerIsBoss": true,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_185944_9265",
+    "PlayedAt": "31.10.2026 18:59",
+    "PlayerName": "Vallka",
+    "CharKey": "commando",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "defeat",
+    "WasSpectatorOnly": false,
+    "DurationSec": 85.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 268472265,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 24,
+    "BossKills": 0,
+    "DamageDealt": 2426,
+    "DamageTaken": 355,
+    "HitsTaken": 26,
+    "TotalHealed": 0,
+    "GoldEarned": 553,
+    "ChestsOpened": 2,
+    "AbilityCasts": 366,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "wisp",
+    "KillerName": "\u041C\u0430\u043B\u044B\u0439 \u041E\u0433\u043E\u043D\u0451\u043A",
+    "KillerRank": "\u041E\u0411\u042B\u0427\u041D\u042B\u0419 \u0412\u0420\u0410\u0413",
+    "KillerDamage": 11.5,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_185527_6543",
+    "PlayedAt": "31.10.2026 18:55",
+    "PlayerName": "Vallka",
+    "CharKey": "commando",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "defeat",
+    "WasSpectatorOnly": false,
+    "DurationSec": 244.1,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0412\u044B\u0436\u0436\u0435\u043D\u043D\u044B\u0435 \u0423\u0433\u043E\u0434\u044C\u044F",
+        "SpecialMode": null,
+        "Seed": 268215593,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 150,
+    "BossKills": 0,
+    "DamageDealt": 13715,
+    "DamageTaken": 350,
+    "HitsTaken": 35,
+    "TotalHealed": 69,
+    "GoldEarned": 3284,
+    "ChestsOpened": 5,
+    "AbilityCasts": 1021,
+    "TotalItemsCount": 3,
+    "Items": [
+      {
+        "Key": "repulsion_armor",
+        "Count": 1
+      },
+      {
+        "Key": "ludens_companion",
+        "Count": 1
+      },
+      {
+        "Key": "topaz_brooch",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "elder_lemurian",
+    "KillerName": "\u0414\u0440\u0435\u0432\u043D\u0438\u0439 \u041B\u0435\u043C\u0443\u0440\u0438\u0435\u0446",
+    "KillerRank": "\u041E\u0411\u042B\u0427\u041D\u042B\u0419 \u0412\u0420\u0410\u0413",
+    "KillerDamage": 30.3,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_185501_5270",
+    "PlayedAt": "31.10.2026 18:55",
+    "PlayerName": "Vallka",
+    "CharKey": "commando",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "drizzle",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "defeat",
+    "WasSpectatorOnly": false,
+    "DurationSec": 22.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0414\u0430\u043B\u0451\u043A\u043E\u0435 \u0413\u043D\u0435\u0437\u0434\u043E\u0432\u044C\u0435",
+        "SpecialMode": null,
+        "Seed": 268189078,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 6,
+    "BossKills": 0,
+    "DamageDealt": 687,
+    "DamageTaken": 164,
+    "HitsTaken": 8,
+    "TotalHealed": 0,
+    "GoldEarned": 124,
+    "ChestsOpened": 0,
+    "AbilityCasts": 114,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "shadow_reaper",
+    "KillerName": "\u0416\u043D\u0435\u0446 \u0422\u0430\u0440\u0442\u0430\u0440\u0430",
+    "KillerRank": "\u0411\u041E\u0421\u0421 \u0422\u0415\u041B\u0415\u041F\u041E\u0420\u0422\u0410",
+    "KillerDamage": 20.5,
+    "KillerIsBoss": true,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_185236_3584",
+    "PlayedAt": "31.10.2026 18:52",
+    "PlayerName": "Vallka",
+    "CharKey": "commando",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "rainstorm",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "defeat",
+    "WasSpectatorOnly": false,
+    "DurationSec": 52.5,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 268044140,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 21,
+    "BossKills": 0,
+    "DamageDealt": 1406,
+    "DamageTaken": 201,
+    "HitsTaken": 13,
+    "TotalHealed": 0,
+    "GoldEarned": 352,
+    "ChestsOpened": 0,
+    "AbilityCasts": 210,
+    "TotalItemsCount": 0,
+    "Items": [],
+    "KillerKey": "brass_contraption",
+    "KillerName": "\u041B\u0430\u0442\u0443\u043D\u043D\u044B\u0439 \u041C\u0435\u0445\u0430\u043D\u0438\u0437\u043C",
+    "KillerRank": "\u041E\u0411\u042B\u0427\u041D\u042B\u0419 \u0412\u0420\u0410\u0413",
+    "KillerDamage": 19,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  },
+  {
+    "RunId": "20261031_185058_5181",
+    "PlayedAt": "31.10.2026 18:50",
+    "PlayerName": "Vallka",
+    "CharKey": "commando",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "rainstorm",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "defeat",
+    "WasSpectatorOnly": false,
+    "DurationSec": 73.7,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u041F\u0435\u0440\u0432\u043E\u0437\u0434\u0430\u043D\u043D\u0430\u044F \u0418\u043E\u043D\u0438\u044F",
+        "SpecialMode": null,
+        "Seed": 267946484,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 20,
+    "BossKills": 0,
+    "DamageDealt": 1499,
+    "DamageTaken": 299,
+    "HitsTaken": 20,
+    "TotalHealed": 138,
+    "GoldEarned": 396,
+    "ChestsOpened": 4,
+    "AbilityCasts": 225,
+    "TotalItemsCount": 2,
+    "Items": [
+      {
+        "Key": "bear",
+        "Count": 1
+      },
+      {
+        "Key": "leeching_seed",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "jellyfish",
+    "KillerName": "\u0411\u043B\u0443\u0436\u0434\u0430\u044E\u0449\u0430\u044F \u041C\u0435\u0434\u0443\u0437\u0430",
+    "KillerRank": "\u041E\u0411\u042B\u0427\u041D\u042B\u0419 \u0412\u0420\u0410\u0413",
+    "KillerDamage": 18.7,
+    "KillerIsBoss": false,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": ""
+  }
+]

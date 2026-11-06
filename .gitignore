@@ -13,6 +13,7 @@ RiskOfCSharp2_Linux.tar.gz
 
 # Файлы сохранений / локальные данные (чтобы не затирать прогресс при пуллах)
 save_logbook.json
+user_settings.json
 
 # Настройки IDE (рекомендуется добавить, если используешь Visual Studio или Rider)
 .vs/

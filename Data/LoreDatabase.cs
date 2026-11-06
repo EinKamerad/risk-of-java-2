@@ -69,6 +69,7 @@ namespace RiskOfCSharp2.Data
             InitializeStagesAndModifiers();
             InitializeItemAchievements();
             InitializeCharacterAchievements();
+            InitializeExpansionLore();
         }
 
         // =================================================================================================

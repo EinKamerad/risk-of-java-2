@@ -1,0 +1,105 @@
+[
+  {
+    "RunId": "20261031_183941_7130",
+    "PlayedAt": "31.10.2026 18:39",
+    "PlayerName": "EinKamerad",
+    "CharKey": "commando",
+    "SkinIdx": 0,
+    "SkillVariants": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "DifficultyKey": "rainstorm",
+    "Artifacts": [],
+    "GameMode": "solo",
+    "Outcome": "defeat",
+    "WasSpectatorOnly": false,
+    "DurationSec": 195.3,
+    "FinalStageNum": 1,
+    "FinalStageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+    "StagesVisited": [
+      {
+        "StageNum": 1,
+        "StageName": "\u0420\u0430\u0441\u043A\u043E\u043B\u043E\u0442\u0430\u044F \u0420\u043E\u0449\u0430",
+        "SpecialMode": null,
+        "Seed": 267268718,
+        "EnterTimeSec": 0
+      }
+    ],
+    "CoopPeers": [],
+    "Kills": 144,
+    "BossKills": 0,
+    "DamageDealt": 7006,
+    "DamageTaken": 465,
+    "HitsTaken": 21,
+    "TotalHealed": 772,
+    "GoldEarned": 3837,
+    "ChestsOpened": 15,
+    "AbilityCasts": 996,
+    "TotalItemsCount": 15,
+    "Items": [
+      {
+        "Key": "will_o_wisp",
+        "Count": 1
+      },
+      {
+        "Key": "razorwire",
+        "Count": 1
+      },
+      {
+        "Key": "crowbar",
+        "Count": 1
+      },
+      {
+        "Key": "leeching_seed",
+        "Count": 2
+      },
+      {
+        "Key": "predatory",
+        "Count": 1
+      },
+      {
+        "Key": "bundle_fireworks",
+        "Count": 1
+      },
+      {
+        "Key": "lens",
+        "Count": 1
+      },
+      {
+        "Key": "wax_quill",
+        "Count": 1
+      },
+      {
+        "Key": "feather",
+        "Count": 1
+      },
+      {
+        "Key": "sticky_bomb",
+        "Count": 1
+      },
+      {
+        "Key": "opal",
+        "Count": 2
+      },
+      {
+        "Key": "infusion",
+        "Count": 1
+      },
+      {
+        "Key": "liandrys_torment",
+        "Count": 1
+      }
+    ],
+    "KillerKey": "great_septimus",
+    "KillerName": "\u0412\u0435\u043B\u0438\u043A\u0438\u0439 \u0421\u0435\u043F\u0442\u0438\u043C\u0438\u0439, \u0425\u043E\u0440 \u0411\u0430\u043B\u0430\u043D\u0441\u0430",
+    "KillerRank": "\u0411\u041E\u0421\u0421 \u0422\u0415\u041B\u0415\u041F\u041E\u0420\u0422\u0410",
+    "KillerDamage": 26.8,
+    "KillerIsBoss": true,
+    "KillerIsElite": false,
+    "KillerIsDoppel": false,
+    "ReplayFile": "replays\\20261031_183941_7130.rpl.gz"
+  }
+]

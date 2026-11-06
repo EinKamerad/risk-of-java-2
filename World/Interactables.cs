@@ -156,7 +156,7 @@ namespace RiskOfCSharp2.World
             _ring.RotationY -= 60f * dt;
 
             float dist = Vector3.Distance(Position, g.PlayerPos);
-            _labelEnt.Enabled = dist < 8.5f;
+            _labelEnt.Enabled = !Program.IsSpectating && dist < 8.5f;
             if (_landed && _lockTimer <= 0f && g.CanPlayerInteract)
             {
                 if (dist < 2.0f || (dist < 4.2f && Raylib.IsKeyPressed(KeyboardKey.E)))
@@ -165,6 +165,7 @@ namespace RiskOfCSharp2.World
                         g.OpenCommandPicker(Info.Tier);
                     else
                         g.CollectItem(ItemKey);
+                    Program.NotifyItemPickedUp(Position, ItemKey);
                     new VisualFX(Position, Info.Color, 2.8f, 0.3f);
                     g.StageEntities.Remove(this);
                     Destroy(this);
@@ -262,7 +263,7 @@ namespace RiskOfCSharp2.World
             Physics.Obstacles.Add(new ObstacleCircle(pos.X, pos.Z, 0.72f * sc, 1.05f * sc, pos.Y));
         }
 
-        public void OpenVisual(string? itemKey = null)
+        public void OpenVisual(string? itemKey = null, bool spawnDrop = true)
         {
             if (Opened) return;
             Opened = true;
@@ -280,7 +281,13 @@ namespace RiskOfCSharp2.World
             }
 
             new VisualFX(Position + new Vector3(0, 1.0f, 0), ChestType == "lunar_pod" ? Color.SkyBlue : Color.Gold, 3.2f, 0.35f);
+            if (!spawnDrop) return;
             WorldContext.Game?.SpawnItemDrop(Position, itemKey, PoolType);
+            if (Entities.CombatManager.GetItemCount("damocles") > 0 && Net.NetworkManager.Instance.Mode != "client")
+            {
+                new VisualFX(Position + new Vector3(0, 1.9f, 0), Rgb(255, 55, 85), 3.4f, 0.32f);
+                WorldContext.Game?.SpawnItemDrop(Position + new Vector3(1.15f, 0f, 0.35f), null, PoolType);
+            }
 
             int fwStacks = Entities.CombatManager.GetItemCount("bundle_fireworks");
             if (fwStacks > 0 && Entities.CombatManager.Controller != null)
@@ -295,6 +302,29 @@ namespace RiskOfCSharp2.World
                         Entities.CombatManager.Controller.BaseDamage * 1.35f, 0.30f, Rgb(255, 95, 215),
                         isPlayer: true, aoe: 2.2f, homing: true, canProc: false);
                 }
+            }
+        }
+
+        public void SetReplayVisualOpen(bool open)
+        {
+            if (Opened == open) return;
+            Opened = open;
+            _labelEnt.Enabled = !open;
+            _lockGem.Color = open ? Color.Gray : Color.Gold;
+            float sc = ChestType == "legendary" ? 1.50f : (ChestType == "large" ? 1.25f : 1.0f);
+            if (ChestType == "lunar_pod")
+            {
+                _lid.Enabled = !open;
+            }
+            else if (open)
+            {
+                _lid.Position = new Vector3(0, 0.85f * sc + 0.4f, -0.45f);
+                _lid.Rotation = new Vector3(-70f, 0, 0);
+            }
+            else
+            {
+                _lid.Position = new Vector3(0, 0.85f * sc, 0);
+                _lid.Rotation = Vector3.Zero;
             }
         }
 
@@ -383,9 +413,9 @@ namespace RiskOfCSharp2.World
             _orb.Y = 3.4f + MathF.Sin(t * 3.0f) * 0.16f;
             _cooldown = MathF.Max(0f, _cooldown - dt);
             float dist = Vector3.Distance(Position, g.PlayerPos);
-            _labelEnt.Enabled = dist < 7.5f && _cooldown <= 0f;
+            _labelEnt.Enabled = !Program.IsSpectating && dist < 7.5f && _cooldown <= 0f;
 
-            if (dist < 4.5f && _cooldown <= 0f && Raylib.IsKeyPressed(KeyboardKey.E))
+            if (g.CanPlayerInteract && dist < 4.5f && _cooldown <= 0f && Raylib.IsKeyPressed(KeyboardKey.E))
             {
                 if (g.Gold >= _cost)
                 {
@@ -436,9 +466,9 @@ namespace RiskOfCSharp2.World
             _crystal.Y = 1.5f + MathF.Sin(t * 2.8f) * 0.14f;
             _ring.RotationY -= 90f * dt;
             float dist = Vector3.Distance(Position, g.PlayerPos);
-            _labelEnt.Enabled = dist < 7.5f;
+            _labelEnt.Enabled = !Program.IsSpectating && dist < 7.5f;
 
-            if (dist < 4.2f && Raylib.IsKeyPressed(KeyboardKey.E))
+            if (g.CanPlayerInteract && dist < 4.2f && Raylib.IsKeyPressed(KeyboardKey.E))
             {
                 if (g.LunarCoins >= 1)
                 {
@@ -492,8 +522,8 @@ namespace RiskOfCSharp2.World
             }
 
             float dist = Vector3.Distance(Position, g.PlayerPos);
-            _labelEnt.Enabled = dist < 11.0f;
-            if (dist < 5.2f && Raylib.IsKeyPressed(KeyboardKey.E))
+            _labelEnt.Enabled = !Program.IsSpectating && dist < 11.0f;
+            if (g.CanPlayerInteract && dist < 5.2f && Raylib.IsKeyPressed(KeyboardKey.E))
             {
                 _used = true;
                 SoundManager.Play("portal_open");
@@ -611,6 +641,12 @@ namespace RiskOfCSharp2.World
                 }
                 if (dist < 5.0f && Raylib.IsKeyPressed(KeyboardKey.E) && g.CanPlayerInteract)
                 {
+                    if (CharacterUnlockSystems.IsTeleporterJammed(out string jamMsg))
+                    {
+                        SoundManager.Play("ui_error");
+                        g.ShowBanner(jamMsg, Color.Red, 2.6f);
+                        return;
+                    }
                     State = "charging";
                     _zoneRing.Enabled = true;
                     g.NotifyTeleporterState("activate", AlignedToMoon);
@@ -619,8 +655,10 @@ namespace RiskOfCSharp2.World
             }
             else if (State == "charging")
             {
+                _zoneRing.Enabled = true;
                 _labelEnt.Enabled = true;
-                if (dist <= ZoneRadius)
+                bool anyPlayerInZone = (g.CanPlayerInteract && dist <= ZoneRadius) || g.IsNearRemotePlayer(Position, ZoneRadius);
+                if (anyPlayerInZone)
                 {
                     int prevStep = (int)(Charge / 10f);
                     Charge = MathF.Min(100f, Charge + 5.5f * dt);
@@ -639,6 +677,7 @@ namespace RiskOfCSharp2.World
                 if (Charge >= 100f && !g.IsBossAlive)
                 {
                     State = "ready";
+                    CharacterUnlockSystems.OnTeleporterFullyCharged(g, this);
                     SoundManager.Play("teleporter_ready");
                     _core.Color = Color.SkyBlue;
                     foreach (var p in _prongs) p.Color = Color.SkyBlue;
@@ -677,6 +716,23 @@ namespace RiskOfCSharp2.World
                 }
             }
         }
+
+        public void ApplyReplayState(string state, float charge, bool aligned)
+        {
+            State = string.IsNullOrEmpty(state) ? "idle" : state;
+            Charge = charge;
+            AlignedToMoon = aligned;
+            Color col = State == "ready" ? Color.SkyBlue : (AlignedToMoon ? Rgb(80, 215, 255) : Color.Red);
+            _core.Color = col;
+            foreach (var p in _prongs) p.Color = col;
+            _labelEnt.Color = col;
+            _zoneRing.Enabled = State is "charging" or "ready";
+            _zoneRing.Color = State == "ready" ? Rgb(60, 255, 220, 55) : Rgb(255, 80, 80, 48);
+            _labelEnt.Enabled = true;
+            _labelEnt.BillboardText = State == "charging"
+                ? $"Телепорт: {(int)Charge}%"
+                : (State == "ready" ? "Телепорт заряжен (100%)" : "Телепорт");
+        }
     }
 
     public class LunarShopBud : Entity
@@ -710,8 +766,8 @@ namespace RiskOfCSharp2.World
             if (_bought || g == null || IsDestroyed) return;
             _visual.RotationY += 85f * dt;
             float dist = Vector3.Distance(Position, g.PlayerPos);
-            _labelEnt.Enabled = dist < 7.0f;
-            if (dist < 3.6f && Raylib.IsKeyPressed(KeyboardKey.E))
+            _labelEnt.Enabled = !Program.IsSpectating && dist < 7.0f;
+            if (g.CanPlayerInteract && dist < 3.6f && Raylib.IsKeyPressed(KeyboardKey.E))
             {
                 if (g.LunarCoins >= _cost)
                 {
@@ -764,9 +820,9 @@ namespace RiskOfCSharp2.World
             _visual.RotationY += 80f * dt;
             _cooldown = MathF.Max(0f, _cooldown - dt);
             float dist = Vector3.Distance(Position, g.PlayerPos);
-            _labelEnt.Enabled = dist < 7.5f && _cooldown <= 0f;
+            _labelEnt.Enabled = !Program.IsSpectating && dist < 7.5f && _cooldown <= 0f;
 
-            if (dist < 4.0f && _cooldown <= 0f && Raylib.IsKeyPressed(KeyboardKey.E))
+            if (g.CanPlayerInteract && dist < 4.0f && _cooldown <= 0f && Raylib.IsKeyPressed(KeyboardKey.E))
             {
                 var nonLunar = new List<string>();
                 int totalAvail = 0;
@@ -822,7 +878,7 @@ namespace RiskOfCSharp2.World
             if (g == null || IsDestroyed) return;
             _ring.RotationY += 120f * dt;
             _cooldown = MathF.Max(0f, _cooldown - dt);
-            if (_cooldown <= 0f && Physics.Distance2D(Position, g.PlayerPos) <= 2.1f && MathF.Abs(g.PlayerPos.Y - Y) <= 2.0f)
+            if (g.CanPlayerInteract && _cooldown <= 0f && Physics.Distance2D(Position, g.PlayerPos) <= 2.1f && MathF.Abs(g.PlayerPos.Y - Y) <= 2.0f)
             {
                 _cooldown = 0.65f;
                 SoundManager.Play("bounce_pad");
@@ -885,8 +941,8 @@ namespace RiskOfCSharp2.World
 
             if (State == "idle")
             {
-                _labelEnt.Enabled = dist < 22.0f;
-                if (dist < 5.2f && heightDiff < 5.0f && Raylib.IsKeyPressed(KeyboardKey.E))
+                _labelEnt.Enabled = !Program.IsSpectating && dist < 22.0f;
+                if (g.CanPlayerInteract && dist < 5.2f && heightDiff < 5.0f && Raylib.IsKeyPressed(KeyboardKey.E))
                 {
                     ActivatePillar(fromNetwork: false);
                 }
@@ -894,14 +950,15 @@ namespace RiskOfCSharp2.World
             else if (State == "charging")
             {
                 _labelEnt.Enabled = true;
-                bool anyPlayerInside = (dist <= Radius && heightDiff <= 7.5f) || g.IsNearRemotePlayer(Position, Radius);
+                bool localInside = g.CanPlayerInteract && dist <= Radius && heightDiff <= 7.5f;
+                bool anyPlayerInside = localInside || g.IsNearRemotePlayer(Position, Radius);
                 if (anyPlayerInside)
                 {
                     float rate = 18.0f;
                     if (PillarType == "blood")
                     {
                         rate = 25.0f;
-                        if (dist <= Radius && heightDiff <= 7.5f)
+                        if (localInside)
                             g.PlayerHp = MathF.Max(1.0f, g.PlayerHp - 7.5f * dt);
                     }
                     else if (PillarType == "design")
@@ -911,7 +968,7 @@ namespace RiskOfCSharp2.World
                         {
                             _pulseTimer = 2.4f;
                             new VisualFX(Position + new Vector3(0, 0.6f, 0), _col, 14.0f, 0.35f);
-                            if (dist <= Radius && g.PlayerPos.Y <= Y + 1.2f)
+                            if (localInside && g.PlayerPos.Y <= Y + 1.2f)
                             {
                                 Vector3 pushDir = Vector3.Normalize(g.PlayerPos - Position);
                                 g.ApplyDash(new Vector3(pushDir.X * 16f, 0, pushDir.Z * 16f), 0.20f);
@@ -960,6 +1017,20 @@ namespace RiskOfCSharp2.World
             if (!fromNetwork)
                 WorldContext.Game?.NotifyMoonPillarState(PillarType, "done");
             WorldContext.Game?.OnMoonPillarCharged();
+        }
+
+        public void SetReplayVisualDone(bool done)
+        {
+            if (Completed == done) return;
+            Completed = done;
+            State = done ? "done" : "idle";
+            Charge = done ? 100f : 0f;
+            _zoneRing.Enabled = false;
+            _core.Color = done ? Color.Lime : _col;
+            _beacon.Color = done ? Color.Lime : _col;
+            _labelEnt.Color = done ? Color.Lime : _col;
+            _labelEnt.Enabled = true;
+            _labelEnt.BillboardText = done ? $"{_title} ЗАРЯЖЕН ✓" : _title;
         }
     }
 
@@ -1033,7 +1104,7 @@ namespace RiskOfCSharp2.World
                 return;
             }
 
-            if (Active && Physics.Distance2D(Position, g.PlayerPos) < 4.0f && g.PlayerPos.Y < 15.0f)
+            if (g.CanPlayerInteract && Active && Physics.Distance2D(Position, g.PlayerPos) < 4.0f && g.PlayerPos.Y < 15.0f)
             {
                 _launching = true;
                 _launchTimer = 0.85f;
@@ -1068,7 +1139,7 @@ namespace RiskOfCSharp2.World
             _ring.RotationY += 120f * dt;
             _cooldown = MathF.Max(0f, _cooldown - dt);
 
-            if (_cooldown <= 0f && g.PlayerPos.Y >= Physics.ColosseumY - 10.0f)
+            if (g.CanPlayerInteract && _cooldown <= 0f && g.PlayerPos.Y >= Physics.ColosseumY - 10.0f)
             {
                 if (Physics.Distance2D(Position, g.PlayerPos) < 3.8f && MathF.Abs(g.PlayerPos.Y - Y) < 6.0f)
                 {
@@ -1115,7 +1186,7 @@ namespace RiskOfCSharp2.World
         {
             var g = WorldContext.Game;
             if (g == null || IsDestroyed) return;
-            if (Vector3.Distance(Position, g.PlayerPos) <= Radius || g.IsNearRemotePlayer(Position, Radius))
+            if ((g.CanPlayerInteract && Vector3.Distance(Position, g.PlayerPos) <= Radius) || g.IsNearRemotePlayer(Position, Radius))
             {
                 int prevStep = (int)(Charge / 10f);
                 Charge = MathF.Min(100f, Charge + 14.0f * dt);
@@ -1204,6 +1275,12 @@ namespace RiskOfCSharp2.World
                 "tartarus" => (Rgb(55, 240, 125), Rgb(22, 95, 58), "[E] ВРАТА ТЁМНОГО ЧАСА: БАШНЯ ТАРТАР"),
                 "hakurei_shrine" => (Rgb(235, 48, 58), Rgb(255, 225, 165), "[E] БАРЬЕР ГЕНСОКЁ: ХРАМ ХАКУРЕЙ"),
                 "tracen_derby" => (Rgb(85, 225, 115), Rgb(255, 210, 55), "[E] ТУРНИРНЫЙ ШЛЮЗ: ИППОДРОМ ТРЕЙСЕН"),
+                "dark_sanctuary" => (Rgb(195, 55, 235), Rgb(85, 235, 255), "[E] ТЁМНЫЙ ФОНТАН: ТЁМНОЕ СВЯТИЛИЩЕ"),
+                "terminal_lucidity" => (Rgb(255, 95, 205), Rgb(255, 235, 65), "[E] ГЛИТЧ-ТЕРМИНАЛ: ПОМОЙКА КИБЕР-МИРА"),
+                "extraction_floor" => (Rgb(235, 185, 55), Rgb(35, 28, 38), "[E] ШЛЮЗ LOBOTOMY: ЭТАЖ ФИЛОСОФИИ"),
+                "originium_core" => (Rgb(255, 165, 45), Rgb(65, 215, 255), "[E] САРКОФАГ PRTS: АССИМИЛИРОВАННОЕ ЯДРО"),
+                "penacony_theater" => (Rgb(235, 195, 95), Rgb(165, 125, 255), "[E] МИР ГРЁЗ: БОЛЬШОЙ ТЕАТР ПЕНАКОНИИ"),
+                "prime_meridian" => (Rgb(255, 215, 85), Rgb(145, 95, 255), "[E] ГРОЗОВОЙ АЛТАРЬ: ГЛАВНЫЙ МЕРИДИАН"),
                 _ => (Color.Gold, Color.SkyBlue, "[E] Таинственный Портал")
             };
 
@@ -2031,6 +2108,11 @@ namespace RiskOfCSharp2.World
         {
             var g = WorldContext.Game;
             if (Collected || g == null || IsDestroyed || ParentQuest.Completed) return;
+            if (Program.IsSpectating)
+            {
+                _labelEnt.Enabled = false;
+                return;
+            }
             float t = (float)Raylib.GetTime();
             float dist = Vector3.Distance(Position, g.PlayerPos);
             _labelEnt.Enabled = dist < 28.0f;
@@ -2270,7 +2352,7 @@ namespace RiskOfCSharp2.World
         }
     }
 
-    public class CharacterQuestMonument : Entity
+    public partial class CharacterQuestMonument : Entity
     {
         public readonly string CharKey;
         public readonly string AchKey;
@@ -2309,11 +2391,12 @@ namespace RiskOfCSharp2.World
             _focalPart = new Entity(parent: this, position: new(0, 1.6f, 0));
 
             string prompt = BuildUniqueMonumentVisuals(charKey);
-            if (charKey is "commando" or "gwen" or "enforcer" or "reimu" or "mindustry" or "jotaro" or "jack_o")
+            if (charKey is "commando" or "gwen" or "enforcer" or "reimu" or "mindustry" or "jotaro" or "jack_o" or "robin" or "closure" or "komeiji")
             {
                 float rad = charKey == "enforcer" ? 3.8f
                     : (charKey == "jotaro" ? 6.2f
-                    : (charKey == "commando" ? 9.8f : (charKey == "jack_o" ? 11.0f : 12.0f)));
+                    : (charKey == "commando" ? 9.8f
+                    : (charKey is "jack_o" or "robin" or "closure" ? 11.0f : 12.0f)));
                 _zoneRing = new Entity(parent: this, model: "sphere", scale: new(rad * 2f, 0.08f, rad * 2f), position: new(0, 0.08f, 0), color: Rgb(_themeCol.R, _themeCol.G, _themeCol.B, 55), unlit: true, enabled: false);
             }
 
@@ -2504,11 +2587,16 @@ namespace RiskOfCSharp2.World
                     return "[E] Алтарь Железной Тыквы (Удержать Знамя 14 сек и отразить Задний Двор!)";
 
                 case "dmc_trio":
-                default:
                     new Entity(parent: this, model: "diamond", scale: new(2.0f, 1.8f, 2.0f), position: new(0, 1.0f, 0), color: Rgb(135, 25, 38));
                     new Entity(parent: _focalPart, model: "diamond", scale: new(0.55f, 2.8f, 0.22f), position: new(0, 0.9f, 0), color: Rgb(255, 55, 75), unlit: true);
                     new Entity(parent: _focalPart, model: "diamond", scale: new(1.2f, 0.35f, 0.35f), position: new(0, 1.6f, 0), color: Color.Gold, unlit: true);
                     return "[E] Пьедестал Спарды (Ранг SSS и Босс: Мираж Вергилия!)";
+
+                default:
+                    if (TryBuildExpansionMonumentVisuals(key, out string expPrompt))
+                        return expPrompt;
+                    new Entity(parent: this, model: "diamond", scale: new(2.0f, 1.8f, 2.0f), position: new(0, 1.0f, 0), color: Rgb(135, 25, 38));
+                    return "[E] Таинственный Алтарь Испытания";
             }
         }
 
@@ -2691,6 +2779,10 @@ namespace RiskOfCSharp2.World
                 SpawnTrialEnemies(g, 4, "combine_soldier", 9.5f);
                 g.ShowBanner("КАСКАДНЫЙ РЕЗОНАНС! ОТРАЗИТЕ ДЕСАНТ ШТУРМОВИКОВ АЛЬЯНСА!", Color.Orange, 3.5f);
             }
+            else
+            {
+                OnExpansionQuestNodeTouched(g, idx);
+            }
         }
 
         public void OnRelayPressed(int colorIdx)
@@ -2821,6 +2913,11 @@ namespace RiskOfCSharp2.World
             float t = (float)Raylib.GetTime();
             _focalPart.RotationY += 75f * dt;
             _focalPart.Y = 1.6f + MathF.Sin(t * 3.0f) * 0.16f;
+            if (Program.IsSpectating)
+            {
+                _labelEnt.Enabled = false;
+                return;
+            }
 
             float dist = Vector3.Distance(Position, g.PlayerPos);
             _labelEnt.Enabled = dist < 16.5f || _state == 1;
@@ -3367,6 +3464,10 @@ namespace RiskOfCSharp2.World
                     SpawnTrialEnemies(g, 3, "imp", 8.5f);
                     AddTrialEnemies(g, 1, "hollow_shadow", 8.5f);
                     g.ShowBanner("КОНФЕТНЫЙ ЛЕГИОН ЭЛИЗИОНА: УДЕРЖИВАЙТЕ ЗОНУ ЗНАМЕНИ 14 СЕК И ОТРАЗИТЕ ЗАДНИЙ ДВОР!", Rgb(155, 255, 75), 3.6f);
+                    break;
+
+                default:
+                    StartExpansionQuestTrial(g);
                     break;
             }
         }
@@ -4053,6 +4154,10 @@ namespace RiskOfCSharp2.World
                         : $"Знамя удержано (100%) — добейте стражей Заднего Двора ({_spawnedGuards.Count})!";
                     if (_progress >= 100f && _spawnedGuards.Count == 0)
                         CompleteCharacterQuest(g);
+                    break;
+
+                default:
+                    UpdateExpansionQuestTrial(g, dt, dist, curTotalHp);
                     break;
             }
         }

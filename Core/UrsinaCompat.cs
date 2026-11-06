@@ -44,8 +44,24 @@ namespace RiskOfCSharp2.Core
         {
             Raylib.SetConfigFlags(ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow);
             Raylib.InitWindow(width, height, title);
+            Raylib.SetWindowMinSize(1024, 600);
+            int mon = Raylib.GetCurrentMonitor();
+            int monW = Raylib.GetMonitorWidth(mon);
+            int monH = Raylib.GetMonitorHeight(mon);
+            if (monW > 800 && monH > 600 && !Raylib.IsWindowFullscreen())
+            {
+                int clampW = Math.Clamp(width, 1024, Math.Max(1024, monW - 48));
+                int clampH = Math.Clamp(height, 600, Math.Max(600, monH - 72));
+                if (clampW != width || clampH != height)
+                {
+                    Raylib.SetWindowSize(clampW, clampH);
+                    Raylib.SetWindowPosition(Math.Max(0, (monW - clampW) / 2), Math.Max(24, (monH - clampH) / 2));
+                }
+            }
             Raylib.SetTargetFPS(120);
             Raylib.SetExitKey(KeyboardKey.Null);
+            Raylib.SetMouseOffset(0, 0);
+            Raylib.SetMouseScale(1f, 1f);
 
             _cubeMesh = Raylib.GenMeshCube(1f, 1f, 1f);
             _sphereMesh = Raylib.GenMeshSphere(0.5f, 16, 16);
@@ -93,14 +109,26 @@ void main() {
 
         private static void LoadCyrillicFont()
         {
+            string localFont = Path.Combine(Data.ProgressData.AppRootDir, "font.ttf");
             string[] fontPaths =
             {
+                localFont,
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
                 "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-                "C:\\Windows\\Fonts\\arialbd.ttf"
+                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+                "/usr/share/fonts/noto/NotoSans-Bold.ttf",
+                "/usr/share/fonts/google-noto/NotoSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
+                "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+                "C:\\Windows\\Fonts\\arialbd.ttf",
+                "C:\\Windows\\Fonts\\seguisb.ttf",
+                "C:\\Windows\\Fonts\\arial.ttf"
             };
 
             string? foundPath = null;
@@ -110,6 +138,28 @@ void main() {
                 {
                     foundPath = p;
                     break;
+                }
+            }
+
+            if (foundPath == null && Directory.Exists("/usr/share/fonts"))
+            {
+                try
+                {
+                    foreach (var f in Directory.EnumerateFiles("/usr/share/fonts", "*.ttf", SearchOption.AllDirectories))
+                    {
+                        string fn = Path.GetFileName(f);
+                        if (fn.Contains("DejaVuSans", StringComparison.OrdinalIgnoreCase) ||
+                            fn.Contains("NotoSans", StringComparison.OrdinalIgnoreCase) ||
+                            fn.Contains("LiberationSans", StringComparison.OrdinalIgnoreCase) ||
+                            fn.Contains("Ubuntu", StringComparison.OrdinalIgnoreCase))
+                        {
+                            foundPath = f;
+                            break;
+                        }
+                    }
+                }
+                catch
+                {
                 }
             }
 
@@ -130,8 +180,8 @@ void main() {
                 0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2026,
                 0x2116, 0x2190, 0x2191, 0x2192, 0x2193, 0x21BB, 0x221E, 0x2248,
                 0x2260, 0x2264, 0x2265, 0x23F1, 0x2550, 0x2588, 0x2591, 0x25B2,
-                0x25B6, 0x25BC, 0x25C0, 0x25C6, 0x2605, 0x2606, 0x2620, 0x2665,
-                0x266A, 0x26A0, 0x26A1, 0x26CF, 0x2713, 0x2715, 0x300E, 0x300F
+                0x25B6, 0x25BC, 0x25C0, 0x25C6, 0x25C7, 0x2605, 0x2606, 0x2620, 0x2665,
+                0x266A, 0x266B, 0x26A0, 0x26A1, 0x26CF, 0x2713, 0x2715, 0x300E, 0x300F
             });
 
             GameFont = Raylib.LoadFontEx(foundPath, 32, codepoints.ToArray(), codepoints.Count);
@@ -439,25 +489,121 @@ void main() {
             return result;
         }
 
-        public static float DrawTextWrapped(string text, float x, float y, float maxWidth, float fontSize, Color col, float lineSpacing = 4f)
+        public static float MeasureWrappedHeight(string text, float maxWidth, float fontSize, float lineSpacing = 4f, int maxLines = 0)
+        {
+            var lines = WrapText(text, fontSize, maxWidth);
+            int count = maxLines > 0 ? Math.Min(lines.Count, maxLines) : lines.Count;
+            return count * (fontSize + lineSpacing);
+        }
+
+        public static float DrawTextWrapped(string text, float x, float y, float maxWidth, float fontSize, Color col, float lineSpacing = 4f, int maxLines = 0)
         {
             var lines = WrapText(text, fontSize, maxWidth);
             float step = fontSize + lineSpacing;
-            for (int i = 0; i < lines.Count; i++)
+            int count = maxLines > 0 ? Math.Min(lines.Count, maxLines) : lines.Count;
+            bool truncated = maxLines > 0 && lines.Count > maxLines;
+            for (int i = 0; i < count; i++)
             {
-                if (!string.IsNullOrEmpty(lines[i]))
+                string line = lines[i];
+                if (truncated && i == count - 1 && line.Length > 2)
+                    line = line[..Math.Max(1, line.Length - 2)].TrimEnd() + "…";
+                if (!string.IsNullOrEmpty(line))
                 {
                     Vector2 pos = new(x, y + i * step);
-                    Raylib.DrawTextEx(GameFont, lines[i], pos + new Vector2(1, 1), fontSize, 1f, Color.Black);
-                    Raylib.DrawTextEx(GameFont, lines[i], pos, fontSize, 1f, col);
+                    Raylib.DrawTextEx(GameFont, line, pos + new Vector2(1, 1), fontSize, 1f, Color.Black);
+                    Raylib.DrawTextEx(GameFont, line, pos, fontSize, 1f, col);
                 }
             }
-            return lines.Count * step;
+            return count * step;
+        }
+
+        public static bool IsFullscreenActive()
+        {
+            if (!Raylib.IsWindowReady()) return false;
+            return Raylib.IsWindowFullscreen() || Raylib.IsWindowState(ConfigFlags.BorderlessWindowMode);
+        }
+
+        public static void SetFullscreenMode(bool enable, ref int savedWindowW, ref int savedWindowH)
+        {
+            if (!Raylib.IsWindowReady()) return;
+
+            bool curExclusive = Raylib.IsWindowFullscreen();
+            bool curBorderless = Raylib.IsWindowState(ConfigFlags.BorderlessWindowMode);
+            bool curAny = curExclusive || curBorderless;
+
+            if (enable)
+            {
+                if (!curAny)
+                {
+                    int curW = Raylib.GetScreenWidth();
+                    int curH = Raylib.GetScreenHeight();
+                    if (curW >= 1024 && curH >= 600)
+                    {
+                        savedWindowW = curW;
+                        savedWindowH = curH;
+                    }
+                    Raylib.ToggleBorderlessWindowed();
+                }
+                else if (curExclusive && !curBorderless)
+                {
+                    // Переводим эксклюзивный режим в безрамочный 1:1 с монитором, чтобы координаты мыши совпадали идеально
+                    Raylib.ToggleFullscreen();
+                    Raylib.ToggleBorderlessWindowed();
+                }
+            }
+            else if (curAny)
+            {
+                if (curExclusive)
+                    Raylib.ToggleFullscreen();
+                if (Raylib.IsWindowState(ConfigFlags.BorderlessWindowMode))
+                    Raylib.ToggleBorderlessWindowed();
+
+                int mon = Raylib.GetCurrentMonitor();
+                int monW = Raylib.GetMonitorWidth(mon);
+                int monH = Raylib.GetMonitorHeight(mon);
+                int targetW = savedWindowW >= 1024 ? savedWindowW : 1536;
+                int targetH = savedWindowH >= 600 ? savedWindowH : 864;
+                if (monW > 800 && monH > 600)
+                {
+                    targetW = Math.Clamp(targetW, 1024, Math.Max(1024, monW - 48));
+                    targetH = Math.Clamp(targetH, 600, Math.Max(600, monH - 72));
+                }
+                Raylib.SetWindowSize(targetW, targetH);
+                if (monW > 800 && monH > 600)
+                {
+                    Vector2 monPos = Raylib.GetMonitorPosition(mon);
+                    Raylib.SetWindowPosition(
+                        (int)monPos.X + Math.Max(0, (monW - targetW) / 2),
+                        (int)monPos.Y + Math.Max(24, (monH - targetH) / 2));
+                }
+            }
+
+            Raylib.SetMouseOffset(0, 0);
+            Raylib.SetMouseScale(1f, 1f);
+        }
+
+        public static Vector2 GetUiMousePosition()
+        {
+            Vector2 mPos = Raylib.GetMousePosition();
+            if (Raylib.IsWindowFullscreen() && !Raylib.IsWindowState(ConfigFlags.BorderlessWindowMode))
+            {
+                int sw = Raylib.GetScreenWidth();
+                int sh = Raylib.GetScreenHeight();
+                int mon = Raylib.GetCurrentMonitor();
+                int mw = Raylib.GetMonitorWidth(mon);
+                int mh = Raylib.GetMonitorHeight(mon);
+                if (sw > 0 && sh > 0 && mw > 0 && mh > 0 && (mw != sw || mh != sh) && (mPos.X > sw || mPos.Y > sh || mw > sw))
+                {
+                    mPos.X *= (float)sw / mw;
+                    mPos.Y *= (float)sh / mh;
+                }
+            }
+            return mPos;
         }
 
         public static bool DrawButton(Rectangle rect, string text, Color bgCol, Color hoverCol, Color textCol, float fontSize = 16f, Color? borderCol = null)
         {
-            Vector2 mPos = Raylib.GetMousePosition();
+            Vector2 mPos = GetUiMousePosition();
             bool hovered = Raylib.CheckCollisionPointRec(mPos, rect);
             bool clicked = hovered && Raylib.IsMouseButtonPressed(MouseButton.Left);
 
@@ -520,6 +666,7 @@ void main() {
 
             e.IsDestroyed = true;
             e.IsDead = true;
+            e.OnDestroy();
             foreach (var ch in e.Children.ToArray())
             {
                 Destroy(ch, 0f);
@@ -665,6 +812,7 @@ void main() {
         }
 
         public virtual void OnUpdate(float dt) { }
+        public virtual void OnDestroy() { }
 
         public Matrix4x4 GetLocalMatrix()
         {
@@ -737,6 +885,8 @@ void main() {
 
         public static Tween CreateDestroyDelay(Entity e, float delay)
             => new(e, delay, 4);
+
+        public bool IsTargetDestroyed => _target == null || _target.IsDestroyed;
 
         public bool Update(float dt)
         {

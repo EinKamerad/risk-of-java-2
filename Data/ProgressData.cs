@@ -23,6 +23,8 @@ namespace RiskOfCSharp2.Data
         [JsonPropertyName("selected_loadouts")] public Dictionary<string, int[]> SelectedLoadouts { get; set; } = new();
         [JsonPropertyName("selected_difficulty")] public string SelectedDifficulty { get; set; } = "rainstorm";
         [JsonPropertyName("active_artifacts")] public List<string> ActiveArtifacts { get; set; } = new();
+        [JsonPropertyName("selected_character")] public string SelectedCharacter { get; set; } = "commando";
+        [JsonPropertyName("settings")] public UserSettingsDto? Settings { get; set; }
         [JsonPropertyName("mithrix_defeated")] public bool MithrixDefeated { get; set; } = false;
         [JsonPropertyName("victories")] public int Victories { get; set; } = 0;
         [JsonPropertyName("lunar_coins")] public int LunarCoins { get; set; } = 15;
@@ -30,7 +32,30 @@ namespace RiskOfCSharp2.Data
 
     public class ProgressData
     {
-        public static readonly string SavePath = Path.Combine(Directory.GetCurrentDirectory(), "save_logbook.json");
+        public static readonly string AppRootDir = ResolveAppRootDir();
+        public static readonly string SavePath = Path.Combine(AppRootDir, "save_logbook.json");
+
+        private static string ResolveAppRootDir()
+        {
+            try
+            {
+                string? procPath = Environment.ProcessPath;
+                if (!string.IsNullOrWhiteSpace(procPath))
+                {
+                    string exeName = Path.GetFileNameWithoutExtension(procPath);
+                    if (!string.Equals(exeName, "dotnet", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string? dir = Path.GetDirectoryName(procPath);
+                        if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+                            return dir;
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return Directory.GetCurrentDirectory();
+        }
 
         // Список избранных игроков, которым доступен секретный персонаж SANABI (Бригадный Генерал).
         // Вы можете добавить сюда любые новые никнеймы прямо в коде:
@@ -38,6 +63,16 @@ namespace RiskOfCSharp2.Data
         {
             "lddrakon",
             "EinKamerad"
+        };
+
+        // Список избранных игроков, которым доступен секретный персонаж «Трио Птиц» (Большая, Длинная и Маленькая Птицы):
+        public static readonly string[] BirdTrioAllowedUsers =
+        {
+            "lddrakon",
+            "EinKamerad",
+            "pame127",
+            "ShaD",
+            "kris"
         };
 
         // Стартовый персонаж, доступный с самого первого забега (остальные 29 открываются уникальными испытаниями):
@@ -63,6 +98,7 @@ namespace RiskOfCSharp2.Data
         public HashSet<string> UnlockedSkills = new();
         public Dictionary<string, int> SelectedSkins = new();
         public Dictionary<string, int[]> SelectedLoadouts = new();
+        public string SelectedCharacter = "commando";
 
         private ProgressData()
         {
@@ -105,24 +141,51 @@ namespace RiskOfCSharp2.Data
             return false;
         }
 
+        public bool IsBirdTrioAuthorized()
+        {
+            if (string.IsNullOrWhiteSpace(PlayerName)) return false;
+            string trimmed = PlayerName.Trim();
+            foreach (var allowed in BirdTrioAllowedUsers)
+            {
+                if (string.Equals(trimmed, allowed, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
         public bool IsCharacterVisible(string charKey)
         {
-            if (charKey == "sanabi")
-                return IsSanabiAuthorized();
+            if (charKey == "apocalypse_bird")
+                return IsCharacterUnlocked("apocalypse_bird") || IsCharacterUnlocked("bird_trio");
             return true;
         }
 
         public bool IsCharacterUnlocked(string charKey)
         {
             if (charKey == "sanabi")
-                return IsSanabiAuthorized();
+                return IsSanabiAuthorized() || UnlockedCharacters.Contains("sanabi") || UnlockedAchievements.Contains("ach_char_sanabi");
+            if (charKey == "bird_trio")
+                return IsBirdTrioAuthorized() || UnlockedCharacters.Contains("bird_trio") || UnlockedAchievements.Contains("ach_char_bird_trio");
+            if (charKey == "apocalypse_bird")
+                return UnlockedCharacters.Contains("apocalypse_bird") || UnlockedAchievements.Contains("ach_char_apocalypse_bird");
             return DefaultCharacters.Contains(charKey) || UnlockedCharacters.Contains(charKey);
         }
 
         public void SetPlayerName(string name)
         {
-            PlayerName = (name ?? "").Trim();
+            string nextName = (name ?? "").Trim();
+            if (string.Equals(PlayerName, nextName, StringComparison.Ordinal))
+            {
+                Save();
+                return;
+            }
+            // Сохраняем открытыми секретных персонажей, если они уже были активированы в профиле,
+            // чтобы смена никнейма не сбрасывала выбранного героя, облики, навыки и конфигурацию.
+            if (IsSanabiAuthorized()) UnlockedCharacters.Add("sanabi");
+            if (IsBirdTrioAuthorized()) UnlockedCharacters.Add("bird_trio");
+            PlayerName = nextName;
             Save();
+            UserSettings.Instance.Save();
         }
 
         public int GetSelectedSkin(string charKey)
@@ -193,7 +256,9 @@ namespace RiskOfCSharp2.Data
         public bool IsSkillUnlocked(string charKey, string slot, int variantIdx)
         {
             if (variantIdx <= 0) return true;
-            if (charKey == "sanabi" && IsSanabiAuthorized()) return true;
+            if (charKey == "sanabi" && IsCharacterUnlocked("sanabi")) return true;
+            if (charKey == "bird_trio" && IsCharacterUnlocked("bird_trio")) return true;
+            if (charKey == "apocalypse_bird" && IsCharacterUnlocked("apocalypse_bird")) return true;
             string profileKey = GetLoadoutProfileKey(charKey);
             return UnlockedSkills.Contains($"{profileKey}_{slot}_{variantIdx}");
         }
@@ -201,6 +266,14 @@ namespace RiskOfCSharp2.Data
         public bool IsSkinUnlocked(string charKey, int skinIdx, string? unlockAchKey)
         {
             if (skinIdx <= 0) return true;
+            if (charKey == "sanabi" && IsCharacterUnlocked("sanabi")) return true;
+            if (charKey == "bird_trio" && IsCharacterUnlocked("bird_trio")) return true;
+            if (!string.IsNullOrEmpty(unlockAchKey) &&
+                unlockAchKey.StartsWith("ach_persona_", StringComparison.Ordinal) &&
+                UnlockedAchievements.Contains(unlockAchKey))
+            {
+                return true;
+            }
             if (Models.SurvivorDatabase.Classes.TryGetValue(charKey, out var cfg) &&
                 skinIdx < cfg.Skins.Count &&
                 cfg.Skins[skinIdx].UnlockedByDefault)
@@ -255,6 +328,16 @@ namespace RiskOfCSharp2.Data
                         if (GameData.RunArtifacts.ContainsKey(ak))
                             GameData.ActiveArtifacts.Add(ak);
                 }
+                if (!string.IsNullOrWhiteSpace(dto.SelectedCharacter))
+                    SelectedCharacter = dto.SelectedCharacter.Trim();
+                if (!File.Exists(UserSettings.SettingsPath))
+                {
+                    if (dto.Settings != null)
+                        UserSettings.Instance.ApplyDto(dto.Settings);
+                    else if (!string.IsNullOrWhiteSpace(dto.SelectedCharacter))
+                        UserSettings.Instance.SelectedCharacter = dto.SelectedCharacter;
+                    UserSettings.Instance.Save();
+                }
             }
             catch
             {
@@ -282,12 +365,15 @@ namespace RiskOfCSharp2.Data
                     SelectedLoadouts = SelectedLoadouts,
                     SelectedDifficulty = GameData.SelectedDifficulty,
                     ActiveArtifacts = GameData.ActiveArtifacts.ToList(),
+                    SelectedCharacter = UserSettings.Instance.SelectedCharacter,
+                    Settings = UserSettings.Instance.ToDto(),
                     MithrixDefeated = MithrixDefeated,
                     Victories = Victories,
                     LunarCoins = LunarCoins
                 };
                 var opts = new JsonSerializerOptions { WriteIndented = true };
                 File.WriteAllText(SavePath, JsonSerializer.Serialize(dto, opts));
+                UserSettings.Instance.Save();
             }
             catch
             {

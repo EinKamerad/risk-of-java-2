@@ -704,6 +704,64 @@ namespace RiskOfCSharp2.Core
             return true;
         }
 
+        /// <summary>
+        /// Трассировка луча прицела из центра экрана камеры в мир (рельеф, платформы и твёрдые препятствия).
+        /// minDist пропускает сегмент позади игрока от 3-го лица, чтобы полупрозрачные колонны у камеры не уводили выстрел назад.
+        /// </summary>
+        public static bool RaycastAimWorld(Vector3 rayOrigin, Vector3 rayDir, float minDist, float maxDist, out Vector3 hitPoint)
+        {
+            if (rayDir.LengthSquared() < 0.0001f)
+            {
+                hitPoint = rayOrigin + Vector3.UnitZ * maxDist;
+                return false;
+            }
+
+            Vector3 dir = Vector3.Normalize(rayDir);
+            float startT = MathF.Max(0.25f, minDist);
+            float prevT = startT;
+            float t = startT;
+
+            static bool IsPointWorldSolid(Vector3 sample)
+            {
+                if (IsInsideSolidObstacle(sample, 0.06f))
+                    return true;
+                for (int i = 0; i < Platforms.Count; i++)
+                {
+                    var pBox = Platforms[i];
+                    float bottomY = pBox.TopY - MathF.Max(0.8f, pBox.Thickness);
+                    if (sample.Y >= bottomY && sample.Y <= pBox.TopY + 0.05f && pBox.Contains(sample.X, sample.Z, 0f))
+                        return true;
+                }
+                float surfY = GetSurfaceHeight(sample.X, sample.Z, sample.Y + 0.55f);
+                return sample.Y <= surfY + 0.04f;
+            }
+
+            while (t <= maxDist)
+            {
+                Vector3 sample = rayOrigin + dir * t;
+                if (IsPointWorldSolid(sample))
+                {
+                    float lo = prevT;
+                    float hi = t;
+                    for (int iter = 0; iter < 5; iter++)
+                    {
+                        float mid = (lo + hi) * 0.5f;
+                        if (IsPointWorldSolid(rayOrigin + dir * mid))
+                            hi = mid;
+                        else
+                            lo = mid;
+                    }
+                    hitPoint = rayOrigin + dir * hi;
+                    return true;
+                }
+                prevT = t;
+                t += t < 36f ? 0.80f : 1.55f;
+            }
+
+            hitPoint = rayOrigin + dir * maxDist;
+            return false;
+        }
+
         public static bool IsPathBlocked2D(Vector3 pos, Vector3 dir2D, float checkDist, float radius, float entityY, float maxStepHeight = 0.45f)
         {
             float sampleX = pos.X + dir2D.X * checkDist;

@@ -57,7 +57,7 @@ namespace RiskOfCSharp2.Entities
                 seg.Scale = new Vector3(arcLen * 0.92f, 0.28f, 0.42f);
             }
 
-            if (!_hitPlayer)
+            if (!_hitPlayer && g.CanPlayerInteract)
             {
                 Vector3 pPos = g.PlayerPos;
                 // Тонкий контур кольца и низкий порог по высоте (0.55м), чтобы прыжок на Space легко перепрыгивал волну!
@@ -129,22 +129,25 @@ namespace RiskOfCSharp2.Entities
                 ln.AnimateScale(new Vector3(0.05f, 22.0f, 110.0f), 0.42f);
             }
 
-            Vector3 pPos = g.PlayerPos;
-            float dx = pPos.X - X, dz = pPos.Z - Z;
-            if (MathF.Sqrt(dx * dx + dz * dz) <= 56.0f)
+            if (g.CanPlayerInteract)
             {
-                foreach (var ln in _lines)
+                Vector3 pPos = g.PlayerPos;
+                float dx = pPos.X - X, dz = pPos.Z - Z;
+                if (MathF.Sqrt(dx * dx + dz * dz) <= 56.0f)
                 {
-                    float worldAng = (RotationY + ln.RotationY) * (MathF.PI / 180f);
-                    float lx = MathF.Sin(worldAng), lz = MathF.Cos(worldAng);
-                    float perpDist = MathF.Abs(dx * lz - dz * lx);
-                    if (perpDist <= 1.45f)
+                    foreach (var ln in _lines)
                     {
-                        if (CombatManager.Controller != null && CombatManager.Controller.TryParryExternalAttack(_damage, Position))
+                        float worldAng = (RotationY + ln.RotationY) * (MathF.PI / 180f);
+                        float lx = MathF.Sin(worldAng), lz = MathF.Cos(worldAng);
+                        float perpDist = MathF.Abs(dx * lz - dz * lx);
+                        if (perpDist <= 1.45f)
+                        {
+                            if (CombatManager.Controller != null && CombatManager.Controller.TryParryExternalAttack(_damage, Position))
+                                break;
+                            CombatManager.DamagePlayer(_damage, CombatManager.FindNearestHostileAt(Position));
+                            new VisualFX(pPos + new Vector3(0, 1f, 0), Color.SkyBlue, 3.2f, 0.3f);
                             break;
-                        CombatManager.DamagePlayer(_damage, CombatManager.FindNearestHostileAt(Position));
-                        new VisualFX(pPos + new Vector3(0, 1f, 0), Color.SkyBlue, 3.2f, 0.3f);
-                        break;
+                        }
                     }
                 }
             }
@@ -152,7 +155,7 @@ namespace RiskOfCSharp2.Entities
         }
     }
 
-    public class CombatTarget : Entity
+    public partial class CombatTarget : Entity
     {
         private static int _nextId = 1;
         private static readonly Random _rng = new();
@@ -163,6 +166,7 @@ namespace RiskOfCSharp2.Entities
         public bool IsAlly = false;
         public bool IsElite = false;
         public bool IsDoppelganger = false;
+        public bool IsHordeBoss = false;
         public float Coeff;
 
         public float MaxHp;
@@ -185,6 +189,16 @@ namespace RiskOfCSharp2.Entities
         public float ArmorBreakTimer = 0f;
         public float PetrifyTimer = 0f;
         public int FixationStacks = 0;
+        public int LunarRuinStacks = 0;
+        public float LunarRuinTimer = 0f;
+        public int CorruptionStacks = 0;
+        public float CorruptionTimer = 0f;
+        public int SinStacks = 0;
+        public float FairyTimer = 0f;
+        public float FairyTick = 0f;
+        public float FairyDps = 0f;
+        public int OriginiumMarks = 0;
+        public bool ShieldDroneProtected = false;
         public float AttackTimer;
         public float SpecialTimer;
         public float SecondaryTimer = 1.6f;
@@ -292,6 +306,12 @@ namespace RiskOfCSharp2.Entities
                 "vergil_mirage" => (2200f, 34.0f, 8.6f, 240, 2.2f, 2.20f),
                 "animatronic_endo" => (1900f, 30.0f, 6.4f, 205, 2.9f, 2.45f),
                 "warden_reef" => (1950f, 31.0f, 5.0f, 210, 3.0f, 2.65f),
+                "echo_providence" => (2550f, 34.0f, 6.2f, 240, 3.1f, 2.55f),
+                "false_son_boss" => (2700f, 36.0f, 5.8f, 250, 3.3f, 2.75f),
+                "prts_source" => (2450f, 32.0f, 5.0f, 245, 3.6f, 2.80f),
+                "binah_arbiter" => (2650f, 35.0f, 6.5f, 260, 2.8f, 2.35f),
+                "roaring_knight" => (2600f, 36.0f, 7.2f, 255, 3.0f, 2.45f),
+                "great_septimus" => (2800f, 35.0f, 4.4f, 270, 3.8f, 3.00f),
                 "mithrix" => (3600f, 38.0f, 8.8f, 650, 2.8f, 2.55f),
                 _ => (65f, 12.0f, 6.8f, 16, 1.1f, 1.15f)
             };
@@ -302,27 +322,28 @@ namespace RiskOfCSharp2.Entities
                 foreach (var v in WorldContext.Game.Items.Values) itemCnt += v;
             }
 
+            var activeDiff = GameData.GetActiveDifficulty();
             if (enemyType == "mithrix")
             {
                 MithrixEffCoeff = MathF.Max(coeff, 2.75f) * (1.0f + 0.065f * itemCnt);
-                MaxHp = hpB * MithrixEffCoeff;
+                MaxHp = hpB * MithrixEffCoeff * activeDiff.EnemyHpMult;
                 Damage = dmgB * MathF.Max(coeff, 2.15f);
             }
             else if (IsBoss)
             {
                 float bossItemMult = 1.0f + 0.04f * itemCnt;
-                MaxHp = hpB * coeff * bossItemMult;
+                MaxHp = hpB * coeff * bossItemMult * activeDiff.EnemyHpMult;
                 Damage = dmgB * coeff;
             }
             else
             {
-                MaxHp = hpB * coeff;
+                MaxHp = hpB * coeff * activeDiff.EnemyHpMult;
                 Damage = dmgB * coeff;
                 if (GameData.HasArtifact("swarm"))
                     MaxHp *= 0.50f;
             }
 
-            Speed = spdB * GameData.GetActiveDifficulty().EnemySpeedMult;
+            Speed = spdB * activeDiff.EnemySpeedMult;
             GoldReward = (int)MathF.Ceiling(goldB * MathF.Pow(coeff, 1.32f));
             HitHeight = hh;
             HitRadius = hr;
@@ -340,9 +361,9 @@ namespace RiskOfCSharp2.Entities
             if (GameData.HasArtifact("honor") && enemyType != "mithrix")
             {
                 IsElite = true;
-                MaxHp *= 1.35f;
-                Damage *= 1.25f;
-                GoldReward = (int)MathF.Ceiling(GoldReward * 1.40f);
+                MaxHp *= 1.45f;
+                Damage *= 1.28f;
+                GoldReward = (int)MathF.Ceiling(GoldReward * 1.45f);
                 new Entity(parent: this, model: "diamond", scale: new(HitRadius * 1.35f, 0.16f, HitRadius * 1.35f),
                     position: new(0, barY - 0.38f, 0), color: Rgb(255, 165, 35), unlit: true);
             }
@@ -352,6 +373,22 @@ namespace RiskOfCSharp2.Entities
             UpdateHpBillboard();
             if (WorldContext.Game != null)
                 SoundManager.Play3D(IsBoss ? "boss_roar" : "enemy_spawn", pos, WorldContext.Game.PlayerPos, 65f);
+        }
+
+        public void PromoteToElite(bool preserveHpRatio = false)
+        {
+            if (IsElite || IsBoss || EnemyType == "mithrix") return;
+            float ratio = preserveHpRatio && MaxHp > 0f ? Math.Clamp(Hp / MaxHp, 0.05f, 1f) : 1f;
+            IsElite = true;
+            MaxHp *= 2.05f;
+            Hp = MaxHp * ratio;
+            Damage *= 1.38f;
+            Speed *= 1.08f;
+            GoldReward = (int)MathF.Ceiling(GoldReward * 1.90f);
+            float barY = LabelEnt != null ? LabelEnt.Y : 2.8f;
+            new Entity(parent: this, model: "diamond", scale: new(HitRadius * 1.42f, 0.18f, HitRadius * 1.42f),
+                position: new(0, barY - 0.38f, 0), color: Rgb(255, 175, 42), unlit: true);
+            UpdateHpBillboard();
         }
 
         public void MakeDoppelganger()
@@ -445,6 +482,11 @@ namespace RiskOfCSharp2.Entities
                 if (CharmTimer > 0f) debuffs += "[♥ ОЧАРОВАН] ";
                 if (BleedTimer > 0f) debuffs += "[КРОВЬ] ";
                 if (LiandryBurnTimer > 0f) debuffs += "[ОЖОГ] ";
+                if (SilenceTimer > 0f) debuffs += "[БЕЗМОЛВИЕ] ";
+                if (LeashTimer > 0f) debuffs += "[СВЯЗАН] ";
+                if (WeakpointScanTimer > 0f) debuffs += "[СКАН +КРИТ] ";
+                if (D12StickyTimer > 0f) debuffs += "[БОМБА D12] ";
+                if (SinStacks >= 10) debuffs += "[ПРИГОВОР 10/10] ";
                 if (FixationStacks > 0) debuffs += $"[ФИКС:{FixationStacks}] ";
                 string debuffLine = debuffs.Length > 0 ? debuffs.TrimEnd() + "\n" : "";
 
@@ -466,6 +508,11 @@ namespace RiskOfCSharp2.Entities
                 : (IsDoppelganger ? "★ ТЕНЕВОЙ ДОППЕЛЬГАНГЕР ★\n"
                 : (IsElite ? "[ЭЛИТНЫЙ] " : "")))));
             string fixLine = FixationStacks > 0 ? $"[ФИКСАЦИЯ: {FixationStacks}/20] " : "";
+            if (SilenceTimer > 0f) fixLine += "[БЕЗМОЛВИЕ] ";
+            if (LeashTimer > 0f) fixLine += "[СВЯЗАН] ";
+            if (WeakpointScanTimer > 0f) fixLine += "[СКАН] ";
+            if (D12StickyTimer > 0f) fixLine += "[D12] ";
+            if (SinStacks >= 10) fixLine += "[ПРИГОВОР 10/10] ";
             string warnLine = (!string.IsNullOrEmpty(WindupTag) && WindupType > 0) ? $"⚠ {WindupTag} ⚠\n" : "";
             string phaseTag = EnemyType == "mithrix" ? $" [Ф{Phase}/4]" : "";
             string displayName = GameData.MonsterLog.TryGetValue(EnemyType, out var mLog)
@@ -531,9 +578,10 @@ namespace RiskOfCSharp2.Entities
                 TelegraphRing = null;
             }
 
+            var mDiff = GameData.GetActiveDifficulty();
             if (Phase == 2)
             {
-                MaxHp = 3200.0f * MithrixEffCoeff;
+                MaxHp = 3200.0f * MithrixEffCoeff * mDiff.EnemyHpMult;
                 Hp = MaxHp;
                 Position = new Vector3(0, Physics.ColosseumY, 0);
                 new VisualFX(new Vector3(0, Physics.ColosseumY + 2.5f, 0), Color.SkyBlue, 14.0f, 0.55f);
@@ -549,7 +597,7 @@ namespace RiskOfCSharp2.Entities
             }
             else if (Phase == 3)
             {
-                MaxHp = 3500.0f * MithrixEffCoeff;
+                MaxHp = 3500.0f * MithrixEffCoeff * mDiff.EnemyHpMult;
                 Hp = MaxHp;
                 Position = new Vector3(0, Physics.ColosseumY, 0);
                 if (Parts.PhaseRing != null) Parts.PhaseRing.Enabled = true;
@@ -567,7 +615,7 @@ namespace RiskOfCSharp2.Entities
             }
             else if (Phase == 4)
             {
-                MaxHp = 2100.0f * MathF.Max(Coeff, 2.2f);
+                MaxHp = 2100.0f * MathF.Max(Coeff, 2.2f) * mDiff.EnemyHpMult;
                 Hp = MaxHp;
                 Position = new Vector3(0, Physics.ColosseumY, 0);
                 if (Parts.PhaseRing != null) { Parts.PhaseRing.Enabled = true; Parts.PhaseRing.Color = Color.Magenta; }
@@ -598,23 +646,31 @@ namespace RiskOfCSharp2.Entities
                 amount *= 1.25f;
             if (FixationStacks > 0 && !fromNetwork)
                 amount *= 1.0f + FixationStacks * 0.03f;
+            if (LunarRuinStacks > 0 && !fromNetwork)
+                amount *= 1.0f + LunarRuinStacks * 0.10f;
+            if (CorruptionStacks > 0 && !fromNetwork)
+                amount *= 1.0f + CorruptionStacks * 0.08f;
+            if (ShieldDroneProtected && !fromNetwork)
+                amount *= 0.15f;
 
             var g = WorldContext.Game;
             if (IsBoss && !IsTrainingDummy && !fromNetwork)
             {
-                // 1. Ограничение максимального урона с одного удара (защита от ваншотов)
-                float maxSingleHit = EnemyType == "mithrix" ? MaxHp * 0.075f : MaxHp * 0.12f;
+                var diffDef = GameData.GetActiveDifficulty();
+                // 1. Ограничение максимального урона с одного удара (защита от ваншотов, зависит от сложности)
+                float capRatio = EnemyType == "mithrix" ? diffDef.BossDamageCapRatio * 0.65f : diffDef.BossDamageCapRatio;
+                float maxSingleHit = MaxHp * capRatio;
                 amount = MathF.Min(amount, maxSingleHit);
 
-                // 2. Стойкость во время замаха спец-атаки (30% снижение урона)
+                // 2. Стойкость во время замаха спец-атаки
                 if (WindupType > 0)
-                    amount *= 0.70f;
+                    amount *= diffDef.Key == "drizzle" ? 0.82f : 0.72f;
 
                 // 3. Адаптивная реактивная броня против закликивания всеми скиллами за секунду
                 float burstRatio = RecentDamageTaken / MathF.Max(1f, MaxHp);
-                if (burstRatio > 0.16f)
+                if (burstRatio > 0.18f)
                 {
-                    float armorMult = Math.Clamp(1.0f - (burstRatio - 0.16f) * 1.45f, 0.42f, 1.0f);
+                    float armorMult = Math.Clamp(1.0f - (burstRatio - 0.18f) * 1.35f, diffDef.BossArmorFloor, 1.0f);
                     amount *= armorMult;
                 }
                 RecentDamageTaken += amount;
@@ -704,6 +760,21 @@ namespace RiskOfCSharp2.Entities
             Destroy(this);
         }
 
+        public override void OnDestroy()
+        {
+            ClearWindup();
+            if (TelegraphRing != null && !TelegraphRing.IsDestroyed)
+            {
+                Destroy(TelegraphRing);
+                TelegraphRing = null;
+            }
+            if (VagrantNovaSphere != null && !VagrantNovaSphere.IsDestroyed)
+            {
+                Destroy(VagrantNovaSphere);
+                VagrantNovaSphere = null;
+            }
+        }
+
         public override void OnUpdate(float dt)
         {
             var g = WorldContext.Game;
@@ -713,6 +784,60 @@ namespace RiskOfCSharp2.Entities
             {
                 UpdateHpBillboard();
                 return;
+            }
+
+            if (VergilFreezeTimer > 0f)
+            {
+                VergilFreezeTimer -= dt;
+                UpdateHpBillboard();
+                return;
+            }
+
+            if (FairyPunishIcd > 0f) FairyPunishIcd -= dt;
+            if (PrevWindupState == 0 && WindupType > 0)
+                TriggerBinahFairyAttackPunish();
+            PrevWindupState = WindupType;
+
+            if (SilenceTimer > 0f) SilenceTimer -= dt;
+            if (ElemFireTimer > 0f) ElemFireTimer -= dt;
+            if (ElemIceTimer > 0f) ElemIceTimer -= dt;
+            if (ElemShockTimer > 0f) ElemShockTimer -= dt;
+            if (HuntressMarkTimer > 0f) HuntressMarkTimer -= dt;
+            if (WeakpointScanTimer > 0f) WeakpointScanTimer -= dt;
+            if (PunishingGrudgeTimer > 0f) PunishingGrudgeTimer -= dt;
+
+            if (D12StickyTimer > 0f)
+            {
+                D12StickyTimer -= dt;
+                if (D12StickyTimer <= 0f)
+                {
+                    float baseRef = CombatManager.Controller != null ? CombatManager.Controller.BaseDamage : 24f;
+                    float detDmg = baseRef * 3.8f + D12AccumDmg;
+                    D12AccumDmg = 0f;
+                    SoundManager.Play3D("explosion", Position, g.PlayerPos, 65f, 1.0f, 0.90f);
+                    new VisualFX(Position + new Vector3(0, HitHeight * 0.6f, 0), Rgb(255, 55, 65), 8.2f, 0.40f);
+                    foreach (var other in CombatManager.Enemies.ToArray())
+                    {
+                        if (IsValid(other) && !other.IsAlly && Vector3.Distance(Position, other.Position) <= 7.5f + other.HitRadius)
+                        {
+                            if (!other.IsBoss) other.StunTimer = MathF.Max(other.StunTimer, 2.2f);
+                            other.TakeDamage(detDmg);
+                        }
+                    }
+                    if (!IsValid(this)) return;
+                }
+            }
+
+            if (LeashTimer > 0f)
+            {
+                LeashTimer -= dt;
+                Vector3 fromOrigin = new(X - LeashOrigin.X, 0f, Z - LeashOrigin.Z);
+                if (fromOrigin.Length() > 4.5f)
+                {
+                    Vector3 clamped = LeashOrigin + Vector3.Normalize(fromOrigin) * 4.5f;
+                    Position = new Vector3(clamped.X, Y, clamped.Z);
+                    new LightningBeam(LeashOrigin + new Vector3(0, 0.6f, 0), Position + new Vector3(0, HitHeight * 0.5f, 0), Rgb(65, 225, 235), 0.10f);
+                }
             }
 
             if (PetrifyTimer > 0f)
@@ -765,6 +890,29 @@ namespace RiskOfCSharp2.Entities
                     LiandryBurnTick = 0.45f;
                     new VisualFX(Position + new Vector3(0, HitHeight, 0), Rgb(135, 225, 255), 1.35f, 0.20f);
                     TakeDamage(LiandryBurnDps * 0.45f);
+                    if (!IsValid(this)) return;
+                }
+            }
+
+            if (LunarRuinTimer > 0f)
+            {
+                LunarRuinTimer -= dt;
+                if (LunarRuinTimer <= 0f) LunarRuinStacks = 0;
+            }
+            if (CorruptionTimer > 0f)
+            {
+                CorruptionTimer -= dt;
+                if (CorruptionTimer <= 0f) CorruptionStacks = 0;
+            }
+            if (FairyTimer > 0f)
+            {
+                FairyTimer -= dt;
+                FairyTick -= dt;
+                if (FairyTick <= 0f)
+                {
+                    FairyTick = 0.40f;
+                    new VisualFX(Position + new Vector3(0, HitHeight, 0), Rgb(120, 255, 165), 1.25f, 0.18f);
+                    TakeDamage(FairyDps * 0.40f);
                     if (!IsValid(this)) return;
                 }
             }
@@ -844,7 +992,7 @@ namespace RiskOfCSharp2.Entities
             }
             else
             {
-                bool localUntargetable = !g.CanPlayerInteract;
+                bool localUntargetable = !g.CanPlayerInteract || (CombatManager.Controller != null && CombatManager.Controller.IsPlayerStealthedForAggro());
                 float bestTargetDist = (targetIsLocal && localUntargetable) ? 9999f : Vector3.Distance(Position, pPos);
 
                 foreach (var other in CombatManager.Enemies)
@@ -918,10 +1066,44 @@ namespace RiskOfCSharp2.Entities
                             }
                         }
                     }
+
+                    foreach (var tot in CombatManager.Controller.WisadelShadows)
+                    {
+                        if (IsValid(tot))
+                        {
+                            float d = Vector3.Distance(Position, tot.Position);
+                            if (d < bestTargetDist)
+                            {
+                                bestTargetDist = d;
+                                structTarget = null; allyEnemyTarget = null; cloneTarget = null; servantTarget = null;
+                                pPos = tot.Position;
+                                targetIsLocal = false;
+                            }
+                        }
+                    }
+
+                    if (IsValid(CombatManager.Controller.SteveActiveGolem))
+                    {
+                        var gol = CombatManager.Controller.SteveActiveGolem!;
+                        float d = Vector3.Distance(Position, gol.Position);
+                        if (d < bestTargetDist)
+                        {
+                            bestTargetDist = d;
+                            structTarget = null; allyEnemyTarget = null; cloneTarget = null; servantTarget = null;
+                            pPos = gol.Position;
+                            targetIsLocal = false;
+                        }
+                    }
                 }
 
                 if (bestTargetDist >= 9990f)
                     return;
+            }
+
+            if (SilenceTimer > 0f && !IsAlly)
+            {
+                SpecialTimer = MathF.Max(SpecialTimer, 0.55f);
+                SecondaryTimer = MathF.Max(SecondaryTimer, 0.55f);
             }
 
             float prevY = Y;
@@ -2467,7 +2649,8 @@ namespace RiskOfCSharp2.Entities
             {
                 UpdateMithrixPhases(pPos, dist, effSpeed, t);
             }
-            else if (EnemyType is "zurg_mech" or "justice_gear" or "shadow_reaper" or "vergil_mirage" or "animatronic_endo" or "warden_reef")
+            else if (EnemyType is "zurg_mech" or "justice_gear" or "shadow_reaper" or "vergil_mirage" or "animatronic_endo" or "warden_reef"
+                or "echo_providence" or "false_son_boss" or "prts_source" or "binah_arbiter" or "roaring_knight" or "great_septimus")
             {
                 UpdateTrialBossAI(g, pPos, dist, effSpeed, t, floorY, projIsPlayer);
             }
@@ -2813,6 +2996,10 @@ namespace RiskOfCSharp2.Entities
                     Vector3 aim = (pPos + new Vector3(0, 1.15f, 0)) - sp;
                     new Projectile(sp, aim, 36f, Damage, 0.56f, Rgb(65, 245, 215), isPlayer: projIsPlayer, aoe: 2.6f, canProc: false);
                 }
+            }
+            else if (TryUpdateExpansionBossAI(g, pPos, dist, effSpeed, projIsPlayer, dt, t))
+            {
+                return;
             }
         }
 
@@ -3283,6 +3470,7 @@ namespace RiskOfCSharp2.Entities
         private readonly float _tickDmg;
         private float _duration = 5.0f;
         private float _tickTimer = 0f;
+        private bool _recentered = false;
         public readonly float Radius = 7.8f;
         private readonly Entity _pillarsHub;
 
@@ -3317,9 +3505,24 @@ namespace RiskOfCSharp2.Entities
         public override void OnUpdate(float dt)
         {
             var g = WorldContext.Game;
+            var c = CombatManager.Controller;
             _duration -= dt;
             _pillarsHub.RotationY += 55f * dt;
             if (_duration <= 0f) { ActiveZones.Remove(this); Destroy(this); return; }
+
+            if (!_recentered && g != null && c != null && c.CharKey == "gwen")
+            {
+                float d2d = Physics.Distance2D(g.PlayerPos, Position);
+                if (d2d > Radius * 0.88f && d2d <= Radius * 2.2f)
+                {
+                    _recentered = true;
+                    _duration += 1.5f;
+                    Position = new Vector3(g.PlayerPos.X, g.PlayerPos.Y + 0.14f, g.PlayerPos.Z);
+                    SoundManager.Play("magic_cast", 0.70f, 1.35f);
+                    new VisualFX(Position + Vector3.UnitY, Rgb(125, 230, 255), 4.5f, 0.26f);
+                    g.ShowBanner("СВЯЩЕННЫЙ ТУМАН ПЕРЕМЕЩЁН ЗА ГВЕН! [+1.5 СЕК]", Rgb(125, 230, 255), 1.3f);
+                }
+            }
 
             _tickTimer -= dt;
             if (_tickTimer <= 0f)
@@ -3609,6 +3812,7 @@ namespace RiskOfCSharp2.Entities
                 "refinery" => Rgb(235, 95, 215),
                 "pylon" => Rgb(85, 245, 135),
                 "core_omega" => Rgb(95, 225, 255),
+                "drone_pad" => Rgb(255, 215, 75),
                 "duo" => Rgb(215, 145, 65),
                 "salvo" => Rgb(255, 110, 55),
                 _ => Rgb(255, 75, 95)
@@ -3622,6 +3826,7 @@ namespace RiskOfCSharp2.Entities
                 "refinery" => 190f,
                 "pylon" => 180f,
                 "core_omega" => 320f,
+                "drone_pad" => 230f,
                 "duo" => 170f,
                 "salvo" => 240f,
                 _ => 380f
@@ -3654,6 +3859,11 @@ namespace RiskOfCSharp2.Entities
             {
                 new Entity(parent: _head, model: "diamond", scale: new(0.95f, 1.95f, 0.95f), position: new(0, 0.5f, 0), color: Color.Lime, unlit: true);
                 new Entity(parent: _head, model: "sphere", scaleUniform: 0.72f, position: new(0, 1.65f, 0), color: Color.White, unlit: true);
+            }
+            else if (buildType == "drone_pad")
+            {
+                new Entity(parent: _head, model: "cube", scale: new(1.75f, 0.25f, 1.75f), position: new(0, 0.1f, 0), color: Rgb(48, 58, 74));
+                new Entity(parent: _head, model: "diamond", scale: new(1.1f, 0.65f, 1.1f), position: new(0, 0.55f, 0), color: Color.Gold, unlit: true);
             }
             else
             {
@@ -3792,24 +4002,43 @@ namespace RiskOfCSharp2.Entities
                 return;
             }
 
-            // Турели: "duo", "salvo", "spectre"
+            if (BuildType == "drone_pad")
+            {
+                _head.RotationY += 75f * boostMult * dt;
+                _mendTimer -= dt * boostMult;
+                c.MindustryDrones.RemoveAll(d => !IsValid(d));
+                if (!IsRemoteVisual && c.CharKey == "mindustry" && _mendTimer <= 0f && c.MindustryDrones.Count < 3)
+                {
+                    _mendTimer = 4.2f;
+                    var dr = new MindustryAssaultDroneEntity(Position, c.MindustryDrones.Count * 2.1f);
+                    c.MindustryDrones.Add(dr);
+                    g.StageEntities.Add(dr);
+                    new VisualFX(Position + new Vector3(0, 1.4f, 0), Color.Gold, 2.8f, 0.24f);
+                }
+                _labelEnt.BillboardText = $"ФАБРИКА ШТУРМОВЫХ ДРОНОВ [{c.MindustryDrones.Count}/3]\n[{(int)Hp}/{(int)MaxHp} HP]";
+                return;
+            }
+
+            // Турели: "duo", "salvo", "spectre" + Энергосеть от Пилонов
             bool buffedByBeacon = false;
+            bool poweredByGrid = false;
             foreach (var b in c.MindustryTurrets)
             {
-                if (IsValid(b) && b.BuildType is "core_omega" or "core_main" && Vector3.Distance(Position, b.Position) <= 28f)
-                {
+                if (!IsValid(b)) continue;
+                float bd = Vector3.Distance(Position, b.Position);
+                if (b.BuildType is "core_omega" or "core_main" && bd <= 28f)
                     buffedByBeacon = true;
-                    break;
-                }
+                if (b.BuildType == "pylon" && bd <= 22f)
+                    poweredByGrid = true;
             }
 
             string tTitle = BuildType == "spectre" ? "ЛАЗЕР «ИСПЕПЕЛИТЕЛЬ»" : (BuildType == "salvo" ? "РАКЕТНИЦА «ЗАЛП»" : "ТУРЕЛЬ «ДУЭТ»");
-            _labelEnt.BillboardText = $"{tTitle} {(buffedByBeacon ? "[УСИЛЕНА ЯДРОМ]" : "")}\n[{(int)Hp}/{(int)MaxHp} HP]";
+            _labelEnt.BillboardText = $"{tTitle} {(buffedByBeacon ? "[ЯДРО]" : "")}{(poweredByGrid ? "[СЕТЬ+]" : "")}\n[{(int)Hp}/{(int)MaxHp} HP]";
 
             _shootCd -= dt;
             if (_shootCd <= 0f)
             {
-                float rateMult = (BuildType == "spectre" ? 1.55f : (BuildType == "salvo" ? 0.85f : 1.05f)) * (buffedByBeacon ? 1.45f : 1.0f) * boostMult;
+                float rateMult = (BuildType == "spectre" ? 1.55f : (BuildType == "salvo" ? 0.85f : 1.05f)) * (buffedByBeacon ? 1.45f : 1.0f) * (poweredByGrid ? 1.28f : 1.0f) * boostMult;
                 _shootCd = MathF.Max(0.09f, 0.85f / (MathF.Max(1f, c.FireRate) * rateMult));
 
                 Vector3? targetPos = null;

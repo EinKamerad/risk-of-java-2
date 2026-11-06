@@ -108,7 +108,7 @@ namespace RiskOfCSharp2.Models
         }
     }
 
-    public class SurvivorParts
+    public partial class SurvivorParts
     {
         public Entity Root = null!;
         public Entity Torso = null!;
@@ -1837,6 +1837,9 @@ namespace RiskOfCSharp2.Models
                     tail.Rotation = LerpEulerDeg(tail.Rotation, tRot, MathF.Min(1f, dt * 14f));
                 }
             }
+
+            UpdateExpansionPack1Anims(charKey, t, dt, isMoving, isGrounded, strafeInput, forwardInput);
+            UpdateExpansionPack2Anims(charKey, t, dt, isMoving, isGrounded, strafeInput, forwardInput);
         }
 
         // Специализированная хореография звездолёта Ядра «Гамма» (Mindustry): полёт, стрельба и все эмоции Колеса [L]
@@ -2221,7 +2224,7 @@ namespace RiskOfCSharp2.Models
         }
     }
 
-    public static class SurvivorDatabase
+    public static partial class SurvivorDatabase
     {
         public static readonly string[] OrderedKeys =
         {
@@ -2229,7 +2232,9 @@ namespace RiskOfCSharp2.Models
             "enforcer", "scout", "m4a1", "medic", "aigis", "reimu", "mindustry",
             "slark", "tidehunter", "freeman", "dante", "cheburashka", "ahri",
             "lappland", "w_arknights", "gold_ship", "pushnoy", "freddy",
-            "steve", "jotaro", "vyper", "haze", "dmc_trio", "sanabi", "jack_o"
+            "steve", "jotaro", "vyper", "haze", "dmc_trio", "sanabi", "jack_o",
+            "susie", "spamton", "binah", "don_quixote", "priestess", "closure",
+            "daitaku_helios", "robin", "bird_trio", "apocalypse_bird", "komeiji", "false_son"
         };
 
         public static List<string> GetVisibleRosterKeys()
@@ -2251,46 +2256,46 @@ namespace RiskOfCSharp2.Models
             ["commando"] = new()
             {
                 Key = "commando", Name = "КОММАНДО", Icon = "CMD", Subtitle = "Универсальный боец UES",
-                Hp = 115, Speed = 9.6f, Damage = 12.0f, FireRate = 6.5f, ProjSpeed = 62f, ProjScale = 0.22f,
+                Hp = 125, Speed = 10.4f, Damage = 13.5f, FireRate = 6.8f, ProjSpeed = 66f, ProjScale = 0.22f,
                 BodyColor = Rgb(235, 130, 35), ArmorColor = Rgb(70, 78, 95), VisorColor = Rgb(60, 245, 255),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Двойной выстрел", Cd = 0.15f, Desc = "[ЛКМ] Скорострельная стрельба из двух пистолетов." },
-                    ["m2"] = new() { Name = "Фазовый снаряд", Cd = 3.2f, Desc = "[ПКМ] Мощный плазменный заряд (300% урона), прошивающий врагов насквозь." },
-                    ["shift"] = new() { Name = "Тактический кувырок", Cd = 4.0f, Desc = "[Shift] Стремительный тактический рывок вперёд." },
-                    ["r"] = new() { Name = "Подавляющий огонь", Cd = 8.0f, Desc = "[R] Шквальная очередь из 8 выстрелов повышенной точности." }
+                    ["m1"] = new() { Name = "Двойной выстрел", Cd = 0.14f, Desc = "[ЛКМ] Скорострельная стрельба из двух пистолетов." },
+                    ["m2"] = new() { Name = "Фазовый снаряд", Cd = 3.0f, Desc = "[ПКМ] Мощный плазменный заряд (300% урона), прошивающий врагов насквозь." },
+                    ["shift"] = new() { Name = "Тактический кувырок", Cd = 3.8f, Desc = "[Shift] Стремительный тактический рывок вперёд." },
+                    ["r"] = new() { Name = "Подавляющий огонь", Cd = 7.5f, Desc = "[R] Шквальная очередь из 8 выстрелов повышенной точности." }
                 }
             },
             ["artificer"] = new()
             {
                 Key = "artificer", Name = "ИЗОБРЕТАТЕЛЬ", Icon = "ART", Subtitle = "Высокотехнологичный Архимаг",
-                Hp = 100, Speed = 8.5f, Damage = 34.0f, FireRate = 1.9f, ProjSpeed = 36f, ProjScale = 0.52f, Aoe = 4.2f,
+                Hp = 115, Speed = 9.8f, Damage = 36.0f, FireRate = 2.15f, ProjSpeed = 46f, ProjScale = 0.52f, Aoe = 4.2f,
                 BodyColor = Rgb(155, 55, 230), ArmorColor = Rgb(225, 195, 105), VisorColor = Rgb(255, 235, 65),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Плазменный разряд", Cd = 0.52f, Desc = "[ЛКМ] Взрывные плазменные сферы, наносящие урон по площади." },
-                    ["m2"] = new() { Name = "Заряженная нано-бомба", Cd = 5.0f, Desc = "[ПКМ] Сверхтяжёлая грави-сфера (280% урона в огромном радиусе)." },
-                    ["shift"] = new() { Name = "Морозный взлёт", Cd = 4.5f, Desc = "[Shift] Реактивный взлёт вверх с ледяным взрывом под ногами." },
-                    ["r"] = new() { Name = "Орбитальный ионный удар", Cd = 10.0f, Desc = "[R] Обрушивает 5 орбитальных ионных лучей на ближайших врагов." }
+                    ["m1"] = new() { Name = "Плазменный разряд", Cd = 0.46f, Desc = "[ЛКМ] Взрывные плазменные сферы, наносящие урон по площади." },
+                    ["m2"] = new() { Name = "Заряженная нано-бомба", Cd = 4.5f, Desc = "[ПКМ] Сверхтяжёлая грави-сфера (280% урона в огромном радиусе)." },
+                    ["shift"] = new() { Name = "Морозный взлёт", Cd = 4.2f, Desc = "[Shift] Реактивный взлёт вверх с ледяным взрывом под ногами." },
+                    ["r"] = new() { Name = "Орбитальный ионный удар", Cd = 9.5f, Desc = "[R] Обрушивает 5 орбитальных ионных лучей на ближайших врагов." }
                 }
             },
             ["huntress"] = new()
             {
                 Key = "huntress", Name = "ОХОТНИЦА", Icon = "HNT", Subtitle = "Стремительный Снайпер",
-                Hp = 95, Speed = 10.8f, Damage = 18.0f, FireRate = 3.4f, ProjSpeed = 54f, ProjScale = 0.28f,
+                Hp = 110, Speed = 11.4f, Damage = 20.5f, FireRate = 3.9f, ProjSpeed = 58f, ProjScale = 0.28f,
                 BodyColor = Rgb(215, 45, 70), ArmorColor = Rgb(45, 50, 64), VisorColor = Rgb(255, 240, 90),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Стрельба в движении", Cd = 0.29f, Desc = "[ЛКМ] Выпускает энергетические стрелы с автонаведением." },
-                    ["m2"] = new() { Name = "Лазерная глефа", Cd = 5.5f, Desc = "[ПКМ] Бросает лазерную глефу, рикошетящую до 5 раз между врагами!" },
-                    ["shift"] = new() { Name = "Фазовый скачок", Cd = 3.5f, Desc = "[Shift] Мгновенная телепортация в направлении взгляда." },
-                    ["r"] = new() { Name = "Дождь стрел", Cd = 9.5f, Desc = "[R] Прыжок в небо и обстрел зоны градом энергетических стрел." }
+                    ["m1"] = new() { Name = "Стрельба в движении", Cd = 0.25f, Desc = "[ЛКМ] Выпускает энергетические стрелы с автонаведением." },
+                    ["m2"] = new() { Name = "Лазерная глефа", Cd = 4.6f, Desc = "[ПКМ] Бросает лазерную глефу, рикошетящую до 5 раз между врагами!" },
+                    ["shift"] = new() { Name = "Фазовый скачок", Cd = 3.4f, Desc = "[Shift] Мгновенная телепортация в направлении взгляда." },
+                    ["r"] = new() { Name = "Дождь стрел", Cd = 8.8f, Desc = "[R] Прыжок в небо и обстрел зоны градом энергетических стрел." }
                 }
             },
             ["buzz"] = new()
             {
                 Key = "buzz", Name = "БАЗЗ ЛАЙТЕР", Icon = "BUZ", Subtitle = "Космический Рейнджер Звёздного Командования",
-                Hp = 135, Speed = 9.8f, Damage = 16.0f, FireRate = 4.8f, ProjSpeed = 66f, ProjScale = 0.25f, Aoe = 1.2f,
+                Hp = 135, Speed = 10.3f, Damage = 17.2f, FireRate = 5.0f, ProjSpeed = 66f, ProjScale = 0.25f, Aoe = 1.2f,
                 BodyColor = Rgb(125, 235, 65), ArmorColor = Rgb(240, 245, 250), VisorColor = Rgb(155, 65, 245),
                 Skills = new()
                 {
@@ -2342,11 +2347,11 @@ namespace RiskOfCSharp2.Models
             ["enforcer"] = new()
             {
                 Key = "enforcer", Name = "СИЛОВИК", Icon = "ENF", Subtitle = "Тяжёлый Бастион [ОТРАЖЕНИЕ И ПАРИРОВАНИЕ x3]",
-                Hp = 175, Speed = 9.0f, Damage = 15.0f, FireRate = 1.65f, ProjSpeed = 64f, ProjScale = 0.20f,
+                Hp = 185, Speed = 9.6f, Damage = 16.5f, FireRate = 1.85f, ProjSpeed = 64f, ProjScale = 0.20f,
                 BodyColor = Rgb(55, 115, 195), ArmorColor = Rgb(38, 48, 68), VisorColor = Rgb(110, 225, 255),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Штурмовой дробовик", Cd = 0.60f, Desc = "[ЛКМ] Мощный залп картечью из 6 пробивных дробин." },
+                    ["m1"] = new() { Name = "Штурмовой дробовик", Cd = 0.54f, Desc = "[ЛКМ] Мощный залп картечью из 6 пробивных дробин." },
                     ["m2"] = new() { Name = "Удар щитом", Cd = 4.0f, Desc = "[ПКМ] Оглушающий удар щитом перед собой (стан 2с и +20 щита)." },
                     ["shift"] = new() { Name = "Щит и Парирование (x3)", Cd = 1.0f, Desc = "[Shift] Щит отражает лобовые атаки. Выход из щита ПАРИРУЕТ ЛЮБУЮ атаку с возвратом урона x3!" },
                     ["r"] = new() { Name = "Слезоточивый газ", Cd = 9.5f, Desc = "[R] Бросает гранату со слезоточивым газом (замедляет врагов и бьёт по области)." }
@@ -2368,14 +2373,14 @@ namespace RiskOfCSharp2.Models
             ["m4a1"] = new()
             {
                 Key = "m4a1", Name = "M4A1 (GFL)", Icon = "M4", Subtitle = "Лидер отряда AR [АВТОНОМНЫЕ ИИ-КЛОНЫ]",
-                Hp = 110, Speed = 10.4f, Damage = 15.5f, FireRate = 5.8f, ProjSpeed = 68f, ProjScale = 0.23f,
+                Hp = 115, Speed = 10.4f, Damage = 15.0f, FireRate = 5.5f, ProjSpeed = 68f, ProjScale = 0.23f,
                 BodyColor = Rgb(75, 95, 78), ArmorColor = Rgb(42, 46, 48), VisorColor = Rgb(95, 255, 135),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Штурмовой карабин M4A1", Cd = 0.17f, Desc = "[ЛКМ] Огонь из карабина. Клоны самостоятельно зачищают карту и собирают лут!" },
+                    ["m1"] = new() { Name = "Штурмовой карабин M4A1", Cd = 0.18f, Desc = "[ЛКМ] Огонь из карабина. Клоны самостоятельно зачищают карту и собирают лут!" },
                     ["m2"] = new() { Name = "Пушка «Юпитер» (MOD3)", Cd = 4.5f, Desc = "[ПКМ] Пробивной энерго-выстрел рельсовой пушки с взрывом (340% ур.)." },
-                    ["shift"] = new() { Name = "Тактическое уклонение", Cd = 3.6f, Desc = "[Shift] Тактический рывок с получением +25 щита и залпом клонов." },
-                    ["r"] = new() { Name = "Автономные клоны (До 4 шт.)", Cd = 7.5f, Desc = "[R] Спавнит ИИ-клона: они сами бегают по карте, открывают сундуки, берут лут и юзают скиллы!" }
+                    ["shift"] = new() { Name = "Тактическое уклонение", Cd = 3.8f, Desc = "[Shift] Тактический рывок с получением +25 щита и залпом клонов." },
+                    ["r"] = new() { Name = "Автономные клоны (До 4 шт.)", Cd = 9.5f, Desc = "[R] Спавнит ИИ-клона: они сами бегают по карте, открывают сундуки, берут лут и юзают скиллы!" }
                 }
             },
             ["medic"] = new()
@@ -2394,20 +2399,20 @@ namespace RiskOfCSharp2.Models
             ["aigis"] = new()
             {
                 Key = "aigis", Name = "АЙГИС (PERSONA 3)", Icon = "AIG", Subtitle = "Оружие против Теней [ОРГИЯ И ПАЛЛАДИОН]",
-                Hp = 140, Speed = 10.6f, Damage = 13.5f, FireRate = 8.2f, ProjSpeed = 76f, ProjScale = 0.20f,
+                Hp = 135, Speed = 10.5f, Damage = 12.0f, FireRate = 7.6f, ProjSpeed = 76f, ProjScale = 0.20f,
                 BodyColor = Rgb(240, 242, 250), ArmorColor = Rgb(235, 195, 55), VisorColor = Rgb(65, 195, 255),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Пальцевые пулемёты «Вулкан»", Cd = 0.12f, Desc = "[ЛКМ] Ураганный пулемётный огонь из пальцев-стволов правой руки." },
-                    ["m2"] = new() { Name = "Гранатомёт «Пандора»", Cd = 3.8f, Desc = "[ПКМ] Тяжёлый фугасный залп из гранатомёта (300% урона, AoE 5.2м)." },
-                    ["shift"] = new() { Name = "Режим перегрузки «Оргия»", Cd = 5.0f, Desc = "[Shift] Взлёт и режим Оргии на 5.5 сек (+50% атаки, +45% скорости, +35% урона)." },
-                    ["r"] = new() { Name = "Персона: Удар Палладиона", Cd = 9.5f, Desc = "[R] Обрушивает копья света на врагов вокруг и даёт +45 щита." }
+                    ["m1"] = new() { Name = "Пальцевые пулемёты «Вулкан»", Cd = 0.13f, Desc = "[ЛКМ] Ураганный пулемётный огонь из пальцев-стволов правой руки." },
+                    ["m2"] = new() { Name = "Гранатомёт «Пандора»", Cd = 4.0f, Desc = "[ПКМ] Тяжёлый фугасный залп из гранатомёта (300% урона, AoE 5.2м)." },
+                    ["shift"] = new() { Name = "Режим перегрузки «Оргия»", Cd = 6.2f, Desc = "[Shift] Взлёт и режим Оргии на 5.5 сек (+50% атаки, +45% скорости, +35% урона)." },
+                    ["r"] = new() { Name = "Персона: Удар Палладиона", Cd = 10.0f, Desc = "[R] Обрушивает копья света на врагов вокруг и даёт +45 щита." }
                 }
             },
             ["reimu"] = new()
             {
                 Key = "reimu", Name = "ХАКУРЕЙ РЕЙМУ", Icon = "RMU", Subtitle = "Жрица Хакурей [ПОЛЁТ НА ЗАЖАТИЕ ПРОБЕЛА]",
-                Hp = 105, Speed = 11.2f, Damage = 17.5f, FireRate = 4.8f, ProjSpeed = 58f, ProjScale = 0.26f, Aoe = 1.2f,
+                Hp = 115, Speed = 11.2f, Damage = 18.0f, FireRate = 4.8f, ProjSpeed = 58f, ProjScale = 0.26f, Aoe = 1.2f,
                 BodyColor = Rgb(225, 42, 52), ArmorColor = Rgb(245, 245, 250), VisorColor = Rgb(255, 230, 80),
                 Skills = new()
                 {
@@ -2420,7 +2425,7 @@ namespace RiskOfCSharp2.Models
             ["mindustry"] = new()
             {
                 Key = "mindustry", Name = "КОРАБЛЬ ЯДРА «ГАММА»", Icon = "MND", Subtitle = "ВИД СВЕРХУ | 2 РЕЖИМА: СТРОИТЕЛЬСТВО [B/Shift] И БОЙ",
-                Hp = 160, Speed = 11.8f, Damage = 14.0f, FireRate = 3.2f, ProjSpeed = 58f, ProjScale = 0.18f, Aoe = 0f,
+                Hp = 160, Speed = 11.8f, Damage = 16.5f, FireRate = 3.8f, ProjSpeed = 60f, ProjScale = 0.20f, Aoe = 0f,
                 BodyColor = Rgb(245, 185, 45), ArmorColor = Rgb(62, 68, 82), VisorColor = Rgb(255, 235, 95),
                 Skills = new()
                 {
@@ -2537,7 +2542,7 @@ namespace RiskOfCSharp2.Models
             ["gold_ship"] = new()
             {
                 Key = "gold_ship", Name = "ГОЛД ШИП (UMAMUSUME)", Icon = "GLD", Subtitle = "Непотопляемый Золотой Корабль [УРОН ОТ СКОРОСТИ БЕГА!]",
-                Hp = 155, Speed = 13.0f, Damage = 20.0f, FireRate = 4.4f, ProjSpeed = 60f, ProjScale = 0.32f, Aoe = 2.2f,
+                Hp = 150, Speed = 12.2f, Damage = 18.5f, FireRate = 4.1f, ProjSpeed = 60f, ProjScale = 0.32f, Aoe = 2.2f,
                 BodyColor = Rgb(225, 42, 55), ArmorColor = Rgb(242, 240, 248), VisorColor = Rgb(255, 215, 55),
                 Skills = new()
                 {
@@ -2589,27 +2594,27 @@ namespace RiskOfCSharp2.Models
             ["jotaro"] = new()
             {
                 Key = "jotaro", Name = "ДЖОТАРО КУДЖО (JOJO)", Icon = "JOJ", Subtitle = "Обладатель Стенда Star Platinum [ORA ORA + ОСТАНОВКА ВРЕМЕНИ!]",
-                Hp = 160, Speed = 10.8f, Damage = 24.0f, FireRate = 5.5f, ProjSpeed = 66f, ProjScale = 0.32f, Aoe = 2.0f,
+                Hp = 155, Speed = 10.6f, Damage = 20.5f, FireRate = 4.8f, ProjSpeed = 66f, ProjScale = 0.32f, Aoe = 2.0f,
                 BodyColor = Rgb(34, 38, 56), ArmorColor = Rgb(165, 95, 245), VisorColor = Rgb(255, 215, 65),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Шквал Ударов «ORA ORA ORA!»", Cd = 0.18f, Desc = "[ЛКМ] Star Platinum наносит ураганную серию кулачных ударов перед Джотаро с высокой скоростью!" },
-                    ["m2"] = new() { Name = "Звёздный Палец (Star Finger!)", Cd = 3.4f, Desc = "[ПКМ] Удлиняет пальцы Star Platinum в дальнобойный пробивной луч (320% урона + оглушение по линии)!" },
-                    ["shift"] = new() { Name = "Прыжок Стенда (Stand Leap)", Cd = 3.8f, Desc = "[Shift] Мощный рывок на силе Star Platinum с отражением снарядов и +40 щита." },
-                    ["r"] = new() { Name = "STAR PLATINUM: THE WORLD! (Остановка Времени)", Cd = 11.0f, Desc = "[R] «ZA WARUDO!» — полностью ОСТАНАВЛИВАЕТ ВРЕМЯ для всех врагов и боссов на 4.0 секунды!" }
+                    ["m1"] = new() { Name = "Шквал Ударов «ORA ORA ORA!»", Cd = 0.20f, Desc = "[ЛКМ] Star Platinum наносит ураганную серию кулачных ударов перед Джотаро с высокой скоростью!" },
+                    ["m2"] = new() { Name = "Звёздный Палец (Star Finger!)", Cd = 3.8f, Desc = "[ПКМ] Удлиняет пальцы Star Platinum в дальнобойный пробивной луч (320% урона + оглушение по линии)!" },
+                    ["shift"] = new() { Name = "Прыжок Стенда (Stand Leap)", Cd = 4.2f, Desc = "[Shift] Мощный рывок на силе Star Platinum с отражением снарядов и +40 щита." },
+                    ["r"] = new() { Name = "STAR PLATINUM: THE WORLD! (Остановка Времени)", Cd = 13.5f, Desc = "[R] «ZA WARUDO!» — полностью ОСТАНАВЛИВАЕТ ВРЕМЯ для всех врагов и боссов на 4.0 секунды!" }
                 }
             },
             ["vyper"] = new()
             {
                 Key = "vyper", Name = "ВАЙПЕР (DEADLOCK)", Icon = "VYP", Subtitle = "Скользящая Рептилия-Преступница [СКОЛЬЖЕНИЕ И ОКАМЕНЕНИЕ]",
-                Hp = 125, Speed = 12.2f, Damage = 14.5f, FireRate = 7.5f, ProjSpeed = 66f, ProjScale = 0.22f, Aoe = 1.4f,
+                Hp = 125, Speed = 11.8f, Damage = 13.0f, FireRate = 7.0f, ProjSpeed = 66f, ProjScale = 0.22f, Aoe = 1.4f,
                 BodyColor = Rgb(65, 185, 85), ArmorColor = Rgb(185, 145, 75), VisorColor = Rgb(165, 255, 75),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Гадючий ПП (Огонь в Скольжении)", Cd = 0.13f, Desc = "[ЛКМ] Ураганный огонь из ПП. Во время движения и скольжения не тратит боезапас и стреляет на 35% быстрее!" },
-                    ["m2"] = new() { Name = "Смертельный Яд (Lethal Venom)", Cd = 3.5f, Desc = "[ПКМ] Отравляющий дротик: наносит взрывной урон токсином тем сильнее, чем меньше HP осталось у цели!" },
-                    ["shift"] = new() { Name = "Бронебойное Скольжение (Slither)", Cd = 3.2f, Desc = "[Shift] Стремительный низкий слайд рептилии (+45 щита, +50% скорости и бонус к скорострельности)!" },
-                    ["r"] = new() { Name = "Окаменяющая Бола (Petrifying Bola)", Cd = 9.5f, Desc = "[R] Бросает проклятую болу, превращающую всех врагов в радиусе взрыва в камень на 3.5 сек.!" }
+                    ["m1"] = new() { Name = "Гадючий ПП (Огонь в Скольжении)", Cd = 0.14f, Desc = "[ЛКМ] Ураганный огонь из ПП. Во время движения и скольжения не тратит боезапас и стреляет на 35% быстрее!" },
+                    ["m2"] = new() { Name = "Смертельный Яд (Lethal Venom)", Cd = 3.8f, Desc = "[ПКМ] Отравляющий дротик: наносит взрывной урон токсином тем сильнее, чем меньше HP осталось у цели!" },
+                    ["shift"] = new() { Name = "Бронебойное Скольжение (Slither)", Cd = 3.6f, Desc = "[Shift] Стремительный низкий слайд рептилии (+45 щита, +50% скорости и бонус к скорострельности)!" },
+                    ["r"] = new() { Name = "Окаменяющая Бола (Petrifying Bola)", Cd = 10.0f, Desc = "[R] Бросает проклятую болу, превращающую всех врагов в радиусе взрыва в камень на 3.5 сек.!" }
                 }
             },
             ["haze"] = new()
@@ -2628,27 +2633,27 @@ namespace RiskOfCSharp2.Models
             ["dmc_trio"] = new()
             {
                 Key = "dmc_trio", Name = "ТРИО DMC (ДАНТЕ / НЕРО / ВЕРГИЛИЙ)", Icon = "DMC", Subtitle = "Охотники на Демонов [1: ДАНТЕ | 2: НЕРО | 3: ВЕРГИЛИЙ]",
-                Hp = 145, Speed = 11.5f, Damage = 23.0f, FireRate = 4.5f, ProjSpeed = 65f, ProjScale = 0.30f, Aoe = 2.0f,
+                Hp = 145, Speed = 11.4f, Damage = 20.5f, FireRate = 4.3f, ProjSpeed = 65f, ProjScale = 0.30f, Aoe = 2.0f,
                 BodyColor = Rgb(195, 34, 46), ArmorColor = Rgb(36, 38, 48), VisorColor = Rgb(255, 85, 95),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Мятежник + Эбони и Айвори", Cd = 0.22f, Desc = "[ЛКМ] Комбо демоническим мечом Rebellion вблизи + скорострельная стрельба из парных пистолетов Ebony & Ivory." },
-                    ["m2"] = new() { Name = "Жало (Stinger) + Drive", Cd = 3.2f, Desc = "[ПКМ] Молниеносный пробивной выпад мечом вперёд с демонической ударной волной Drive!" },
-                    ["shift"] = new() { Name = "Стиль Ловкача / Королевский Страж", Cd = 3.4f, Desc = "[Shift] Телепортационный рывок Trickster с блоком Royal Guard (+40 щита и отражение урона)." },
-                    ["r"] = new() { Name = "Истинный Демонический Облик (Sin Devil Trigger)", Cd = 10.0f, Desc = "[R] Пробуждает крылатую форму Sin Devil Trigger, исцеляя Данте и обрушивая адский взрыв Judgment!" }
+                    ["m1"] = new() { Name = "Мятежник + Эбони и Айвори", Cd = 0.23f, Desc = "[ЛКМ] Комбо демоническим мечом Rebellion вблизи + скорострельная стрельба из парных пистолетов Ebony & Ivory." },
+                    ["m2"] = new() { Name = "Жало (Stinger) + Drive", Cd = 3.5f, Desc = "[ПКМ] Молниеносный пробивной выпад мечом вперёд с демонической ударной волной Drive!" },
+                    ["shift"] = new() { Name = "Стиль Ловкача / Королевский Страж", Cd = 3.8f, Desc = "[Shift] Телепортационный рывок Trickster с блоком Royal Guard (+40 щита и отражение урона)." },
+                    ["r"] = new() { Name = "Истинный Демонический Облик (Sin Devil Trigger)", Cd = 10.5f, Desc = "[R] Пробуждает крылатую форму Sin Devil Trigger, исцеляя Данте и обрушивая адский взрыв Judgment!" }
                 }
             },
             ["sanabi"] = new()
             {
                 Key = "sanabi", Name = "ГЕНЕРАЛ САННАБИ [ЭКСКЛЮЗИВ]", Icon = "SNB", Subtitle = "Бригадный Генерал Чосона и Мари [ЦЕПНОЙ КРЮК, МАЯТНИК И ИМПУЛЬС]",
-                Hp = 160, Speed = 12.6f, Damage = 26.0f, FireRate = 4.8f, ProjSpeed = 88f, ProjScale = 0.32f, Aoe = 2.4f,
+                Hp = 145, Speed = 12.0f, Damage = 22.0f, FireRate = 4.2f, ProjSpeed = 88f, ProjScale = 0.32f, Aoe = 2.4f,
                 BodyColor = Rgb(52, 68, 56), ArmorColor = Rgb(44, 48, 58), VisorColor = Rgb(65, 235, 255),
                 Skills = new()
                 {
-                    ["m1"] = new() { Name = "Рывок Цепного Крюка (Chain-Arm Breach)", Cd = 0.20f, Desc = "[ЛКМ] Мгновенный захват цели гигантской Рукой-Крюком и сокрушительный таранный удар в упор! Урон растёт от набранного Импульса скорости!" },
-                    ["m2"] = new() { Name = "Гарпун-Якорь Маго (Chain Grapple)", Cd = 2.2f, Desc = "[ПКМ] Выстреливает стальным 3D-тросом в точку прицела или врага, притягивая Генерала на сверхзвуковой скорости (+100% Импульса и сброс КД Shift)!" },
-                    ["shift"] = new() { Name = "Маятниковый Свинг-Импульс (Pendulum Boost)", Cd = 2.4f, Desc = "[Shift] Акробатический маятниковый рывок на цепи в воздухе или над землёй (+45 щита, взрывная волна и набор максимального Импульса)!" },
-                    ["r"] = new() { Name = "Протокол «САННАБИ»: Перегрузка Мари (Overdrive)", Cd = 9.0f, Desc = "[R] Мари взламывает поле боя: время вокруг замедляется, КД крюка обнуляется, а Генерал обрушивает казнь цепными молниями по всем врагам!" }
+                    ["m1"] = new() { Name = "Рывок Цепного Крюка (Chain-Arm Breach)", Cd = 0.23f, Desc = "[ЛКМ] Мгновенный захват цели гигантской Рукой-Крюком и сокрушительный таранный удар в упор! Урон растёт от набранного Импульса скорости!" },
+                    ["m2"] = new() { Name = "Гарпун-Якорь Маго (Chain Grapple)", Cd = 2.6f, Desc = "[ПКМ] Выстреливает стальным 3D-тросом в точку прицела или врага, притягивая Генерала на сверхзвуковой скорости (+100% Импульса и сброс КД Shift)!" },
+                    ["shift"] = new() { Name = "Маятниковый Свинг-Импульс (Pendulum Boost)", Cd = 3.0f, Desc = "[Shift] Акробатический маятниковый рывок на цепи в воздухе или над землёй (+45 щита, взрывная волна и набор максимального Импульса)!" },
+                    ["r"] = new() { Name = "Протокол «САННАБИ»: Перегрузка Мари (Overdrive)", Cd = 10.5f, Desc = "[R] Мари взламывает поле боя: время вокруг замедляется, КД крюка обнуляется, а Генерал обрушивает казнь цепными молниями по всем врагам!" }
                 }
             },
             ["jack_o"] = new()
@@ -2668,10 +2673,14 @@ namespace RiskOfCSharp2.Models
 
         static SurvivorDatabase()
         {
+            RegisterExpansionPack1Classes();
+            RegisterExpansionPack2Classes();
             InitializeLoadoutsAndSkins();
+            SetupExpansionPack1Loadouts();
+            SetupExpansionPack2Loadouts();
         }
 
-        private static Dictionary<string, List<SkillDef>> BuildCustomSkinSkillSet(
+        internal static Dictionary<string, List<SkillDef>> BuildCustomSkinSkillSet(
             string formDisplayName,
             SkillDef stdM1, SkillDef altM1,
             SkillDef stdM2, SkillDef altM2,
@@ -2696,7 +2705,7 @@ namespace RiskOfCSharp2.Models
             };
         }
 
-        private static void SetupCharLoadout(
+        internal static void SetupCharLoadout(
             string key, string lore, string passiveName, string passiveDesc,
             SkillDef altM1, SkillDef altM2, SkillDef altShift, SkillDef altR,
             SkinDef reskin, SkinDef masterySkin)
@@ -2726,13 +2735,20 @@ namespace RiskOfCSharp2.Models
 
             if (!reskin.UnlockedByDefault)
             {
-                reskin.UnlockAchKey = "ach_stage3";
-                reskin.UnlockReqText = $"Играя за {cfg.Name}: Доберитесь до 3-го этапа (Покоритель Глубин)";
+                if (string.IsNullOrEmpty(reskin.UnlockAchKey) || !reskin.UnlockAchKey.StartsWith("ach_persona_", StringComparison.Ordinal))
+                {
+                    reskin.UnlockAchKey = "ach_stage3";
+                    reskin.UnlockReqText = $"Играя за {cfg.Name}: Доберитесь до 3-го этапа (Покоритель Глубин)";
+                }
             }
 
             if (!masterySkin.UnlockedByDefault)
             {
-                if (masterySkin.UnlockAchKey == "ach_stage3")
+                if (!string.IsNullOrEmpty(masterySkin.UnlockAchKey) && masterySkin.UnlockAchKey.StartsWith("ach_persona_", StringComparison.Ordinal))
+                {
+                    // Уникальное персональное испытание альтернативной личности — сохраняем как есть
+                }
+                else if (masterySkin.UnlockAchKey == "ach_stage3")
                 {
                     masterySkin.UnlockAchKey = "ach_stage4";
                     masterySkin.UnlockReqText = $"Играя за {cfg.Name}: Доберитесь до 4-го этапа или победите Митрикса";
@@ -2773,57 +2789,105 @@ namespace RiskOfCSharp2.Models
         {
             SetupCharLoadout("commando",
                 "Закалённый в боях оперативник корабля UES «Contact Light». Полагается на высокую скорострельность, мобильность и надёжное тактическое вооружение.",
-                "Боевая выучка UES", "Высокий коэффициент срабатывания предметов от каждого выстрела из парных пистолетов.",
+                "Боевая выучка UES (Тактический Темп)", "Обойма на 12 тяжёлых патронов: перезарядка через [Shift] заряжает первые 4 выстрела бронебойным трассером (x1.35 урона) и ускоряет стрельбу!",
                 new SkillDef { Name = "Картечный залп", Cd = 0.24f, Desc = "[ЛКМ] Выпускает веер из 4 бронебойных пуль на ближней и средней дистанции." },
                 new SkillDef { Name = "Фазовый дробовик", Cd = 3.0f, Desc = "[ПКМ] Мощный веер из 5 пробивных плазменных зарядов (по 90% урона каждый)." },
-                new SkillDef { Name = "Тактический подкат", Cd = 3.6f, Desc = "[Shift] Стремительный подкат вперёд с получением +22 временного щита." },
-                new SkillDef { Name = "Осколочная граната", Cd = 6.5f, Desc = "[R] Бросает 2 тяжёлые фугасные гранаты с огромным радиусом взрыва и оглушением." },
+                new SkillDef { Name = "Тактический подкат", Cd = 3.6f, Desc = "[Shift] Стремительный подкат вперёд с перезарядкой Тяжёлой Обоймы и +22 щита." },
+                new SkillDef { Name = "Осколочная граната (Рикошет)", Cd = 6.5f, Desc = "[R] Бросает 2 фугасные гранаты, рикошетящие от стен по баллистической дуге и оглушающие врагов!" },
                 new SkinDef { Name = "Шершень", Desc = "Чёрно-багровая расцветка элитного штурмового подразделения UES.", UnlockAchKey = "ach_slayer", UnlockReqText = "Достижение: Истребитель (12 монстров)", BodyColor = Rgb(215, 42, 48), ArmorColor = Rgb(30, 34, 42), VisorColor = Rgb(255, 215, 55) },
                 new SkinDef { Name = "Сёгун UES [Модель]", Desc = "Кибер-самурайская броня с рогатым гребнем кабуто, наплечниками содэ и плазменной катаной.", UnlockAchKey = "ach_carnage", UnlockReqText = "Испытание: Кровавая Жатва (25 врагов за забег)", ChangesModel = true, BodyColor = Rgb(238, 240, 248), ArmorColor = Rgb(185, 35, 48), VisorColor = Rgb(255, 210, 65) });
 
             SetupCharLoadout("artificer",
                 "Верховный учёный-архимаг Высшего Суда. Управляет плазмой, солнечным пламенем и криогенной материей с помощью нано-костюма ENV.",
-                "Реактивный костюм ENV", "Парит над землёй и использует элементальные нано-сферы с огромным уроном по площади.",
-                new SkillDef { Name = "Солнечные дротики", Cd = 0.34f, Desc = "[ЛКМ] Выпускает парные сгустки солнечной плазмы, поджигающие врагов." },
+                "Костюм ENV и Элементальный Резонанс", "Удержание [Space] включает реактивное парение (+20% урона сверху). Смешивание Огня, Льда и Молнии вызывает взрывные реакции Таяния, Перегрузки и Сверхпроводимости!",
+                new SkillDef { Name = "Солнечные дротики", Cd = 0.34f, Desc = "[ЛКМ] Выпускает парные сгустки солнечной плазмы, поджигающие врагов для реакций стихий." },
                 new SkillDef { Name = "Литое нано-копьё", Cd = 4.2f, Desc = "[ПКМ] Сверхскоростное ледяное копьё, прошивающее и замораживающее врагов на 3.5 сек." },
                 new SkillDef { Name = "Криогенный барьер", Cd = 4.0f, Desc = "[Shift] Рывок с ледяной волной вокруг себя и получением +35 щита." },
-                new SkillDef { Name = "Огнемёт Солнца", Cd = 9.0f, Desc = "[R] Выпускает веер из 9 пробивных солнечных сфер с вампиризмом." },
+                new SkillDef { Name = "Штормовая Сфера Ионов", Cd = 9.0f, Desc = "[R Альт.] Взмывает вверх и создаёт парящую грозовую сферу, бьющую цепными молниями по площади!" },
                 new SkinDef { Name = "Хромированный Архимаг", Desc = "Изумрудно-серебряная мантия исследователя далёких звёздных систем.", UnlockAchKey = "ach_traveler", UnlockReqText = "Достижение: Исследователь миров (2-й этап)", BodyColor = Rgb(42, 165, 135), ArmorColor = Rgb(210, 225, 240), VisorColor = Rgb(115, 255, 195) },
                 new SkinDef { Name = "Верховный Серафим [Модель]", Desc = "Небесный облик с 4 парящими золотыми крыльями серафима и короной света.", UnlockAchKey = "ach_arsenal", UnlockReqText = "Испытание: Вооружён до зубов (12 предметов)", ChangesModel = true, BodyColor = Rgb(245, 242, 252), ArmorColor = Rgb(245, 195, 65), VisorColor = Rgb(105, 235, 255) });
 
             SetupCharLoadout("huntress",
                 "Молниеносный следопыт, способный вести прицельный огонь из энергетического лука прямо на бегу и мгновенно менять позицию.",
-                "Ловкость следопыта", "Стрелы автоматически наводятся на уязвимые точки врагов во время движения.",
+                "Ловкость и Метка Охотницы", "Бег заряжает критический выстрел Хищника, а Глефа вешает Метку Охоты, заставляя стрелы [ЛКМ] рикошетить в помеченные цели!",
                 new SkillDef { Name = "Шквал стрел (Тройной)", Cd = 0.38f, Desc = "[ЛКМ] Выпускает сразу 3 быстрые энергетические стрелы веером." },
-                new SkillDef { Name = "Магнитное копьё", Cd = 4.8f, Desc = "[ПКМ] Пробивной выстрел, стягивающий и оглушающий врагов взрывом." },
+                new SkillDef { Name = "Магнитное копьё", Cd = 4.8f, Desc = "[ПКМ] Пробивной выстрел, стягивающий, оглушающий и помечающий врагов взрывом." },
                 new SkillDef { Name = "Фазовый шаг (Быстрый)", Cd = 2.1f, Desc = "[Shift] Короткий мгновенный скачок с быстрой перезарядкой и +15 щита." },
-                new SkillDef { Name = "Баллиста (3 залпа)", Cd = 8.5f, Desc = "[R] Прыжок в воздух и мгновенный залп из 3 снайперских лучей огромной силы." },
+                new SkillDef { Name = "Баллиста (3 ручных залпа)", Cd = 8.5f, Desc = "[R] Зависает в воздухе (2.8 сек.) и открывает 3 ручных снайперских выстрела на [ЛКМ]!" },
                 new SkinDef { Name = "Лесной фантом", Desc = "Изумрудно-золотой камуфляж элитного снайпера джунглей.", UnlockAchKey = "ach_slayer", UnlockReqText = "Достижение: Истребитель (12 монстров)", BodyColor = Rgb(48, 175, 95), ArmorColor = Rgb(32, 46, 38), VisorColor = Rgb(255, 225, 75) },
                 new SkinDef { Name = "Арктический Следопыт [Модель]", Desc = "Белоснежный меховой капюшон с волчьими ушами, плащ и ледяной кристальный лук.", UnlockAchKey = "ach_stage3", UnlockReqText = "Испытание: Покоритель Глубин (3-й этап)", ChangesModel = true, BodyColor = Rgb(215, 235, 255), ArmorColor = Rgb(55, 85, 130), VisorColor = Rgb(95, 240, 255) });
 
             SetupCharLoadout("buzz",
-                "Легендарный Космический Рейнджер Звёздного Командования. Оснащён наручным лазером, раскрывающимися крыльями и фотонными ракетами.",
-                "Скафандр Star Command", "Усиленный корпус скафандра и реактивный ранец для воздушного превосходства.",
-                new SkillDef { Name = "Двойной плазма-бластер", Cd = 0.25f, Desc = "[ЛКМ] Выпускает парные рикошетящие сгустки зелёной плазмы." },
+                "Легендарный Космический Рейнджер Звёздного Командования. Оснащён рикошетящим наручным лазером и раскрывающимися крыльями. В 3-м слоте скина превращается в заклятого врага — ИМПЕРАТОРА ЗУРГА с 8 собственными навыками!",
+                "Крылья Star Command («Падение со стилем!»)", "После взлёта [Shift] зажмите [Space] для планирования на крыльях или нажмите [Ctrl], чтобы обрушиться вниз метеором! Лазер рикошетит от стен с ростом урона.",
+                new SkillDef { Name = "Двойной рикошет-бластер", Cd = 0.25f, Desc = "[ЛКМ] Выпускает парные рикошетящие от стен лазеры зелёной плазмы (+25% урона за отскок)." },
                 new SkillDef { Name = "Световой клинок рейнджера", Cd = 3.5f, Desc = "[ПКМ] Широкий энергетический взмах клинком перед собой с оглушением и +25 щита." },
-                new SkillDef { Name = "Сверхзвуковой таран", Cd = 3.8f, Desc = "[Shift] Стремительный горизонтальный пролёт сквозь врагов с взрывной волной." },
-                new SkillDef { Name = "Орбитальный луч Командования", Cd = 8.5f, Desc = "[R] Обрушивает гигантский орбитальный лазер по врагам и даёт +50 щита." },
+                new SkillDef { Name = "Сверхзвуковой таран", Cd = 3.8f, Desc = "[Shift] Стремительный пролёт сквозь врагов с раскрытием крыльев для планирования!" },
+                new SkillDef { Name = "Лазерный Спутник Star Command", Cd = 8.5f, Desc = "[R] Вызывает движущийся сходящийся луч орбитального спутника Командования и даёт +50 щита!" },
                 new SkinDef { Name = "Стелс-Рейнджер", Desc = "Тёмно-синий тактический скафандр для секретных операций в глубоком космосе.", UnlockAchKey = "ach_traveler", UnlockReqText = "Достижение: Исследователь миров (2-й этап)", BodyColor = Rgb(55, 145, 245), ArmorColor = Rgb(35, 42, 58), VisorColor = Rgb(255, 195, 50) },
-                new SkinDef { Name = "Император Зург [Модель]", Desc = "Броня Императора Зурга с золотыми рогами, мантией и трёхствольным ионным бластером!", UnlockAchKey = "ach_boss_hunter", UnlockReqText = "Испытание: Гроза Стражей (3 Босса)", ChangesModel = true, BodyColor = Rgb(145, 42, 195), ArmorColor = Rgb(36, 32, 46), VisorColor = Rgb(255, 55, 65) });
+                new SkinDef
+                {
+                    Name = "Император Зург [Альт. Личность]",
+                    Desc = "Заклятый враг Звёздного Альянса — Император Зург! Парящая грави-платформа, трёхствольный Ионный Бластер, дроны-шершни и 8 собственных навыков Тёмной Империи!",
+                    UnlockedByDefault = false,
+                    UnlockAchKey = "ach_persona_buzz_zurg",
+                    UnlockReqText = "Играя за Базза Лайтера: Победите Дредноут Императора Зурга или 2 Боссов за один забег",
+                    ChangesModel = true,
+                    BodyColor = Rgb(145, 42, 195),
+                    ArmorColor = Rgb(36, 32, 46),
+                    VisorColor = Rgb(255, 55, 65),
+                    CustomSubtitle = "Император Зург [АЛЬТ. ЛИЧНОСТЬ | ПОВЕЛИТЕЛЬ ИОННОГО АРСЕНАЛА]",
+                    CustomPassiveName = "Антигравитационная Платформа Зурга",
+                    CustomPassiveDesc = "Зург плавно скользит над поверхностью без трения, не теряет скорость при стрельбе и накапливает перегрузку Ионного Ядра (+30% урона на пике)!",
+                    CustomSkillVariants = BuildCustomSkinSkillSet(
+                        "Император Зург",
+                        new SkillDef { Name = "Трёхствольный Ионный Бластер", Cd = 0.22f, Desc = "[ЛКМ Зург] Вращающийся барабан выпускает поочерёдные разрывные плазменные сферы Тёмной Материи!" },
+                        new SkillDef { Name = "Копьё Тёмной Материи", Cd = 0.34f, Desc = "[ЛКМ Альт. Зург] Пробивной пурпурный луч высокой плотности, накладывающий распад брони!" },
+                        new SkillDef { Name = "Магнитный Отражатель Императора", Cd = 3.6f, Desc = "[ПКМ Зург] Включает пурпурный щит, поглощающий вражеские снаряды и выстреливающий их обратно залпом!" },
+                        new SkillDef { Name = "Гравитационная Воронка", Cd = 4.0f, Desc = "[ПКМ Альт. Зург] Бросает сферу сингулярности, стягивающую всех монстров под огонь бластера!" },
+                        new SkillDef { Name = "Эскадрилья Ботов-Шершней", Cd = 4.2f, Desc = "[Shift Зург] Рывок на грави-тяге с выпуском 2 автономных летающих Дронов-Шершней (+35 щита)!" },
+                        new SkillDef { Name = "Телепорт Тёмного Плаща", Cd = 3.5f, Desc = "[Shift Альт. Зург] Мгновенный квантовый перенос сквозь врагов с ионным взрывом на месте исчезновения!" },
+                        new SkillDef { Name = "Орудие Разрушителя Планет", Cd = 9.5f, Desc = "[R Зург] Заряжает и выпускает колоссальный багрово-фиолетовый луч смерти, выжигающий всё по курсу!" },
+                        new SkillDef { Name = "Ковровая Бомбардировка Флота Зурга", Cd = 10.0f, Desc = "[R Альт. Зург] Призывает залп ионных торпед Дредноута и усиливает всех Дронов-Шершней!" })
+                });
 
             SetupCharLoadout("v1",
-                "Экспериментальная боевая машина V1, работающая на свежей крови. Переключается между 5 видами оружия [1-5] и 3 механическими руками [F/G/R].",
-                "Кровь — это топливо", "Убийства и атаки на близкой дистанции мгновенно ремонтируют броню, а высокий ранг Стиля умножает весь урон.",
-                new SkillDef { Name = "Альтернативный Slab-Арсенал [1-5]", Cd = 0.20f, Desc = "[ЛКМ] Тяжёлые модификации всех 5 пушек: +35% к урону и взрывные попадания." },
-                new SkillDef { Name = "Перегрузка помпы (Overpump)", Cd = 0.85f, Desc = "[ПКМ] Выпускает сверхмощный концентрированный взрывной залп на любом выбранном оружии." },
+                "Экспериментальная боевая машина V1, работающая на свежей крови. Переключается между 5 видами оружия [1-5], оседлывает ракеты и бьёт 3 руками [F/G/V]. В 3-м слоте скина переключается на багрового соперника — V2 с Титановой Бронёй и 8 уникальными приёмами!",
+                "Кровь — это топливо + Rocket Riding", "Убийства и атаки вблизи чинят корпус V1, ранг Стиля умножает урон, а замороженную ракету [5] можно оседлать в полёте!",
+                new SkillDef { Name = "Альтернативный Slab-Арсенал [1-5]", Cd = 0.20f, Desc = "[ЛКМ] Тяжёлые Slab-модификации всех 5 пушек: +35% к урону и взрывные попадания." },
+                new SkillDef { Name = "Револьвер Sharpshooter (Рикошет)", Cd = 0.85f, Desc = "[ПКМ Альт.] Раскручивает револьвер и выпускает багровый луч, 3 раза рикошетящий от стен сквозь врагов!" },
                 new SkillDef { Name = "Слэм-пикирование (Slam)", Cd = 0.80f, Desc = "[Shift] В воздухе мгновенно обрушивается вниз с ударной волной, на земле — длинный слайд-рывок." },
                 new SkillDef { Name = "Кровавая Сверхновая", Cd = 4.5f, Desc = "[R] Выпускает 6 самонаводящихся кровавых копий во врагов, мгновенно исцеляя V1." },
                 new SkinDef { Name = "Золотой Серафим (Габриэль)", Desc = "Бело-золотая расцветка Высшего Ангела Совета с лазурными крыльями.", UnlockAchKey = "ach_boss", UnlockReqText = "Достижение: Убийца Титанов (Победа над Боссом)", BodyColor = Rgb(242, 244, 250), ArmorColor = Rgb(235, 190, 55), VisorColor = Rgb(85, 225, 255) },
-                new SkinDef { Name = "V2 Высшая Машина [Модель]", Desc = "Багровый корпус V2 с золотой короной, крестовым визором и удлинёнными крыльями-лезвиями.", UnlockAchKey = "ach_carnage", UnlockReqText = "Испытание: Кровавая Жатва (25 врагов за забег)", ChangesModel = true, BodyColor = Rgb(215, 38, 48), ArmorColor = Rgb(42, 32, 36), VisorColor = Rgb(255, 225, 55) });
+                new SkinDef
+                {
+                    Name = "V2 Высшая Машина [Альт. Личность]",
+                    Desc = "Вторая модель высшего класса — V2! Не впитывает кровь от обычных попаданий, но защищена Титановой Бронёй (+80 Щита), отпрыгивает веером из 3 монет и впадает в Багровую Ярость!",
+                    UnlockedByDefault = false,
+                    UnlockAchKey = "ach_persona_v1_v2",
+                    UnlockReqText = "Играя за V1: Достигните ранга стиля ULTRAKILL / SSS (800+ очков стиля) в бою",
+                    ChangesModel = true,
+                    BodyColor = Rgb(215, 38, 48),
+                    ArmorColor = Rgb(42, 32, 36),
+                    VisorColor = Rgb(255, 225, 55),
+                    CustomSubtitle = "V2 [АЛЬТ. ЛИЧНОСТЬ | ТИТАНОВАЯ БРОНЯ И БАГРОВАЯ ДУЭЛЬ]",
+                    CustomPassiveName = "Титановая Обшивка V2 (Hardened Plating)",
+                    CustomPassiveDesc = "+80 к прочной Титановой Броне, но НЕТ обычного вампиризма от крови вблизи! Починка корпуса и щита идёт через +PARRY, Рикошеты монет, Core Nuke и убийства на ранге S+, а пробитие брони включает Багровый Овердрайв!",
+                    CustomSkillVariants = BuildCustomSkinSkillSet(
+                        "V2 (Supreme Machine)",
+                        new SkillDef { Name = "Тяжёлый Пирсер V2 [1-5]", Cd = 0.19f, Desc = "[ЛКМ V2] Скоростной дуэльный огонь V2 с повышенной кучностью и багровыми трассерами!" },
+                        new SkillDef { Name = "Бронебойный Slab-Залп V2 [1-5]", Cd = 0.23f, Desc = "[ЛКМ Альт. V2] Утяжелённые разрывные патроны V2, раскалывающие броню при прямом попадании!" },
+                        new SkillDef { Name = "Сальто и Веер 3 Монет!", Cd = 1.35f, Desc = "[ПКМ V2] V2 делает дуэльное сальто назад и подбрасывает сразу 3 золотые монеты веером для тройного Ricoshot!" },
+                        new SkillDef { Name = "Заряженный Луч Пирсера / Ядро", Cd = 1.10f, Desc = "[ПКМ Альт. V2] Мгновенный пробивной багровый луч с 3 рикошетами от стен (или выброс 2 ядер на дробовике)!" },
+                        new SkillDef { Name = "Багровый Реактивный Слайд", Cd = 0.85f, Desc = "[Shift V2] Сверхскоростное скольжение на крыльях-лезвиях с выстрелом микро-ракетами и +25 брони!" },
+                        new SkillDef { Name = "Пикирующий Удар Наклбластера", Cd = 1.10f, Desc = "[Shift Альт. V2] Взрывной прыжок и таран красной рукой Knuckleblaster с ударной волной!" },
+                        new SkillDef { Name = "Гарпун Whiplash + Взрыв Кулака", Cd = 3.2f, Desc = "[R V2] Стремительное сближение на зелёном тросе Whiplash с автоматическим разрывным ударом Knuckleblaster!" },
+                        new SkillDef { Name = "Протокол «Клэр де Люн» (Ярость Крыльев)", Cd = 8.0f, Desc = "[R Альт. V2] Раскрывает золотые крылья V2: восстанавливает Титановую Броню, бросает 4 монеты и ускоряет стрельбу на 40%!" })
+                });
 
             SetupCharLoadout("sol",
-                "Охотник за головами и прототип Гира, вооружённый огненным мечом-артефактом Fireseal (Junkyard Dog). В 3-м слоте скина переключается на свою альтернативную версию «Кай Киске (Гром Иллирии)» с мечом Thunderseal и 8 новыми громовыми способностями!",
-                "Пламя Порчи (Flame of Corruption)", "Удары мечом высекают столпы пламени, а пробуждение Драконьего Инсталла превращает Сола в демонического Гира.",
+                "Охотник за головами и прототип Гира с огненным мечом Fireseal. Нажмите [Q] при 50% шкалы Напряжения (Tension), чтобы активировать ROMAN CANCEL и замедлить время вокруг! В 3-м слоте скина — «Кай Киске»!",
+                "Пламя Порчи и Roman Cancel [Q]", "Удары и рывки копят шкалу Tension (0-100%). Нажатие [Q] за 50% Tension мгновенно отменяет анимацию, замедляет врагов вокруг и усиливает комбо на +25%!",
                 new SkillDef { Name = "Fafnir (Сокрушительный выпад)", Cd = 0.44f, Desc = "[ЛКМ Альт.] Тяжёлый прямой удар огненным кулаком с взрывом, пробитием брони и отбрасыванием." },
                 new SkillDef { Name = "Volcanic Viper (Апперкот)", Cd = 3.6f, Desc = "[ПКМ Альт.] Взмывает вверх с пылающим восходящим ударом меча, оглушая врагов вокруг." },
                 new SkillDef { Name = "Night Raid Vortex (Прорыв)", Cd = 3.8f, Desc = "[Shift Альт.] Стремительный прорыв по земле сквозь врагов с мощным огненным апперкотом." },
@@ -2833,8 +2897,9 @@ namespace RiskOfCSharp2.Models
                 {
                     Name = "Кай Киске (Гром Иллирии) [Альт. Версия]",
                     Desc = "Альтернативная версия Кая Киске — Первого Короля Иллирии и вечного соперника Сола! Меч Громовая Печать (Thunderseal), бело-лазурный королевский плащ и 8 новых способностей молнии!",
-                    UnlockedByDefault = true,
-                    UnlockReqText = "Альт. версия (Открыта сразу — альт. навыки открываются отдельно!)",
+                    UnlockedByDefault = false,
+                    UnlockAchKey = "ach_persona_sol_ky",
+                    UnlockReqText = "Играя за Сола Бэдгая: Кодекс Священного Ордена — победите Босса, не имея Лунных и Пустотных предметов",
                     ChangesModel = true,
                     BodyColor = Rgb(240, 244, 255),
                     ArmorColor = Rgb(42, 108, 225),
@@ -2875,8 +2940,8 @@ namespace RiskOfCSharp2.Models
                 new SkinDef { Name = "Судья Мега-Сити [Модель]", Desc = "Шлем Судьи с крестовым визором, золотой орлиный наплечник и силовые шипы на щите.", UnlockAchKey = "ach_boss_hunter", UnlockReqText = "Испытание: Гроза Стражей (3 Босса)", ChangesModel = true, BodyColor = Rgb(42, 52, 78), ArmorColor = Rgb(235, 185, 45), VisorColor = Rgb(255, 55, 55) });
 
             SetupCharLoadout("scout",
-                "Бесстрашный дварф-разведчик корпорации Deep Rock Galactic. Освещает путь, летает на крюке-кошке и подбрасывает себя отдачей двустволки.",
-                "Скала и Камень!", "Крюк-кошка перезаряжает прыжок в воздухе и даёт ускорение после притяжения.",
+                "Бесстрашный дварф-разведчик корпорации Deep Rock Galactic. Освещает путь Ракетницей [F], летает на крюке-кошке и подбрасывает себя отдачей двустволки.",
+                "Скала и Камень! + Ракетница [F]", "Крюк-кошка перезаряжает прыжок и ускоряет бег, а Сигнальная Ракетница на [F] освещает пещеру и помечает уязвимые точки врагов (+25% к шансу крита)!",
                 new SkillDef { Name = "Винтовка M1000 Classic", Cd = 0.32f, Desc = "[ЛКМ] Снайперские пробивные выстрелы повышенной мощности (220% урона)." },
                 new SkillDef { Name = "Арбалет Болтшарк (Крио-болты)", Cd = 3.4f, Desc = "[ПКМ] Выпускает 2 рикошетящие ледяные стрелы, замораживающие врагов." },
                 new SkillDef { Name = "Реактивные ботинки Хоксеса", Cd = 3.5f, Desc = "[Shift] Высокий взлёт на реактивных ботинках с огненной волной под ногами." },
@@ -2885,38 +2950,38 @@ namespace RiskOfCSharp2.Models
                 new SkinDef { Name = "Лорд Седой Бороды [Модель]", Desc = "Золотой рогатый шлем дварфа-ветерана, плащ и рунный кристалл на ранце.", UnlockAchKey = "ach_stage3", UnlockReqText = "Испытание: Покоритель Глубин (3-й этап)", ChangesModel = true, BodyColor = Rgb(235, 190, 55), ArmorColor = Rgb(55, 65, 86), VisorColor = Rgb(95, 245, 255) });
 
             SetupCharLoadout("m4a1",
-                "Командир элитного тактического отряда AR (Girls' Frontline). Управляет звеном автономных клонов Dummy Link и тяжёлой пушкой «Юпитер».",
+                "Командир элитного тактического отряда AR (Girls' Frontline). Управляет звеном автономных клонов Dummy Link и осадным комплексом «Юпитер».",
                 "Система Dummy Link", "При гибели M4A1 автоматически переносит своё сознание в ближайшего живого клона.",
                 new SkillDef { Name = "Импульсный карабин MOD3", Cd = 0.24f, Desc = "[ЛКМ] Выпускает пробивные энергетические снаряды с взрывом по площади." },
                 new SkillDef { Name = "Миномётный залп Грифона", Cd = 4.2f, Desc = "[ПКМ] Обрушивает 3 артиллерийских удара по врагам перед собой." },
                 new SkillDef { Name = "Маскировочный рывок", Cd = 3.5f, Desc = "[Shift] Рывок с целебным импульсом (+20% HP себе и всем клонам)." },
-                new SkillDef { Name = "Штурмовой протокол «Мститель»", Cd = 8.0f, Desc = "[R] Призывает клона и выпускает веер из 5 пробивных снарядов «Юпитера»." },
+                new SkillDef { Name = "Осадное Орудие «Юпитер MOD3»", Cd = 8.0f, Desc = "[R Альт.] Развёртывает рельсовую пушку «Юпитер»: все клоны соединяются лучами с M4A1 для 3 колоссальных залпов!" },
                 new SkinDef { Name = "Ночной Оперативник", Desc = "Бело-голубой арктический камуфляж спецподразделения Грифона.", UnlockAchKey = "ach_hoarder", UnlockReqText = "Достижение: Коллекционер (6 предметов)", BodyColor = Rgb(225, 235, 248), ArmorColor = Rgb(48, 62, 85), VisorColor = Rgb(85, 225, 255) },
                 new SkinDef { Name = "MOD3 Валькирия [Модель]", Desc = "Тактические крылья-антенны MOD3 за спиной, кибер-нимб и золотая отделка брони.", UnlockAchKey = "ach_carnage", UnlockReqText = "Испытание: Кровавая Жатва (25 врагов за забег)", ChangesModel = true, BodyColor = Rgb(45, 52, 64), ArmorColor = Rgb(235, 190, 65), VisorColor = Rgb(115, 255, 165) });
 
             SetupCharLoadout("medic",
-                "Гениальный (и слегка безумный) полевой врач из Team Fortress 2. Лечит союзников, переманивает ослабленных врагов и включает неуязвимый Убер-заряд.",
-                "Регенерация и Насмешка [G]", "Повышенная регенерация здоровья и фирменная насмешка «Oktoberfest!» на клавишу [G].",
+                "Гениальный полевой врач из Team Fortress 2. Зажмите [ПКМ], чтобы связать союзника непрерывным Лечебным Лучом и накопить 100% Убер-заряда!",
+                "Лечебный Луч [Удерж. ПКМ] и Насмешка [G]", "Удержание [ПКМ] тянет луч Medi-Gun к союзнику/рекруту, исцеляя его и заряжая Убер-шкалу (0-100%) для бесплатного двойного Убер-заряда!",
                 new SkillDef { Name = "Арбалет Крестоносца", Cd = 0.34f, Desc = "[ЛКМ] Мощные дальнобойные болты (210% урона врагам и мгновенное лечение союзников)." },
                 new SkillDef { Name = "Импульс Вакцинатора", Cd = 3.2f, Desc = "[ПКМ] Даёт огромный барьер +50 щита и выпускает взрывную волну вокруг Медика." },
-                new SkillDef { Name = "Прыжок с Убер-пилой", Cd = 3.8f, Desc = "[Shift] Высокий прыжок вперёд с ударом пилой, сокращающий откат Ульты на 3 сек." },
+                new SkillDef { Name = "Прыжок с Убер-пилой", Cd = 3.8f, Desc = "[Shift] Высокий прыжок вперёд с ударом пилой (+25% к шкале Убер-заряда!)." },
                 new SkillDef { Name = "Крицкриг-Шторм", Cd = 9.5f, Desc = "[R] Включает Убер-заряд и обрушивает серию критических молний на всех врагов вокруг!" },
                 new SkinDef { Name = "Синяя команда (BLU)", Desc = "Классический синий халат полевого врача корпорации BLU.", UnlockAchKey = "ach_slayer", UnlockReqText = "Достижение: Истребитель (12 монстров)", BodyColor = Rgb(75, 145, 235), ArmorColor = Rgb(35, 75, 145), VisorColor = Rgb(110, 225, 255) },
                 new SkinDef { Name = "Чумной Доктор и Архимед [Модель]", Desc = "Золотая маска Чумного Доктора с клювом, цилиндр и парящий голубь Архимед над плечом!", UnlockAchKey = "ach_arsenal", UnlockReqText = "Испытание: Вооружён до зубов (12 предметов)", ChangesModel = true, BodyColor = Rgb(38, 42, 54), ArmorColor = Rgb(235, 190, 60), VisorColor = Rgb(95, 255, 145) });
 
             SetupCharLoadout("aigis",
-                "Боевой андроид 7-го поколения из группы S.E.E.S. (Persona 3). Сочетает стрелковое вооружение, режим перегрузки «Оргия» и призыв Персоны.",
-                "Сердце Папирус", "Бронированный корпус андроида и встроенные реактивные ускорители в стопах.",
+                "Боевой андроид 7-го поколения из группы S.E.E.S. (Persona 3). Летает в режиме перегрузки «Оргия» и призывает 3D-Персону Палладион / Афина!",
+                "Сердце Папирус и Режим Оргии", "Во время Оргии зажмите [Space] для реактивного полёта! По окончании Оргии корпус выпускает паровой взрыв (+50% брони на 1.8 сек., мгновенно снимается на [R]).",
                 new SkillDef { Name = "Крупнокалиберный рельс", Cd = 0.24f, Desc = "[ЛКМ] Пробивные бронебойные выстрелы с повышенным уроном (195%)." },
                 new SkillDef { Name = "Ракетный рой «Орион»", Cd = 3.6f, Desc = "[ПКМ] Выпускает 4 самонаводящиеся микро-ракеты по ближайшим врагам." },
                 new SkillDef { Name = "Копьё Эгиды (Рывок + Щит)", Cd = 4.2f, Desc = "[Shift] Стремительный выпад вперёд с получением +50 щита и ударной волной." },
-                new SkillDef { Name = "Персона: Афина (Клич Победы)", Cd = 10.0f, Desc = "[R] Включает режим Оргии, лечит 40% HP и обрушивает небесные копья света!" },
+                new SkillDef { Name = "Персона: Афина (Тетракарн и Акаша)", Cd = 10.0f, Desc = "[R] Материализует за спиной 3D-Персону Афину с копьём, лечит 40% HP и ставит отражающий щит Тетракарн!" },
                 new SkinDef { Name = "Полуночный Страж S.E.E.S.", Desc = "Тёмно-кобальтовый корпус для битв в Тартаре в Тёмный Час.", UnlockAchKey = "ach_traveler", UnlockReqText = "Достижение: Исследователь миров (2-й этап)", BodyColor = Rgb(48, 72, 135), ArmorColor = Rgb(215, 225, 245), VisorColor = Rgb(95, 245, 255) },
                 new SkinDef { Name = "Метис / Крылья Персоны [Модель]", Desc = "Алая броня с механическими крыльями-бабочками, боевым визором и золотым нимбом.", UnlockAchKey = "ach_stage4", UnlockReqText = "Испытание: Ветеран Petrichor V (4-й этап)", ChangesModel = true, BodyColor = Rgb(36, 34, 46), ArmorColor = Rgb(225, 45, 65), VisorColor = Rgb(255, 215, 65) });
 
             SetupCharLoadout("reimu",
-                "Жрица храма Хакурей из Генсокё (Touhou Project). Свободно парит в воздухе при удержании Пробела и осыпает врагов самонаводящимися амулетами и сферами.",
-                "Парение вне реальности", "Удержание [Space] в воздухе позволяет свободно летать над полем боя.",
+                "Жрица храма Хакурей из Генсокё (Touhou Project). Свободно парит на [Space] и накапливает мощь Грейза при пролёте вражеских пуль впритирку!",
+                "Парение и Грейз Данмаку (Graze)", "Удержание [Space] даёт полёт, а вражеские снаряды в радиусе 2.5м копят Грейз (до +30% урона), восполняют топливо полёта и выпускают ответную иглу!",
                 new SkillDef { Name = "Иглы Истребления Ёкаев", Cd = 0.16f, Desc = "[ЛКМ] Сверхскоростные пробивные алые иглы с высоким прямым уроном." },
                 new SkillDef { Name = "Очищающий взмах Гохэй", Cd = 3.2f, Desc = "[ПКМ] Круговой удар жезлом, отбрасывающий врагов и дающий +30 щита." },
                 new SkillDef { Name = "Пространственный разлом", Cd = 3.5f, Desc = "[Shift] Мгновенная телепортация вперёд с выпуском 6 самонаводящихся амулетов." },
@@ -2925,8 +2990,8 @@ namespace RiskOfCSharp2.Models
                 new SkinDef { Name = "Божественная Хакурей [Модель]", Desc = "Парящее кольцо из 6 золотых сфер Инь-Ян за спиной и небесная корона святилища.", UnlockAchKey = "ach_arsenal", UnlockReqText = "Испытание: Вооружён до зубов (12 предметов)", ChangesModel = true, BodyColor = Rgb(235, 45, 75), ArmorColor = Rgb(255, 215, 75), VisorColor = Rgb(255, 245, 150) });
 
             SetupCharLoadout("mindustry",
-                "Автономный командный корабль «Гамма» с планеты Серпуло. Переключается между неуязвимым Строительным режимом сверху и Боевым режимом.",
-                "Промышленная сеть", "Добывает Медь, Кремний и Торий для постройки буров, заводов и автоматических турелей.",
+                "Автономный командный корабль «Гамма» с планеты Серпуло. Возводит базу из 9 чертежей [1-9], связывает турели Энергосетью и выпускает Штурмовых Дронов!",
+                "Энергосеть Серпуло и Дроны [1-9]", "Турели рядом с Ядром или Пилоном стреляют на +30% быстрее, а Чертёж [9.ДРОН] выпускает автономных боевых юнитов!",
                 new SkillDef { Name = "Стройка / Тройной лазер Альфы", Cd = 0.28f, Desc = "[ЛКМ] В стройке возводит чертёж, а в боевом режиме стреляет веером из 3 лазеров!" },
                 new SkillDef { Name = "Сброс / Энерго-импульс", Cd = 1.8f, Desc = "[ПКМ] В стройке сбрасывает чертёж, а в боевом режиме бьёт врагов вокруг током." },
                 new SkillDef { Name = "Форсажная смена режима [Shift/B]", Cd = 0.6f, Desc = "[Shift] Переключает режим Стройки/Боя и даёт кораблю +35 щита." },
@@ -2945,32 +3010,32 @@ namespace RiskOfCSharp2.Models
                 new SkinDef { Name = "Акулий Принц Бездны [Модель]", Desc = "Золотая корона-плавник, коралловые наплечники и второй клинок в левой лапе.", UnlockAchKey = "ach_carnage", UnlockReqText = "Испытание: Кровавая Жатва (25 врагов за забег)", ChangesModel = true, BodyColor = Rgb(45, 195, 225), ArmorColor = Rgb(235, 185, 55), VisorColor = Rgb(125, 255, 235) });
 
             SetupCharLoadout("tidehunter",
-                "Древний морской исполин Левиафан (Dota 2). Сокрушает толпы врагов гигантским якорем и подбрасывает всю карту щупальцами Бездны.",
-                "Панцирь Кракена", "Огромный запас здоровья и встроенная устойчивость в ближнем бою.",
+                "Древний морской исполин Левиафан (Dota 2). Сбрасывает контроль Панцирем Кракена и подбрасывает всю карту настоящими 3D-щупальцами Бездны!",
+                "Панцирь Кракена (Kraken Shell)", "Блокирует плоский урон от каждого удара, а при потере 25% HP автоматически снимает оглушения и выпускает бесплатную круговую волну Якоря!",
                 new SkillDef { Name = "Волна Прибоя", Cd = 0.45f, Desc = "[ЛКМ / Q] Удар якорем, дополнительно пускающий вперёд пробивную волну воды." },
                 new SkillDef { Name = "Бросок Якоря", Cd = 3.6f, Desc = "[W / СКМ] Мощный бросок водяного якоря, оглушающий и раскалывающий броню врагов." },
                 new SkillDef { Name = "Прыжок Левиафана", Cd = 4.2f, Desc = "[Shift] Прыжок вверх с сокрушительным обрушением на землю и +50 щита." },
-                new SkillDef { Name = "Гнев Мальстрема", Cd = 11.0f, Desc = "[R] Опустошение вокруг себя + даёт Тайдхантеру +80 щита и исцеление." },
+                new SkillDef { Name = "Гнев Мальстрема (Щупальца Бездны)", Cd = 11.0f, Desc = "[R] Пробуждает из-под земли кольцо гигантских 3D-щупалец, подбрасывающих врагов в воздух, +80 щита!" },
                 new SkinDef { Name = "Владыка Вулканов", Desc = "Пепельно-магмовый панцирь древнего доисторического левиафана.", UnlockAchKey = "ach_boss", UnlockReqText = "Достижение: Убийца Титанов (Победа над Боссом)", BodyColor = Rgb(95, 45, 42), ArmorColor = Rgb(225, 95, 35), VisorColor = Rgb(255, 195, 55) },
                 new SkinDef { Name = "Дредноут Глубин [Модель]", Desc = "Латунный водолазный шлем с иллюминатором, пушечные наплечники и золотой трезубец.", UnlockAchKey = "ach_boss_hunter", UnlockReqText = "Испытание: Гроза Стражей (3 Босса)", ChangesModel = true, BodyColor = Rgb(42, 115, 135), ArmorColor = Rgb(225, 175, 55), VisorColor = Rgb(95, 245, 255) });
 
             SetupCharLoadout("freeman",
-                "Физик-теоретик исследовательского центра «Чёрная Меза» в защитном костюме HEV Mark IV. Вооружён монтировкой, Грави-пушкой и Тау-пушкой.",
-                "Защитный костюм HEV", "Высокая мобильность от 1-го лица и возможность швырять объекты карты Грави-пушкой.",
+                "Физик-теоретик центра «Чёрная Меза» в костюме HEV Mark IV. Вблизи Телепорта Грави-пушка перегружается Синей Энергией Цитадели и хватает живых монстров!",
+                "Костюм HEV (Морфий + Синяя Грави-пушка)", "Авто-инъекция морфия при HP < 25% (раз в 25 сек.), а при активном Телепорте или рывке Грави-пушка захватывает живых врагов и швыряет их во взрыв!",
                 new SkillDef { Name = "Импульсная винтовка AR2", Cd = 0.20f, Desc = "[ЛКМ] Тяжёлые энергетические выстрелы Альянса + удар монтировкой вблизи." },
                 new SkillDef { Name = "Энергетический шар Альянса", Cd = 3.2f, Desc = "[ПКМ] Выпускает дезинтегрирующую сферу AR2, рикошетящую до 6 раз между врагами!" },
-                new SkillDef { Name = "Инъекция морфия HEV", Cd = 4.2f, Desc = "[Shift] Реактивный рывок с мгновенным лечением +25% HP и +35 щита." },
+                new SkillDef { Name = "Инъекция морфия HEV", Cd = 4.2f, Desc = "[Shift] Реактивный рывок с мгновенным лечением +25% HP, +35 щита и перегрузкой Грави-пушки!" },
                 new SkillDef { Name = "Глюонный излучатель", Cd = 6.5f, Desc = "[R] Мгновенный квантовый залп чистой энергии без необходимости долгой зарядки!" },
                 new SkinDef { Name = "Спецназ HECU (Адриан Шепард)", Desc = "Зелёно-камуфляжный бронежилет PCV корпуса морской пехоты HECU.", UnlockAchKey = "ach_slayer", UnlockReqText = "Достижение: Истребитель (12 монстров)", BodyColor = Rgb(75, 145, 65), ArmorColor = Rgb(38, 46, 38), VisorColor = Rgb(115, 255, 95) },
                 new SkinDef { Name = "Шлем HEV + Хедкраб Ламарр [Модель]", Desc = "Золотой костюм HEV Mk.V с приручённым хедкрабом Ламарр на голове!", UnlockAchKey = "ach_stage3", UnlockReqText = "Испытание: Покоритель Глубин (3-й этап)", ChangesModel = true, BodyColor = Rgb(245, 155, 35), ArmorColor = Rgb(42, 46, 56), VisorColor = Rgb(255, 225, 75) });
 
             SetupCharLoadout("dante",
-                "Исполнительный Менеджер №10 компании Limbus Company с пылающими часами вместо головы. Усиливает союзников и управляет временем.",
-                "Резонанс Золотой Ветви", "Способности Данте усиливают весь отряд и призванных союзников на карте.",
+                "Исполнительный Менеджер №10 компании Limbus Company с пылающими часами вместо головы. Призывает фантомные проекции Грешников в бою и перематывает смерть!",
+                "Резонанс Золотой Ветви и Грешников", "Умения призывают фантомов И Сана, Фауст, Хитклиффа и Отис для совместных ударов, а в кооперативе усиливают весь отряд!",
                 new SkillDef { Name = "Стрелы Полуночи (Тройной)", Cd = 0.28f, Desc = "[ЛКМ] Выпускает веер из 3 пылающих часовых стрел, пробивающих врагов." },
-                new SkillDef { Name = "Карающие Цепи Грешников", Cd = 5.0f, Desc = "[ПКМ] Усиливает атаку отряда и обрушивает золотые цепи на врагов вокруг!" },
-                new SkillDef { Name = "Скачок Стрелки Времени", Cd = 4.5f, Desc = "[Shift] Телепортация вперёд с получением +50 щита и исцелением." },
-                new SkillDef { Name = "Э.Г.О. Золотой Ветви (Без жертвы)", Cd = 11.0f, Desc = "[R] Без потери жизни: призывает 6 орбитальных ударов Света и даёт бафф атаки и щита!" },
+                new SkillDef { Name = "Карающие Цепи Грешников", Cd = 5.0f, Desc = "[ПКМ] Призывает фантомов Грешников и сковывает врагов вокруг золотыми цепями!" },
+                new SkillDef { Name = "Скачок Стрелки Времени", Cd = 4.5f, Desc = "[Shift] Телепортация вперёд с проекцией И Сана, +50 щита и исцелением." },
+                new SkillDef { Name = "Э.Г.О. Золотой Ветви (Парад Грешников)", Cd = 11.0f, Desc = "[R] Без потери жизни: призывает 4 проекции Грешников вокруг арены и даёт бафф атаки и щита!" },
                 new SkinDef { Name = "Синдикат Пальцев", Desc = "Бело-золотой костюм высшего офицера Города.", UnlockAchKey = "ach_hoarder", UnlockReqText = "Достижение: Коллекционер (6 предметов)", BodyColor = Rgb(242, 240, 248), ArmorColor = Rgb(42, 38, 52), VisorColor = Rgb(255, 215, 65) },
                 new SkinDef { Name = "Апокалипсис Полуночи [Модель]", Desc = "4 пылающих золотых крыла серафима за спиной и корона Золотой Ветви.", UnlockAchKey = "ach_stage4", UnlockReqText = "Испытание: Ветеран Petrichor V (4-й этап)", ChangesModel = true, BodyColor = Rgb(215, 35, 52), ArmorColor = Rgb(245, 195, 55), VisorColor = Rgb(255, 240, 120) });
 
@@ -3009,8 +3074,9 @@ namespace RiskOfCSharp2.Models
                 {
                     Name = "Лаппланд Декаденца [Альт. Версия]",
                     Desc = "Альтернативная версия Lappland the Decadenza (Caster): маскарадное пальто, парящие призрачные волки Сиракуз и совершенно новый набор из 8 навыков!",
-                    UnlockedByDefault = true,
-                    UnlockReqText = "Альт. версия (Открыта сразу — альт. навыки открываются отдельно!)",
+                    UnlockedByDefault = false,
+                    UnlockAchKey = "ach_persona_lappland_decadenza",
+                    UnlockReqText = "Играя за Лаппланд: Истребите 16 врагов за 14 сек. или казните 3 Элитных врагов под Безмолвием",
                     ChangesModel = true,
                     BodyColor = Rgb(28, 26, 38),
                     ArmorColor = Rgb(215, 175, 65),
@@ -3045,8 +3111,9 @@ namespace RiskOfCSharp2.Models
                 {
                     Name = "Вишадель (Wiš'adel) [Альт. Версия]",
                     Desc = "Альтернативная версия Wiš'adel: парящие артиллерийские пилоны «Тень Восставших (Revenant's Shadow)», королевский плащ Каздела и 8 новых навыков!",
-                    UnlockedByDefault = true,
-                    UnlockReqText = "Альт. версия (Открыта сразу — альт. навыки открываются отдельно!)",
+                    UnlockedByDefault = false,
+                    UnlockAchKey = "ach_persona_w_wisadel",
+                    UnlockReqText = "Играя за W: Нанесите 450+ урона одним взрывом или сокрушите Босса быстрее чем за 30 секунд",
                     ChangesModel = true,
                     BodyColor = Rgb(225, 38, 52),
                     ArmorColor = Rgb(245, 242, 250),
@@ -3161,25 +3228,26 @@ namespace RiskOfCSharp2.Models
             // 30. ТРИО ИЗ DEVIL MAY CRY (1: ДАНТЕ | 2: НЕРО | 3: ВЕРГИЛИЙ — У КАЖДОГО 8 СКИЛЛОВ!)
             // =========================================================================================
             SetupCharLoadout("dmc_trio",
-                "Легендарное трио охотников на демонов из Devil May Cry! Переключайте слоты скинов, чтобы менять самого персонажа, его 3D-модель и все 8 способностей: Слот 1 — ДАНТЕ, Слот 2 — НЕРО, Слот 3 — ВЕРГИЛИЙ!",
-                "Кровь Спарды (Данте: Смена Стилей)", "Удары Данте чередуют меч и пистолеты, исцеляя здоровье в демоническом резонансе.",
+                "Легендарное трио охотников на демонов из Devil May Cry! Переключайте слоты скинов, чтобы менять персонажа и все 8 способностей: Слот 1 — ДАНТЕ (Смена стилей [1-4]!), Слот 2 — НЕРО (Тайминг MAX-Act [Q]!), Слот 3 — ВЕРГИЛИЙ (Шкала Концентрации и Just-Cut)!",
+                "Кровь Спарды: Смена 4 Стилей [1-4]", "Нажимайте [1] Trickster, [2] Swordmaster, [3] Gunslinger или [4] Royal Guard в реальном времени, меняя бонусы и накапливая шкалу Royal Release!",
                 new SkillDef { Name = "Дьявольский Меч Данте + Койот-А", Cd = 0.25f, Desc = "[ЛКМ Альт. Данте] Призывает парящие призрачные клинки DSD и бьёт картечью из дробовика!" },
                 new SkillDef { Name = "Танец Макабр + Багровый Дождь", Cd = 3.4f, Desc = "[ПКМ Альт. Данте] Серия молниеносных выпадов с круговым расстрелом из Ebony & Ivory!" },
-                new SkillDef { Name = "Кавалерия (Мотоцикл-Пила!)", Cd = 3.6f, Desc = "[Shift Альт. Данте] Таранный прорыв вперёд на демоническом мотоцикле Cavaliere с +50 щита!" },
-                new SkillDef { Name = "Королевское Возмездие + SDT Суд", Cd = 9.5f, Desc = "[R Альт. Данте] Взрыв накопленной ярости Royal Release и тотальная аннигиляция арены!" },
+                new SkillDef { Name = "Королевский Страж (Royal Block & Release)", Cd = 3.6f, Desc = "[Shift Альт. Данте] Парирует урон в шкалу Royal Gauge, а при повторном нажатии высвобождает Royal Release!" },
+                new SkillDef { Name = "Греховный Дьявольский Облик: Суд SDT!", Cd = 9.5f, Desc = "[R Альт. Данте] Превращается в Sin Devil Trigger и разрывает пространство демоническим вихрем The Luce!" },
                 new SkinDef
                 {
                     Name = "Неро (Nero) [Слот 2]",
-                    Desc = "Молодой охотник на демонов Неро из Фортуны: меч «Алая Королева (Red Queen)» с зажиганием Exceed, револьвер «Синяя Роза» и механический протез Devil Breaker!",
-                    UnlockedByDefault = true,
-                    UnlockReqText = "Персонаж 2-го слота (Открыт сразу — альт. навыки открываются отдельно!)",
+                    Desc = "Молодой охотник на демонов Неро из Фортуны: меч «Алая Королева (Red Queen)» с зажиганием Exceed [Q], револьвер «Синяя Роза» и механический протез Devil Breaker!",
+                    UnlockedByDefault = false,
+                    UnlockAchKey = "ach_persona_dmc_nero",
+                    UnlockReqText = "Играя за Трио DMC: Победите Босса Телепорта, применив навык стиля/рывка [Shift] не менее 8 раз за бой",
                     ChangesModel = true,
                     BodyColor = Rgb(38, 68, 145),
                     ArmorColor = Rgb(185, 34, 48),
                     VisorColor = Rgb(85, 225, 255),
-                    CustomSubtitle = "Неро (Nero) [СЛОТ 2 | АЛАЯ КОРОЛЕВА, EXCEED И DEVIL BREAKER]",
-                    CustomPassiveName = "Зажигание Exceed (MAX-Act)",
-                    CustomPassiveDesc = "Меч «Алая Королева» оснащён двигателем: каждый 3-й взмах выпускает огненную волну Exceed с повышенным уроном!",
+                    CustomSubtitle = "Неро (Nero) [СЛОТ 2 | АЛАЯ КОРОЛЕВА, MAX-ACT [Q] И DEVIL BREAKER]",
+                    CustomPassiveName = "Зажигание Exceed и MAX-Act [Q]",
+                    CustomPassiveDesc = "Нажмите [Q] сразу после взмаха меча (окно 0.26 сек.), чтобы поймать MAX-Act и мгновенно зарядить все 3/3 бака огненного двигателя Exceed!",
                     CustomSkillVariants = BuildCustomSkinSkillSet(
                         "Неро (DMC)",
                         new SkillDef { Name = "Алая Королева + Синяя Роза", Cd = 0.23f, Desc = "[ЛКМ Неро] Рубящие удары мечом с огненным двигателем Exceed + двуствольный выстрел из револьвера Blue Rose." },
@@ -3195,15 +3263,16 @@ namespace RiskOfCSharp2.Models
                 {
                     Name = "Вергилий (Vergil) [Слот 3]",
                     Desc = "Альфа и Омега — старший брат-близнец Данте в синем плаще с пространственной катаной «Ямато (Yamato)» и Призрачными Клинками!",
-                    UnlockedByDefault = true,
-                    UnlockReqText = "Персонаж 3-го слота (Открыт сразу — альт. навыки открываются отдельно!)",
+                    UnlockedByDefault = false,
+                    UnlockAchKey = "ach_persona_dmc_vergil",
+                    UnlockReqText = "Играя за Трио DMC: Истинная Мотивация — победите Босса быстрее чем за 25 сек. или одолейте Митрикса",
                     ChangesModel = true,
                     BodyColor = Rgb(32, 65, 138),
                     ArmorColor = Rgb(235, 238, 248),
                     VisorColor = Rgb(85, 215, 255),
                     CustomSubtitle = "Вергилий (Vergil) [СЛОТ 3 | КАТАНА ЯМАТО И РАЗРЕЗ ПРАВОСУДИЯ]",
-                    CustomPassiveName = "Концентрация (Motivation)",
-                    CustomPassiveDesc = "Точные удары катаной Ямато рассекают само пространство, игнорируя броню врагов и призывая Призрачные Клинки.",
+                    CustomPassiveName = "Концентрация (Motivation) и Just-Cut",
+                    CustomPassiveDesc = "Хладнокровная точность копит шкалу Концентрации (0-100%, до +35% урона и радиуса Ямато), а ритмичное нажатие [ЛКМ] выпускает идеальный тройной Just Judgement Cut!",
                     CustomSkillVariants = BuildCustomSkinSkillSet(
                         "Вергилий (DMC)",
                         new SkillDef { Name = "Катана Ямато + Разрез Правосудия", Cd = 0.21f, Desc = "[ЛКМ Вергилий] Молниеносные взмахи Ямато + пространственная сфера Judgement Cut прямо по цели!" },
@@ -3253,8 +3322,8 @@ namespace RiskOfCSharp2.Models
             // 32. ДЖЕК-О ВАЛЕНТАЙН (GUILTY GEAR -STRIVE-)
             // =========================================================================================
             SetupCharLoadout("jack_o",
-                "Искусственная форма жизни Валентайн, созданная Асукой Р. Кройцем и хранящая в себе частицу души Арии Хейл (Guilty Gear -Strive-). Сражается прикованным к лодыжке чугунным шаром «Железная Тыква» через высокие пинки, призывает отряд маленьких рыцарей-миньонов (взрывающихся при низком здоровье!), усиливает их Командным Флагом и вбивает врагов с небес в землю приёмом Forever Elysion Driver!",
-                "Хоровод Слуг и Заводной Фитиль", "Каждый активный Слуга даёт Джек-О +6% к скорости и броне. Когда у миньона остаётся мало HP, у него зажигается фитиль и он взрывается по площади!",
+                "Искусственная форма жизни Валентайн, хранящая частицу души Арии Хейл (Guilty Gear -Strive-). Пинками шара запускает Слуг в цепной бильярд-рикошет, подхватывает и бросает их на [F], усиливает Командным Флагом и вбивает врагов с небес приёмом Forever Elysion Driver!",
+                "Хоровод Слуг, Бросок [F] и Бильярд", "Каждый активный Слуга даёт +6% к скорости и броне. Пинки [ЛКМ] рикошетят миньонов друг от друга с ростом урона, а клавиша [F] позволяет подхватить ближайшего Слугу и метнуть навесом!",
                 new SkillDef { Name = "Двойной Вихрь Тыквы (Shoot Command)", Cd = 0.34f, Desc = "[ЛКМ Альт.] Круговой пинок шаром на цепи вокруг себя, запускающий ближайших миньонов во врагов как живые снаряды!" },
                 new SkillDef { Name = "Двойной Призыв Слуг (Twin Servants)", Cd = 4.0f, Desc = "[ПКМ Альт.] Спавнит сразу 2 маленьких Слуг (лимит до 5 шт.) с увеличенным радиусом предсмертного взрыва!" },
                 new SkillDef { Name = "Королевский Штандарт Элизиона", Cd = 4.4f, Desc = "[Shift Альт.] Прыжок с золотым флагом: в точке приземления знамя одновременно баффает миньонов и на УРОН, и на ЗАЩИТУ (+50 щита)!" },
@@ -3582,6 +3651,10 @@ namespace RiskOfCSharp2.Models
                         new Entity(parent: torso, model: "diamond", scale: new(0.96f, 0.18f, 0.10f), position: new(s * 0.58f, 0.06f, -0.28f), rotation: new(0, s * -12f, s * -18f), color: skin.VisorColor, unlit: true);
                     }
                     break;
+                default:
+                    ApplyExpansionPack1Mastery(charKey, root, parts, skin);
+                    ApplyExpansionPack2Mastery(charKey, root, parts, skin);
+                    break;
             }
         }
 
@@ -3640,16 +3713,25 @@ namespace RiskOfCSharp2.Models
                 case "dmc_trio": BuildDmcTrio(root, cfg, parts, skinIdx); break;
                 case "sanabi": BuildSanabi(root, cfg, parts, skinIdx); break;
                 case "jack_o": BuildJackO(root, cfg, parts, skinIdx); break;
-                default: BuildCommando(root, cfg, parts); break;
+                default:
+                    if (!TryBuildExpansionPack1(charKey, root, cfg, parts, skinIdx) &&
+                        !TryBuildExpansionPack2(charKey, root, cfg, parts, skinIdx))
+                    {
+                        BuildCommando(root, cfg, parts);
+                    }
+                    break;
             }
 
             cfg.BodyColor = savedBody;
             cfg.ArmorColor = savedArmor;
             cfg.VisorColor = savedVisor;
 
-            if (skinIdx > 0 && charKey is not ("lappland" or "w_arknights" or "dmc_trio") && !(charKey == "sol" && skinIdx == 2))
+            bool customSkinModel = charKey is "lappland" or "w_arknights" or "dmc_trio" or "bird_trio" or "don_quixote" or "komeiji"
+                                   || (charKey == "sol" && skinIdx == 2)
+                                   || (charKey == "spamton" && skinIdx == 2);
+            if (skinIdx > 0 && !customSkinModel)
                 ApplySkinColorRemap(root, cfg, skin);
-            if (skin.ChangesModel && !(charKey == "sol" && skinIdx == 2))
+            if (skin.ChangesModel && !customSkinModel)
                 ApplyMasterySkinGeometry(charKey, root, parts, skin);
 
             parts.CaptureBindPose();

@@ -25,6 +25,18 @@ namespace RiskOfCSharp2.Data
         public bool DefaultUnlocked = true;
         public bool IsVoid = false;
         public bool IsLunar = false;
+
+        public string GetAbbreviatedDesc(int maxLen = 58)
+        {
+            if (string.IsNullOrWhiteSpace(Desc)) return "";
+            string s = Desc.Replace("\r", "").Replace("\n", " ").Trim();
+            int dot = s.IndexOf('.');
+            if (dot > 10 && dot <= maxLen + 8)
+                s = s[..(dot + 1)];
+            if (s.Length > maxLen)
+                s = s[..(maxLen - 2)].TrimEnd() + "..";
+            return s;
+        }
     }
 
     public class AchievementInfo
@@ -78,6 +90,15 @@ namespace RiskOfCSharp2.Data
         public float RegenMult = 1.0f;
         public float PlayerDmgTakenMult = 1.0f;
         public float EnemySpeedMult = 1.0f;
+        public float EnemyHpMult = 1.0f;
+        public float SpawnRateMult = 1.0f;
+        public float MinSpawnInterval = 1.35f;
+        public float MaxSpawnInterval = 2.40f;
+        public int MaxEnemiesBase = 30;
+        public float BaseEliteChance = 0.06f;
+        public float StartCoeffBonus = 0.0f;
+        public float BossDamageCapRatio = 0.14f;
+        public float BossArmorFloor = 0.48f;
         public string Desc = "";
         public Color Color;
         public string Icon => Short;
@@ -91,10 +112,43 @@ namespace RiskOfCSharp2.Data
         public static string SelectedDifficulty = "rainstorm";
         public static readonly HashSet<string> ActiveArtifacts = new();
 
-        public static bool HasArtifact(string key) => ActiveArtifacts.Contains(key);
+        private static bool _hasNetClientOverride = false;
+        private static string _netClientDifficulty = "rainstorm";
+        private static readonly HashSet<string> _netClientArtifacts = new();
+
+        public static string EffectiveDifficultyKey => _hasNetClientOverride ? _netClientDifficulty : SelectedDifficulty;
+        public static IReadOnlyCollection<string> EffectiveArtifacts => _hasNetClientOverride ? _netClientArtifacts : ActiveArtifacts;
+
+        public static void SetNetClientOverride(string? diff, IEnumerable<string>? artifacts)
+        {
+            _hasNetClientOverride = true;
+            if (!string.IsNullOrEmpty(diff) && Difficulties.ContainsKey(diff))
+                _netClientDifficulty = diff;
+            else
+                _netClientDifficulty = SelectedDifficulty;
+
+            _netClientArtifacts.Clear();
+            if (artifacts != null)
+            {
+                foreach (var ak in artifacts)
+                {
+                    if (!string.IsNullOrWhiteSpace(ak) && RunArtifacts.ContainsKey(ak))
+                        _netClientArtifacts.Add(ak);
+                }
+            }
+        }
+
+        public static void ClearNetClientOverride()
+        {
+            _hasNetClientOverride = false;
+            _netClientArtifacts.Clear();
+        }
+
+        public static bool HasArtifact(string key)
+            => _hasNetClientOverride ? _netClientArtifacts.Contains(key) : ActiveArtifacts.Contains(key);
 
         public static DifficultyDef GetActiveDifficulty()
-            => Difficulties.TryGetValue(SelectedDifficulty, out var d) ? d : Difficulties["rainstorm"];
+            => Difficulties.TryGetValue(EffectiveDifficultyKey, out var d) ? d : Difficulties["rainstorm"];
 
         public static readonly string[] OrderedDifficultyKeys = { "drizzle", "rainstorm", "monsoon", "eclipse" };
 
@@ -105,12 +159,21 @@ namespace RiskOfCSharp2.Data
                 Key = "drizzle",
                 Name = "МОРОСЬ",
                 Short = "ЛЕГКО",
-                ScaleMult = 0.50f,
-                RegenMult = 2.50f,
-                PlayerDmgTakenMult = 0.75f,
-                EnemySpeedMult = 0.90f,
+                ScaleMult = 0.55f,
+                RegenMult = 2.40f,
+                PlayerDmgTakenMult = 0.68f,
+                EnemySpeedMult = 0.88f,
+                EnemyHpMult = 0.72f,
+                SpawnRateMult = 0.65f,
+                MinSpawnInterval = 2.10f,
+                MaxSpawnInterval = 3.50f,
+                MaxEnemiesBase = 20,
+                BaseEliteChance = 0.015f,
+                StartCoeffBonus = 0.0f,
+                BossDamageCapRatio = 0.20f,
+                BossArmorFloor = 0.66f,
                 Color = Rgb(85, 235, 105),
-                Desc = "Для спокойного освоения: скорость роста сложности -50%, регенерация HP +150%, входящий урон -25%."
+                Desc = "Комфортное освоение: ОЗ врагов -28%, темп спавна волн -35%, рост сложности x0.55, реген +140%, урон врагов -32%."
             },
             ["rainstorm"] = new()
             {
@@ -121,32 +184,59 @@ namespace RiskOfCSharp2.Data
                 RegenMult = 1.00f,
                 PlayerDmgTakenMult = 1.00f,
                 EnemySpeedMult = 1.00f,
+                EnemyHpMult = 1.00f,
+                SpawnRateMult = 1.00f,
+                MinSpawnInterval = 1.35f,
+                MaxSpawnInterval = 2.40f,
+                MaxEnemiesBase = 30,
+                BaseEliteChance = 0.06f,
+                StartCoeffBonus = 0.0f,
+                BossDamageCapRatio = 0.14f,
+                BossArmorFloor = 0.48f,
                 Color = Rgb(255, 195, 55),
-                Desc = "Классический баланс Petrichor V: стандартная скорость роста сложности (100%) и базовые параметры."
+                Desc = "Эталонный баланс Petrichor V: честная живучесть врагов (100%), умеренные волны и плавный рост элитных монстров."
             },
             ["monsoon"] = new()
             {
                 Key = "monsoon",
                 Name = "МУССОН",
                 Short = "СЛОЖНО",
-                ScaleMult = 1.50f,
+                ScaleMult = 1.55f,
                 RegenMult = 0.60f,
-                PlayerDmgTakenMult = 1.18f,
-                EnemySpeedMult = 1.15f,
+                PlayerDmgTakenMult = 1.24f,
+                EnemySpeedMult = 1.12f,
+                EnemyHpMult = 1.30f,
+                SpawnRateMult = 1.40f,
+                MinSpawnInterval = 0.90f,
+                MaxSpawnInterval = 1.65f,
+                MaxEnemiesBase = 42,
+                BaseEliteChance = 0.14f,
+                StartCoeffBonus = 0.15f,
+                BossDamageCapRatio = 0.11f,
+                BossArmorFloor = 0.40f,
                 Color = Rgb(255, 65, 75),
-                Desc = "Суровое испытание: скорость роста сложности +50%, регенерация HP -40%, враги быстрее и опаснее (+15%)."
+                Desc = "Суровое испытание: ОЗ врагов +30%, плотные волны (+40%), частые элитные монстры, реген -40%, рост сложности x1.55."
             },
             ["eclipse"] = new()
             {
                 Key = "eclipse",
                 Name = "ЗАТМЕНИЕ VIII",
                 Short = "КОШМАР",
-                ScaleMult = 2.00f,
+                ScaleMult = 2.05f,
                 RegenMult = 0.50f,
-                PlayerDmgTakenMult = 1.30f,
-                EnemySpeedMult = 1.25f,
+                PlayerDmgTakenMult = 1.42f,
+                EnemySpeedMult = 1.20f,
+                EnemyHpMult = 1.58f,
+                SpawnRateMult = 1.75f,
+                MinSpawnInterval = 0.68f,
+                MaxSpawnInterval = 1.25f,
+                MaxEnemiesBase = 54,
+                BaseEliteChance = 0.24f,
+                StartCoeffBonus = 0.30f,
+                BossDamageCapRatio = 0.095f,
+                BossArmorFloor = 0.36f,
                 Color = Rgb(195, 85, 255),
-                Desc = "Абсолютный предел: рост сложности +100% (x2), старт с 80% HP, всё исцеление -35%, Боссы призывают элитную гвардию!"
+                Desc = "Абсолютный предел: ОЗ врагов +58%, непрерывный натиск орд и элит, старт с 80% HP, всё исцеление -35%!"
             }
         };
 
@@ -254,7 +344,11 @@ namespace RiskOfCSharp2.Data
         public static readonly Dictionary<string, ItemInfo> LunarItems = new();
         public static readonly Dictionary<string, List<string>> ItemsByTier = new();
 
-        public static readonly string[] BossTypes = { "boss", "vagrant", "overlord", "magma_worm", "dunestrider", "solus_control" };
+        public static readonly string[] BossTypes =
+        {
+            "boss", "vagrant", "overlord", "magma_worm", "dunestrider", "solus_control",
+            "echo_providence", "false_son_boss", "prts_source", "binah_arbiter", "roaring_knight", "great_septimus"
+        };
         public static readonly string[] TrialBossTypes = { "zurg_mech", "justice_gear", "shadow_reaper", "vergil_mirage", "animatronic_endo", "warden_reef" };
 
         public static bool IsKnownBossType(string? t)
@@ -268,6 +362,12 @@ namespace RiskOfCSharp2.Data
             ["magma_worm"] = "МАГМОВЫЙ ЧЕРВЬ :: ИСПОЛИН ПРЕИСПОДНЕЙ",
             ["dunestrider"] = "ПЕСЧАНЫЙ СТРАННИК :: СОСУД ДЕГТЯ",
             ["solus_control"] = "МОДУЛЬ СОЛУС :: АВТОНОМНЫЙ ПРОТОКОЛ",
+            ["echo_providence"] = "ИСКАЖЁННЫЙ ПРОВИДЕЦ :: ОПЛОТ СЛАБЫХ",
+            ["false_son_boss"] = "ЛОЖНЫЙ СЫН :: ОСКВЕРНЁННЫЙ НАСЛЕДНИК МЕРИДИАНА",
+            ["prts_source"] = "PRTS, ИСХОДНЫЙ КОД :: КОВЧЕГ ИЗНАЧАЛЬНОЙ ПРОГРАММЫ",
+            ["binah_arbiter"] = "АРБИТР БИНА :: ОКО ГЛАВЫ И СТОЛПЫ ИСКУПЛЕНИЯ",
+            ["roaring_knight"] = "РОКОЧУЩИЙ РЫЦАРЬ :: РАССЕКАТЕЛЬ ТЁМНЫХ ФОНТАНОВ",
+            ["great_septimus"] = "ВЕЛИКИЙ СЕПТИМИЙ :: ХОР БАЛАНСА И ЭМБРИОН ФИЛОСОФИИ",
             ["mithrix"] = "МИТРИКС :: КОРОЛЬ НИЧЕГО",
             ["zurg_mech"] = "ДРЕДНОУТ ЗУРГА :: ФЛАГМАН ГАЛАКТИЧЕСКОЙ ИМПЕРИИ",
             ["justice_gear"] = "ПРОТОТИП «ДЖАСТИС» :: КОМАНДНЫЙ МЕХАНИЗМ РАЗРУШЕНИЯ",
@@ -308,6 +408,12 @@ namespace RiskOfCSharp2.Data
             ["vergil_mirage"] = new() { Key = "vergil_mirage", Name = "Мираж Вергилия", Hp = 2200, Damage = 34, Desc = "Призрачное воплощение Тёмного Убийцы с Ямато. Совершает мгновенные разрезы пространства и призывает Призрачные Клинки." },
             ["animatronic_endo"] = new() { Key = "animatronic_endo", Name = "Золотой Эндоскелет 06:00", Hp = 1900, Damage = 30, Desc = "Одержимый стальной гигант ночной пиццерии с искрящими сервоприводами и оглушающим звуковым скримером." },
             ["warden_reef"] = new() { Key = "warden_reef", Name = "Надзиратель Тёмного Рифа", Hp = 1950, Damage = 31, Desc = "Древний глубоководный страж тюрьмы Тёмного Рифа с гарпунными цепями и сокрушительными приливными волнами." },
+            ["echo_providence"] = new() { Key = "echo_providence", Name = "Искажённый Провидец", Hp = 2550, Damage = 35, Desc = "Призрачное эхо хранителя Petrichor V в мантии цвета фуксии. Рассекает пространство теневыми двойниками и призывает мечи правосудия." },
+            ["false_son_boss"] = new() { Key = "false_son_boss", Name = "Ложный Сын (Босс Меридиана)", Hp = 2700, Damage = 36, Desc = "Осквернённый лунным проклятием колосс Провиденса и Аурелионита. Накладывает Лунную Погибель и выжигает арену Лучём Отца." },
+            ["prts_source"] = new() { Key = "prts_source", Name = "PRTS, Исходный Код", Hp = 2450, Damage = 33, Desc = "Изначальный нейросетевой монолит «Родос Айленд». Укрывается за Машиной-Мимиком, искажает интерфейс и выжигает сектора красными ромбами ◇." },
+            ["binah_arbiter"] = new() { Key = "binah_arbiter", Name = "Арбитр Бина", Hp = 2650, Damage = 36, Desc = "Неумолимый Арбитр Главы в чёрно-золотом плаще. Пронзает арену Столпами, сковывает золотыми цепями Замка и обрушивает Ударную Волну." },
+            ["roaring_knight"] = new() { Key = "roaring_knight", Name = "Рокочущий Рыцарь", Hp = 2500, Damage = 35, Desc = "Безмолвный создатель Тёмных Фонтанов в рогатом шлеме с ослепительно белым визором. Ведёт обстрел парящими мечами и разрубает реальность пополам." },
+            ["great_septimus"] = new() { Key = "great_septimus", Name = "Великий Септимий, Хор Баланса", Hp = 2850, Damage = 34, Desc = "Исполинский златокрылый дирижёр Пенаконии. Повелевает эхом Хора и исполняет симфонию Сотворения за Семь Дней." },
             ["mithrix"] = new() { Key = "mithrix", Name = "Митрикс, Король Ничего", Hp = 3600, Damage = 38, Desc = "Повелитель Луны. Сражается в 4 фазах гигантским молотом с читаемыми замахами и крадёт предметы." }
         };
 
@@ -393,55 +499,55 @@ namespace RiskOfCSharp2.Data
             {
                 Key = "ach_char_commando",
                 Name = "Чёрный Ящик UES «Contact Light»",
-                Desc = "Активируйте Разбитый Маяк Десантной Капсулы UES, удерживайте периметр связи и отбейте штурм отряда Штурмовиков Альянса!",
+                Desc = "Соберите зашифрованные Чёрные Ящики «Contact Light» последовательно на 1-м, 2-м и 3-м этапах одного забега и переживите орбитальную высадку!",
                 UnlocksCharacter = "commando",
-                RewardText = "Ветеранский протокол Коммандо + Катсцена посадки и легендарный трофей"
+                RewardText = "Ветеранский протокол Коммандо + Легендарный трофей высадки"
             },
             ["ach_char_huntress"] = new()
             {
                 Key = "ach_char_huntress",
                 Name = "Безупречная Охота Полнолуния",
-                Desc = "У Тотема Артемиды сбейте 4 стремительных Астральных Светлячка в движении (остановка >1.2с сбрасывает серию) и сразите Элитного Вожака!",
+                Desc = "Завершите зарядку Телепорта 3-го этапа (или выше), ни разу не опустившись ниже 80% от максимального здоровья за всё время битвы у Телепорта!",
                 UnlocksCharacter = "huntress",
                 RewardText = "Персонаж: Охотница (Huntress) + Катсцена охоты"
             },
             ["ach_char_sol"] = new()
             {
                 Key = "ach_char_sol",
-                Name = "Пламя Семени Магии",
-                Desc = "Сорвите Ограничитель Пламени на Наковальне Священного Ордена и сокрушите пробудившегося босса — Прототипа «Джастис»!",
+                Name = "HERE COMES DAREDEVIL!",
+                Desc = "Снесите Боссу Телепорта 30%+ здоровья за 4.5 секунды (или сокрушите его быстрее чем за 32 сек.), чтобы спровоцировать вторжение Прототипа «Джастис», и победите его!",
                 UnlocksCharacter = "sol",
-                RewardText = "Персонаж: Сол Бэдгай + Альт. версия: Кай Киске (Гром Иллирии)"
+                RewardText = "Персонаж: Сол Бэдгай (альт. личность Кая Киске открывается испытанием Кодекса Ордена)"
             },
             ["ach_char_gwen"] = new()
             {
                 Key = "ach_char_gwen",
                 Name = "Священный Туман Изольды",
-                Desc = "Активируйте Швейный Манекен, перережьте [E] все 4 нити Чёрного Тумана в защитном круге и изгоните Теневого Жнеца Погибели!",
+                Desc = "Найдите Золотые Ножницы Изольды в кольце сжимающегося Чёрного Тумана, соберите 3 Золотые Иглы под защитой движущегося круга Священного Тумана и изгоните Жнеца!",
                 UnlocksCharacter = "gwen",
                 RewardText = "Персонаж: Гвен (Благая Швея) + Катсцена пробуждения"
             },
             ["ach_char_v1"] = new()
             {
                 Key = "ach_char_v1",
-                Name = "ЧЕЛОВЕЧЕСТВО МЕРТВО // КИБЕР-ГРАЙНД",
-                Desc = "Войдите в Кровавый Терминал Ада (секретная арена «Кибер-Грайнд») и зачистите 3 волны Адских Дронов и Бесов до иссякания топлива крови!",
+                Name = "ЧЕЛОВЕЧЕСТВО МЕРТВО // P-DOOR КИБЕР-ГРАЙНД",
+                Desc = "Зачистите Телепорт 1-го этапа быстрее чем за 2:45 (открыв Кровавую Шахту Лифта P-1) или войдите в «Кибер-Грайнд» и пройдите 4 волны на динамических колоннах до потери топлива крови!",
                 UnlocksCharacter = "v1",
                 RewardText = "Персонаж: V1 (ULTRAKILL) + Секретная локация «Кибер-Грайнд»"
             },
             ["ach_char_cheburashka"] = new()
             {
                 Key = "ach_char_cheburashka",
-                Name = "Спецгруз: Апельсиновый Контракт",
-                Desc = "Откройте таинственный Ящик с Апельсинами, успейте собрать [E] 5 золотых апельсинов под обстрелом налётчиков и защитите груз!",
+                Name = "Мирная Мелодия у Апельсинового Ящика",
+                Desc = "Найдите на этапе покачивающийся Ящик с Апельсинами, НЕ атакуйте его, отыщите неподалёку Гармошку Крокодила Гены и сыграйте [E] мирную мелодию рядом с ящиком!",
                 UnlocksCharacter = "cheburashka",
                 RewardText = "Персонаж: Чебурашка + Катсцена прибытия"
             },
             ["ach_char_artificer"] = new()
             {
                 Key = "ach_char_artificer",
-                Name = "Пауза во Времени",
-                Desc = "На Базаре Между Временем разрушьте темпоральную печать Замёрзшего Кристалла за 5 Лунных Монет и переживите всплеск Лунных Химер.",
+                Name = "Термальная Разморозка ENV",
+                Desc = "На Базаре Между Временем разогрейте Замёрзший Кристалл сериями огненных/энергетических ударов до 100°C, внесите 5 Лунных Монет и переживите всплеск Лунных Химер!",
                 UnlocksCharacter = "artificer",
                 RewardText = "Персонаж: Изобретательница (Artificer) + Катсцена освобождения"
             },
@@ -449,193 +555,472 @@ namespace RiskOfCSharp2.Data
             {
                 Key = "ach_char_buzz",
                 Name = "Бесконечность — не предел!",
-                Desc = "Почините маяк Звездолёта XP-38 прыжком с высоты >12м на его купол, а затем победите вторгшегося босса — Дредноут Императора Зурга!",
+                Desc = "Поднимитесь по каскаду гравитационных гейзеров на парящий в небесах Шаттл Звёздного Командования (Y=+26м), активируйте бортовой маяк и сокрушите Дредноут Императора Зурга!",
                 UnlocksCharacter = "buzz",
-                RewardText = "Персонаж: Базз Лайтер + Битва с боссом Зургом"
+                RewardText = "Персонаж: Базз Лайтер + Небесная дуэль с Дредноутом Зурга"
             },
             ["ach_char_enforcer"] = new()
             {
                 Key = "ach_char_enforcer",
-                Name = "Ни Шагу Назад",
-                Desc = "Встаньте в Щитовой Блокпост UES и выдержите 10 секунд шквального огня Штурмовиков Альянса, не покидая пост и не прыгая!",
+                Name = "Несгибаемый Бастион Телепорта",
+                Desc = "Зарядите любой Телепорт с 0% до 100%, ни разу не выйдя за пределы круга зоны Телепорта на протяжении всей битвы с Боссом!",
                 UnlocksCharacter = "enforcer",
                 RewardText = "Персонаж: Силовик (Enforcer) + Катсцена щитового строя"
             },
             ["ach_char_scout"] = new()
             {
                 Key = "ach_char_scout",
-                Name = "Небесный Паркур Разведчика",
-                Desc = "Перехватите Разведданные RED и пролетите сквозь 4 высотных турбо-кольца подряд, не касаясь земли под перекрёстным огнём!",
+                Name = "ROCK AND STONE! // Эвакуация M.U.L.E.",
+                Desc = "Бросайте осветительные флаеры [E], чтобы проявить в темноте 3 жилы Моркита, загрузите руду в шагающего мула M.U.L.E. и успейте запрыгнуть в рампу Десантной Капсулы за 15 секунд!",
                 UnlocksCharacter = "scout",
-                RewardText = "Персонаж: Разведчик (Scout) + Катсцена захвата кейса"
+                RewardText = "Персонаж: Разведчик (Scout DRG) + Эвакуация на Drop-Pod"
             },
             ["ach_char_m4a1"] = new()
             {
                 Key = "ach_char_m4a1",
-                Name = "Дешифровка Протокола «Грифон»",
-                Desc = "Считайте 4-значный тактический шифр на терминале AR-Team и введите его на 3 ретрансляторах под натиском механизированного отряда!",
+                Name = "Радиоперехват «Parapluie»",
+                Desc = "Когда вирус «Parapluie» блокирует Телепорт, запеленгуйте по частотному индикатору (Холодно/Горячо) и уничтожьте 3 скрытых глушителя Sangvis Ferri на этапе!",
                 UnlocksCharacter = "m4a1",
-                RewardText = "Персонаж: M4A1 (Girls' Frontline) + Катсцена связи"
+                RewardText = "Персонаж: M4A1 (Girls' Frontline) + Снятие радиопомех"
             },
             ["ach_char_medic"] = new()
             {
                 Key = "ach_char_medic",
-                Name = "Убер-Операция на Грани Жизни (1 HP)",
-                Desc = "Пожертвуйте всё здоровье до 1 HP в Хирургической Капсуле и продержитесь 10 секунд против охотников за органами, заряжая Убер-Сердце!",
+                Name = "Полевой Убер-Конвой",
+                Desc = "Исцелите раненых союзников в кооперативе на 250+ HP ИЛИ сопроводите раненого Штурмовика-Пулемётчика через поле боя до точки эвакуации, поддерживая лечебный луч [E] до 100% Убер-заряда!",
                 UnlocksCharacter = "medic",
                 RewardText = "Персонаж: Медик (Medic) + Катсцена Убер-заряда"
             },
             ["ach_char_aigis"] = new()
             {
                 Key = "ach_char_aigis",
-                Name = "Тёмный Час Тартара",
-                Desc = "Войдите в Изумрудный Портал Башни Тартар (или вскройте Золотой Саркофаг S.E.E.S.), зачистите Арканных Теней и победите босса — Жнеца Тартара!",
+                Name = "Тёмный Час (00:00) // Жнец Тартара",
+                Desc = "Задержитесь на этапе до наступления Тёмного Часа (06:00 на таймере локации), пробейте Старинные Часы S.E.E.S. или войдите в «Башню Тартар» и одолейте преследующего вас Жнеца!",
                 UnlocksCharacter = "aigis",
-                RewardText = "Персонаж: Айгис (Aigis) + Секретная локация «Башня Тартар»"
+                RewardText = "Персонаж: Айгис (Aigis) + Событие «Тёмный Час»"
             },
             ["ach_char_reimu"] = new()
             {
                 Key = "ach_char_reimu",
-                Name = "Безупречное Данмаку Хакурей",
-                Desc = "Пройдите сквозь Алые Врата в секретную локацию «Храм Хакурей» и выдержите 12 секунд спирального шторма Данмаку без единого попадания!",
+                Name = "Мастер Грейза Храма Хакурей",
+                Desc = "В секретном «Храме Хакурей» наберите 25 очков Грейза (скользя вплотную к пулям данмаку без получения урона!) на протяжении 3 спелл-карт подряд!",
                 UnlocksCharacter = "reimu",
                 RewardText = "Персонаж: Рейму Хакурей + Секретная локация «Храм Хакурей»"
             },
             ["ach_char_mindustry"] = new()
             {
                 Key = "ach_char_mindustry",
-                Name = "Оборона Ториевого Ядра",
-                Desc = "Запустите Ториевый Бур (350 HP), собирайте энергоячейки для ускорения и защитите скважину от 3 волн штурмовых жуков и големов!",
+                Name = "Мини-Форпост Серпуло (Tower Defense)",
+                Desc = "Добывайте Медь вокруг Посадочного Ядра и возведите [E] на 6 тактических ячейках Стены, Турели «Двойка» и Ремонтные Проекторы, чтобы отразить 3 волны штурма!",
                 UnlocksCharacter = "mindustry",
                 RewardText = "Персонаж: Ядро: Гамма (Mindustry) + Катсцена развёртывания"
             },
             ["ach_char_slark"] = new()
             {
                 Key = "ach_char_slark",
-                Name = "Побег из Тёмного Рифа",
-                Desc = "Разбейте цепи Адамантовой Клетки и одолейте разгневанного тюремного босса — Надзирателя Тёмного Рифа!",
+                Name = "Тайный Побег из Тёмного Рифа",
+                Desc = "Прокрадитесь мимо вращающихся красных прожекторов Надзирателя Тёмного Рифа, похитьте Ключ-Заточку [E], отоприте Адамантовую Клетку и одолейте Надзирателя!",
                 UnlocksCharacter = "slark",
-                RewardText = "Персонаж: Сларк (Slark) + Битва с Надзирателем Рифа"
+                RewardText = "Персонаж: Сларк (Slark) + Стелс-побег из Тёмного Рифа"
             },
             ["ach_char_tidehunter"] = new()
             {
                 Key = "ach_char_tidehunter",
-                Name = "Зов Мальроуна Бездны",
-                Desc = "Принесите в жертву предмет у Затонувшего Якоря и переживите пробуждение щупалец и стражей океанской впадины!",
+                Name = "Приливное Цунами Мальроуна",
+                Desc = "Принесите 2 предмета в жертву Океанскому Водовороту Мальроуна и переживите 3 волны затопления арены, запрыгивая на высокие коралловые скалы во время Цунами!",
                 UnlocksCharacter = "tidehunter",
                 RewardText = "Персонаж: Тайдхантер (Tidehunter) + Катсцена прилива"
             },
             ["ach_char_freeman"] = new()
             {
                 Key = "ach_char_freeman",
-                Name = "Каскадный Резонанс Чёрной Мезы",
-                Desc = "Проникните в Сектор C Чёрной Мезы, вкатите кристалл GG-3883 в луч Антимасс-Спектрометра и отразите десант Штурмовиков Альянса!",
+                Name = "Каскадный Резонанс Сектора C",
+                Desc = "Отоприте вентиляционную решётку на Базаре или войдите в «Чёрную Мезу», проведите тележку с кристаллом GG-3883 сквозь лазерные растяжки HECU в луч Спектрометра и отразите десант!",
                 UnlocksCharacter = "freeman",
                 RewardText = "Персонаж: Гордон Фриман + Секретная локация «Чёрная Меза»"
             },
             ["ach_char_dante"] = new()
             {
                 Key = "ach_char_dante",
-                Name = "Полночь Судного Часа LCB",
-                Desc = "Трижды остановите стремительную стрелку Багровых Часов ровно на Полночи (12:00), отбиваясь от искажённых Арканных Теней!",
+                Name = "Стрелки Судного Часа LCB",
+                Desc = "В кооперативе завершите этап с павшим союзником, вернув его в строй, ИЛИ у разбитого автобуса «Мефистофель» трижды пробейте Полночь (12:00) под цепями Грешников!",
                 UnlocksCharacter = "dante",
                 RewardText = "Персонаж: Данте #10 (Limbus Company) + Катсцена поворота стрелок"
             },
             ["ach_char_ahri"] = new()
             {
                 Key = "ach_char_ahri",
-                Name = "Танец Девятихвостого Духа",
-                Desc = "Догоните неуловимого Призрачного Лисёнка Васитаи 4 раза подряд сквозь духовные огни и победите похитителей эссенции!",
+                Name = "Танец Дикой Духовной Лисицы",
+                Desc = "Выследите свободно гуляющую по этапу Дикую Духовную Лисицу Васитаи, трижды догоните её перебежки между лисьими норами без единого удара по ней и погладьте [E]!",
                 UnlocksCharacter = "ahri",
                 RewardText = "Персонаж: Ари (Ahri) + Катсцена Девятихвостой Лисы"
             },
             ["ach_char_lappland"] = new()
             {
                 Key = "ach_char_lappland",
-                Name = "Кровавая Вендетта Сиракуз",
-                Desc = "Активируйте Алтарь Двух Клинков и сокрушите элитный отряд Наёмников Сарказов и гончих быстрее чем за 16 секунд!",
+                Name = "Вендетта под Куполом Безмолвия",
+                Desc = "Защитите курьера Penguin Logistics от засады Сиракузских Чистильщиков, сражаясь внутри ауры Безмолвия (блокирующей навыки M2, Shift и R)!",
                 UnlocksCharacter = "lappland",
-                RewardText = "Персонаж: Лаппланд + Альт. версия: Лаппланд Декаденца"
+                RewardText = "Персонаж: Лаппланд (альт. личность Декаденцы открывается собственным испытанием)"
             },
             ["ach_char_w_arknights"] = new()
             {
                 Key = "ach_char_w_arknights",
-                Name = "Взрывной Сюрприз Каздела",
-                Desc = "Обезвредьте [E] все 4 тикающих заряда C4 за 16 секунд под яростными атаками Наёмников Сарказов!",
+                Name = "Сундук-Мимик Наёмницы W",
+                Desc = "Переживите засаду заминированного Красного Сундука-Мимика W и отфутбольте [E] или ударами 3 тикающие бомбы обратно в укрытие снайперши!",
                 UnlocksCharacter = "w_arknights",
-                RewardText = "Персонаж: W + Альт. версия: Вишадель (Arknights)"
+                RewardText = "Персонаж: W (альт. личность Вишадель открывается взрывным рекордом)"
             },
             ["ach_char_gold_ship"] = new()
             {
                 Key = "ach_char_gold_ship",
-                Name = "Гран-При Арима Кинэн",
-                Desc = "Отправляйтесь на секретный «Ипподром Трейсен» (или Стартовые Ворота) и промчитесь через все 5 чекпойнтов финального рывка за 20 секунд!",
+                Name = "Финиш Первым на Арима Кинэн!",
+                Desc = "На овальном треке секретного «Ипподрома Трейсен» примите старт против 5 соперниц-бегуний и пересеките финишную черту полного круга ПЕРВЫМ!",
                 UnlocksCharacter = "gold_ship",
-                RewardText = "Персонаж: Голд Шип (Umamusume) + Секретный «Ипподром Трейсен»"
+                RewardText = "Персонаж: Голд Шип (Umamusume) + Гонка на «Ипподроме Трейсен»"
             },
             ["ach_char_pushnoy"] = new()
             {
                 Key = "ach_char_pushnoy",
-                Name = "10 000 Вольт в Эфире «Галилео»!",
-                Desc = "Эксперимент в прямом эфире: непрерывно заряжайте атаками Гитарный Резонатор Теслы до 10 000 В, отбрасывая электрических элементалей!",
+                Name = "ЭКСПЕРИМЕНТЫ В ЭФИРЕ «ГАЛИЛЕО»!",
+                Desc = "Пройдите 3 научных опыта подряд у передвижной студии «Галилео»: 1) Акустический резонанс быстрыми атаками, 2) Замыкание дуги катушки Теслы, 3) Прыжки через звуковые рок-кольца до 10 000 В!",
                 UnlocksCharacter = "pushnoy",
                 RewardText = "Персонаж: Александр Пушной + Рок-катсцена"
             },
             ["ach_char_freddy"] = new()
             {
                 Key = "ach_char_freddy",
-                Name = "Шесть Утра (06:00 AM)",
-                Desc = "В секретной «Пиццерии Freddy Fazbear's» доживите до 06:00 AM, заводя Музыкальную Шкатулку [E], и сокрушите Золотого Эндоскелета!",
+                Name = "Офис Охраны: 06:00 AM (Энергия 100%)",
+                Desc = "Войдите в «Пиццерию Fazbear» (или сломанный аркадный автомат на Базаре), экономьте заряд батареи Офиса, вовремя закрывайте Левую/Правую гермодвери [E], заводите шкатулку и одолейте Эндоскелета!",
                 UnlocksCharacter = "freddy",
-                RewardText = "Персонаж: Фредди Фазбер + Секретная локация «Пиццерия» и Босс"
+                RewardText = "Персонаж: Фредди Фазбер + Оборона Офиса Fazbear"
             },
             ["ach_char_steve"] = new()
             {
                 Key = "ach_char_steve",
-                Name = "Врата Пылающего Незера",
-                Desc = "Добудьте 3 Обсидиановых Монолита, зажгите Портал Незера [E] и отразите вторжение роя Ифритов Незера!",
+                Name = "Руины Портала Незера",
+                Desc = "Разбейте атаками 4 жилы Обсидиановой Руды и сундук с Огнивом в разных уголках карты, вручную вставьте блоки [E] в разрушенную рамку Портала Незера, зажгите его и отбейте рой Ифритов!",
                 UnlocksCharacter = "steve",
-                RewardText = "Персонаж: Стив (Minecraft) + Катсцена портала"
+                RewardText = "Персонаж: Стив (Minecraft) + Крафт Портала Незера"
             },
             ["ach_char_jotaro"] = new()
             {
                 Key = "ach_char_jotaro",
-                Name = "Испытание Стрелы Стенда",
-                Desc = "Идите наперекор ураганному ветру Метеорита со Стрелой 7 секунд и выдержите духовное давление пробудившегося Стенда!",
+                Name = "Падение Звёздного Метеорита",
+                Desc = "Дождитесь падения горящего Метеорита со Стрелой с небес на 2-м+ этапе, пробейтесь сквозь ураган к кратеру и переживите испытание остановки времени фантомного Стенда!",
                 UnlocksCharacter = "jotaro",
                 RewardText = "Персонаж: Джотаро Куджо (JoJo) + Катсцена Star Platinum"
             },
             ["ach_char_vyper"] = new()
             {
                 Key = "ach_char_vyper",
-                Name = "Побег из Бронекапсулы OSIC",
-                Desc = "Прицельно отстрелите все 4 вращающихся магнитных замка тюремной капсулы OSIC, уклоняясь от охранных лазеров!",
+                Name = "Подкат Под Лазерами Тюрьмы OSIC",
+                Desc = "Проскользните на рывках/вприсядку под низкими горизонтальными лазерными лучами тюремного периметра OSIC и отстрелите все 4 магнитных замка бронекапсулы!",
                 UnlocksCharacter = "vyper",
                 RewardText = "Персонаж: Вайпер (Deadlock) + Катсцена взлома"
             },
             ["ach_char_haze"] = new()
             {
                 Key = "ach_char_haze",
-                Name = "Протокол Сновидца OSIC",
-                Desc = "В тумане сновидений трижды распознайте Истинную Золотую Сферу среди коварных миражей и устраните Арканную Тень-перехватчика!",
+                Name = "Контракт Бюро Сновидений OSIC",
+                Desc = "Коснитесь Ловца Снов OSIC и в индиговом тумане выследите и устраните Истинного Спящего среди бродячих сонных двойников-миражей (удар по ложному двойнику поднимает тревогу)!",
                 UnlocksCharacter = "haze",
                 RewardText = "Персонаж: Хейз (Deadlock) + Катсцена пробуждения"
             },
             ["ach_char_dmc_trio"] = new()
             {
                 Key = "ach_char_dmc_trio",
-                Name = "Ранг Стиля SSS: Вершина Клипота",
-                Desc = "На Вершине Древа Клипота наберите ранг стиля SSS и победите в дуэли босса — Миража Вергилия с клинком Ямато!",
+                Name = "Разлом Клипота: Ранг Стиля SSS",
+                Desc = "Уничтожьте Босса Телепорта быстрее чем за 25 сек. без потери HP, чтобы рассечь воздух Разломом Клипота (или войдите на «Вершину Клипота»), наберите ранг SSS и одолейте Миража Вергилия!",
                 UnlocksCharacter = "dmc_trio",
-                RewardText = "Персонаж: Трио DMC (Данте, Неро, Вергилий) + Дуэль с Миражом Вергилия"
+                RewardText = "Персонаж: Трио DMC (Данте; Неро и Вергилий открываются испытаниями стиля!)"
             },
             ["ach_char_jack_o"] = new()
             {
                 Key = "ach_char_jack_o",
-                Name = "Конфетный Легион Элизиона",
-                Desc = "Активируйте Алтарь Железной Тыквы, удерживайте периметр Командного Знамени 14 секунд и отразите натиск стражей Заднего Двора!",
+                Name = "Конфетный Бильярд Миньонов Элизиона",
+                Desc = "Ударными атаками и пинками загоните 3 упругих чиби-рыцарей Железной Тыквы точно в 3 светящихся Кольца-Ворота Элизиона за отведённое время!",
                 UnlocksCharacter = "jack_o",
                 RewardText = "Персонаж: Джек-О Валентайн (Guilty Gear -Strive-) + Катсцена пробуждения"
+            },
+
+            // --- ДОСТИЖЕНИЯ РАСШИРЕНИЯ И АЛЬТ. ЛИЧНОСТЕЙ ---
+            ["ach_char_susie"] = new()
+            {
+                Key = "ach_char_susie",
+                Name = "Отбой Rude Buster Тёмного Святилища",
+                Desc = "В секретном «Тёмном Святилище» копите шкалу TP скольжением рядом с клинками Тьмы (Graze до 100%) и трижды отразите [E] волну Rude Buster обратно в Рокочущего Рыцаря!",
+                UnlocksCharacter = "susie",
+                RewardText = "Персонаж: Сьюзи (Deltarune) + Секретное «Тёмное Святилище»"
+            },
+            ["ach_char_spamton"] = new()
+            {
+                Key = "ach_char_spamton",
+                Name = "СДЕЛКА ВСЕЙ ЖИЗНИ [[1997 KROMER]]",
+                Desc = "Ответьте на звонок Мусорного Телефона, подловите выгодный курс [[KROMER]], чтобы выкупить «Загрузочный Диск», вставьте его в пустой корпус НЕО и защитите загрузку от [Pipis]!",
+                UnlocksCharacter = "spamton",
+                RewardText = "Персонаж: Спамтон Г. Спамтон (СПАМТОН НЕО открывается накоплением богатства!)"
+            },
+            ["ach_char_binah"] = new()
+            {
+                Key = "ach_char_binah",
+                Name = "Подавление Перегрузки Клипота",
+                Desc = "На «Этаже Извлечения» примите бой с Арбитром Биной, вовремя подавляя [E] тикающие Столпы Перегрузки Клипота по углам зала до их детонации!",
+                UnlocksCharacter = "binah",
+                RewardText = "Персонаж: Бина / Гарион (Project Moon) + Секретный «Этаж Извлечения»"
+            },
+            ["ach_char_don_quixote"] = new()
+            {
+                Key = "ach_char_don_quixote",
+                Name = "Рыцарский Турнир Верхом на Росинанте!",
+                Desc = "Подберите Турнирное Копьё (+75% скорости галопа) и трижды сокрушите встречным лобовым тараном атакующих Кавалеристов Ла-Манчаленда на полном скаку!",
+                UnlocksCharacter = "don_quixote",
+                RewardText = "Персонаж: Дон Кихот (Фонарь E.G.O и Санчо открываются боевыми подвигами!)"
+            },
+            ["ach_char_priestess"] = new()
+            {
+                Key = "ach_char_priestess",
+                Name = "Эхо Первой Цивилизации: EYESOFPRIESTESS",
+                Desc = "Отследите по глитч-помехам интерфейса ◇ 3 скрытых Ромба Памяти PRTS на этапе (открыв прямой разлом в «Ядро Ориджиниума») и победите босса PRTS, Исходный Код!",
+                UnlocksCharacter = "priestess",
+                RewardText = "Персонаж: Пристесс (Arknights) + Секретное «Ядро Ориджиниума»"
+            },
+            ["ach_char_closure"] = new()
+            {
+                Key = "ach_char_closure",
+                Name = "Инженерный Магазин «Родос Айленд»",
+                Desc = "Проинвестируйте золото в 3 апгрейда полевой мастерской Кложер на этапе и защитите выкатившуюся на помощь платформу Lancet-2 от налёта дронов!",
+                UnlocksCharacter = "closure",
+                RewardText = "Персонаж: Кложер (Arknights) + Полевая поддержка Lancet-2"
+            },
+            ["ach_char_daitaku_helios"] = new()
+            {
+                Key = "ach_char_daitaku_helios",
+                Name = "Вэй~☆! Ритм-Баттл 128 BPM!",
+                Desc = "У пульта диджея «WEI~☆!» попадайте нажатиями [E] или [Space] точно в центральный бит неоновой ритм-шкалы 8 раз подряд на максимальном драйве!",
+                UnlocksCharacter = "daitaku_helios",
+                RewardText = "Персонаж: Дайтаку Гелиос (Umamusume) + Ритм-вечеринка"
+            },
+            ["ach_char_robin"] = new()
+            {
+                Key = "ach_char_robin",
+                Name = "Мелодия Гармонии Большого Театра",
+                Desc = "В «Большом Театре Пенаконии» сыграйте правильную последовательность из 5 музыкальных прожекторов-нот на сцене, чтобы развеять хоровой щит Великого Септимия, и победите его!",
+                UnlocksCharacter = "robin",
+                RewardText = "Персонаж: Зарянка / Робин (Honkai: Star Rail) + «Театр Пенаконии»"
+            },
+            ["ach_char_sanabi"] = new()
+            {
+                Key = "ach_char_sanabi",
+                Name = "Проект №17: Вертикальный Прорыв Маго",
+                Desc = "На высотной Шахте Реактора Маго перелетайте на тросе Руки-Крюка [E] между парящими дронами над поднимающимся плазменным полом и разрушьте Ядро Надзора наверху!",
+                UnlocksCharacter = "sanabi",
+                RewardText = "Персонаж: Бригадный Генерал и Мари (SANABI)"
+            },
+            ["ach_char_bird_trio"] = new()
+            {
+                Key = "ach_char_bird_trio",
+                Name = "Три Стража Чёрного Леса",
+                Desc = "Пройдите 3 испытания клеток Аномалий Чёрного Леса подряд: 1) Умиротворите Малую Птицу (8 сек. без единой атаки), 2) Уравновесьте Весы Длинной Птицы, 3) Сберегите Вечную Лампу Большой Птицы!",
+                UnlocksCharacter = "bird_trio",
+                RewardText = "Персонаж: Трио Птиц (Длинная и Малая Птицы открываются собственными испытаниями)"
+            },
+            ["ach_char_apocalypse_bird"] = new()
+            {
+                Key = "ach_char_apocalypse_bird",
+                Name = "Врата Сумерек Чёрного Леса",
+                Desc = "Соберитесь в сетевом лобби втроём с владельцами «Трио Птиц» ИЛИ (открыв Трио Птиц) активируйте Алтарь Сумерек в забеге, разбейте 3 Яйца Апокалипсиса и одолейте Зверя Чёрного Леса!",
+                UnlocksCharacter = "apocalypse_bird",
+                RewardText = "Рейдовый персонаж: Птица Апокалипсиса"
+            },
+            ["ach_char_komeiji"] = new()
+            {
+                Key = "ach_char_komeiji",
+                Name = "Слепое Пятно Подсознания Тирэйден",
+                Desc = "Во «Дворце Духов Земли» трижды отыщите невидимую при прямом взгляде Коиши с помощью периферийного зрения (отвернув камеру в сторону!) и коснитесь её [E]!",
+                UnlocksCharacter = "komeiji",
+                RewardText = "Персонаж: Сатори Комейдзи (Коиши открывается испытанием Неуловимого Подсознания)"
+            },
+            ["ach_char_false_son"] = new()
+            {
+                Key = "ach_char_false_son",
+                Name = "Грозовое Очищение Изначального Меридиана",
+                Desc = "Зарядите Золотой Алтарь Алкиона золотом на этапе (или войдите на «Изначальный Меридиан»), расколите 3 Жеоды Алкиона ударами небесных молний и победите Ложного Сына!",
+                UnlocksCharacter = "false_son",
+                RewardText = "Персонаж: Ложный Сын (RoR2: Seekers of the Storm) + «Изначальный Меридиан»"
+            },
+
+            // --- 13 ПЕРСОНАЛЬНЫХ ИСПЫТАНИЙ АЛЬТЕРНАТИВНЫХ ЛИЧНОСТЕЙ (ach_persona_*) ---
+            ["ach_persona_sol_ky"] = new()
+            {
+                Key = "ach_persona_sol_ky",
+                Name = "Кодекс Священного Ордена: Кай Киске",
+                Desc = "Играя за Сола Бэдгая, победите Босса Телепорта, не имея в инвентаре ни одного Лунного или Пустотного предмета.",
+                RewardText = "Альт. личность [Сол Бэдгай]: Кай Киске (Гром Иллирии)"
+            },
+            ["ach_persona_lappland_decadenza"] = new()
+            {
+                Key = "ach_persona_lappland_decadenza",
+                Name = "Гранд-Карнавал Сиракуз: Декаденца",
+                Desc = "Играя за Лаппланд, истребите 16 врагов за 14 секунд или казните 3 Элитных врагов под эффектом Безмолвия за один забег.",
+                RewardText = "Альт. личность [Лаппланд]: Лаппланд Декаденца"
+            },
+            ["ach_persona_w_wisadel"] = new()
+            {
+                Key = "ach_persona_w_wisadel",
+                Name = "Корона Предков Каздела: Вишадель",
+                Desc = "Играя за W, нанесите 450+ урона одним взрывом или сокрушите Босса Телепорта быстрее чем за 30 секунд.",
+                RewardText = "Альт. личность [W]: Вишадель (Wiš'adel)"
+            },
+            ["ach_persona_dmc_nero"] = new()
+            {
+                Key = "ach_persona_dmc_nero",
+                Name = "Зажигание Алой Королевы: Неро",
+                Desc = "Играя за Трио DMC, победите Босса Телепорта, применив навык перемещения/стиля [Shift] не менее 8 раз за время боя.",
+                RewardText = "Альт. личность [Трио DMC]: Неро (Nero)"
+            },
+            ["ach_persona_dmc_vergil"] = new()
+            {
+                Key = "ach_persona_dmc_vergil",
+                Name = "Приближающаяся Буря: Вергилий",
+                Desc = "Играя за Трио DMC, победите Босса Телепорта быстрее чем за 25 секунд или одолейте Митрикса.",
+                RewardText = "Альт. личность [Трио DMC]: Вергилий (Vergil)"
+            },
+            ["ach_persona_spamton_neo"] = new()
+            {
+                Key = "ach_persona_spamton_neo",
+                Name = "КРЫЛЬЯ СВОБОДЫ [[СПАМТОН НЕО]]",
+                Desc = "Играя за Спамтона, накопите $400 золота или соберите 10 предметов за один забег, став [[БОЛЬШОЙ ШИШКОЙ]]!",
+                RewardText = "Альт. личность [Спамтон]: СПАМТОН НЕО"
+            },
+            ["ach_persona_don_lantern"] = new()
+            {
+                Key = "ach_persona_don_lantern",
+                Name = "Огонёк Тёмной Чащи: Фонарь E.G.O",
+                Desc = "Играя за Дон Кихот, восстановите суммарно 300 HP в бою за один забег.",
+                RewardText = "Альт. личность [Дон Кихот]: Lobotomy E.G.O::Lantern"
+            },
+            ["ach_persona_don_manager"] = new()
+            {
+                Key = "ach_persona_don_manager",
+                Name = "Пробуждение Второго Сородича: Санчо",
+                Desc = "Играя за Дон Кихот, победите 2 Боссов за один забег или доберитесь до 4-го этапа.",
+                RewardText = "Альт. личность [Дон Кихот]: Управляющая Ла-Манчаленда"
+            },
+            ["ach_persona_bird_long"] = new()
+            {
+                Key = "ach_persona_bird_long",
+                Name = "Беспристрастные Весы: Длинная Птица",
+                Desc = "Играя за Трио Птиц, победите Босса Телепорта, не опустившись ниже 70% здоровья за весь бой.",
+                RewardText = "Альт. личность [Трио Птиц]: Длинная Птица"
+            },
+            ["ach_persona_bird_small"] = new()
+            {
+                Key = "ach_persona_bird_small",
+                Name = "Карающий Клюв Возмездия: Малая Птица",
+                Desc = "Играя за Трио Птиц, уничтожьте 5 врагов в течение 6 секунд после получения урона.",
+                RewardText = "Альт. личность [Трио Птиц]: Маленькая Птица"
+            },
+            ["ach_persona_komeiji_koishi"] = new()
+            {
+                Key = "ach_persona_komeiji_koishi",
+                Name = "Закрытые Глаза Любви: Коиши Комейдзи",
+                Desc = "Играя за Сатори Комейдзи, проведите 30 секунд в активном бою рядом с врагами без получения урона.",
+                RewardText = "Альт. личность [Сатори]: Коиши Комейдзи"
+            },
+            ["ach_persona_buzz_zurg"] = new()
+            {
+                Key = "ach_persona_buzz_zurg",
+                Name = "Галактическая Империя Зурга",
+                Desc = "Играя за Базза Лайтера, победите Дредноут Императора Зурга или 2 Боссов за один забег.",
+                RewardText = "Альт. личность [Базз Лайтер]: Император Зург"
+            },
+            ["ach_persona_v1_v2"] = new()
+            {
+                Key = "ach_persona_v1_v2",
+                Name = "Красная Зеркальная Дуэль: V2",
+                Desc = "Играя за V1, наберите ранг стиля SSS / ULTRAKILL (800+ очков стиля) в бою.",
+                RewardText = "Альт. личность [V1]: Высшая Машина V2"
+            },
+            ["ach_boss_echo_providence"] = new()
+            {
+                Key = "ach_boss_echo_providence",
+                Name = "Тень Булавы Слабых",
+                Desc = "Победите босса Телепорта — Искажённого Провидца.",
+                UnlocksItem = "holy_mantle",
+                RewardText = "Предмет [Isaac]: Святая Мантия"
+            },
+            ["ach_boss_false_son"] = new()
+            {
+                Key = "ach_boss_false_son",
+                Name = "Разбитые Оковы Лунной Погибели",
+                Desc = "Победите босса — Ложного Сына.",
+                UnlocksItem = "totem_undying",
+                RewardText = "Предмет [Minecraft]: Тотем Бессмертия"
+            },
+            ["ach_boss_prts"] = new()
+            {
+                Key = "ach_boss_prts",
+                Name = "Перезагрузка Изначального Протокола",
+                Desc = "Победите босса — PRTS, Исходный Код.",
+                UnlocksItem = "poca_sp_battery",
+                RewardText = "Предмет [Arknights]: Батарея SP Родоса"
+            },
+            ["ach_boss_binah"] = new()
+            {
+                Key = "ach_boss_binah",
+                Name = "Разомкнутый Замок Главы",
+                Desc = "Победите босса — Арбитра Бину.",
+                UnlocksItem = "damocles",
+                RewardText = "Лунный предмет [Isaac]: Дамоклов Меч"
+            },
+            ["ach_boss_roaring_knight"] = new()
+            {
+                Key = "ach_boss_roaring_knight",
+                Name = "Запечатанный Тёмный Фонтан",
+                Desc = "Победите босса — Рокочущего Рыцаря.",
+                UnlocksItem = "brimstone",
+                RewardText = "Предмет [Isaac]: Сера (Brimstone)"
+            },
+            ["ach_boss_septimus"] = new()
+            {
+                Key = "ach_boss_septimus",
+                Name = "Пробуждение от Сна Порядка",
+                Desc = "Победите босса — Великого Септимия, Хор Баланса.",
+                UnlocksItem = "elytra_curse",
+                RewardText = "Лунный предмет [Minecraft]: Проклятые Элитры"
+            },
+            ["ach_horde_many"] = new()
+            {
+                Key = "ach_horde_many",
+                Name = "Один Против Легиона",
+                Desc = "Уничтожьте элитную «Орду Многих», заменившую стража Телепорта и делящую общее здоровье Босса!",
+                UnlocksItem = "black_king_bar",
+                RewardText = "Предмет [Dota 2]: Посох Чёрного Короля (BKB)"
+            },
+            ["ach_item_golden_apple"] = new()
+            {
+                Key = "ach_item_golden_apple",
+                Name = "Золотой Сад Крафтера",
+                Desc = "Накопите более 250 золота за один забег или переживите падение ниже 35% HP в бою.",
+                UnlocksItem = "golden_apple",
+                RewardText = "Предмет [Minecraft]: Золотое Яблоко"
+            },
+            ["ach_item_orirock"] = new()
+            {
+                Key = "ach_item_orirock",
+                Name = "Ферма 1-7",
+                Desc = "Уничтожьте 25 монстров за один забег.",
+                UnlocksItem = "orirock_cluster",
+                RewardText = "Предмет [Arknights]: Кластер Орирока"
+            },
+            ["ach_item_ender_pearl"] = new()
+            {
+                Key = "ach_item_ender_pearl",
+                Name = "Прыжок Сквозь Край",
+                Desc = "Примените навык перемещения [Shift] 15 раз за один забег.",
+                UnlocksItem = "ender_pearl",
+                RewardText = "Предмет [Minecraft]: Эндер-Жемчуг"
             }
         };
 
@@ -743,6 +1128,12 @@ namespace RiskOfCSharp2.Data
             ["tartarus"] = new() { Id = "tartarus", Name = "Башня Тартар (Тёмный Час)", Desc = "Искажённый лабиринт полуночного часа под изумрудной луной, кишащий Арканными Тенями и цепями Жнеца.", Ground = Rgb(18, 36, 28), Ruins = Rgb(34, 66, 52), Accent = Rgb(85, 255, 165), Sky = Rgb(8, 22, 16), Nebula = Rgb(35, 165, 95), Moon = Rgb(145, 255, 175) },
             ["hakurei_shrine"] = new() { Id = "hakurei_shrine", Name = "Храм Хакурей (Генсокё)", Desc = "Заоблачное святилище на границе реальности и фантазии, усыпанное лепестками сакуры и печатями Инь-Ян.", Ground = Rgb(56, 44, 58), Ruins = Rgb(168, 42, 48), Accent = Rgb(255, 135, 185), Sky = Rgb(24, 16, 36), Nebula = Rgb(225, 85, 145), Moon = Rgb(255, 230, 240) },
             ["tracen_derby"] = new() { Id = "tracen_derby", Name = "Ипподром Трейсен (Арима Кинэн)", Desc = "Парадный зелёный стадион финального дерби со стартовыми воротами, трибунами и подковами удачи.", Ground = Rgb(38, 92, 48), Ruins = Rgb(225, 232, 245), Accent = Rgb(255, 205, 65), Sky = Rgb(22, 48, 86), Nebula = Rgb(95, 185, 255), Moon = Rgb(255, 245, 195) },
+            ["dark_sanctuary"] = new() { Id = "dark_sanctuary", Name = "Тёмное Святилище (Deltarune)", Desc = "Готический собор вокруг бьющего в небо чёрно-бирюзового Тёмного Фонтана и витражей пророчества.", Ground = Rgb(20, 18, 42), Ruins = Rgb(48, 42, 88), Accent = Rgb(75, 245, 235), Sky = Rgb(8, 6, 22), Nebula = Rgb(125, 45, 195), Moon = Rgb(185, 255, 250) },
+            ["terminal_lucidity"] = new() { Id = "terminal_lucidity", Name = "Дворец Духов Земли (Тирэйден)", Desc = "Подземный особняк сестёр Комеидзи над Пылающим Адом с витражной розеткой Третьего Глаза и астральными венами.", Ground = Rgb(36, 20, 44), Ruins = Rgb(78, 36, 68), Accent = Rgb(255, 75, 155), Sky = Rgb(16, 8, 24), Nebula = Rgb(195, 45, 115), Moon = Rgb(255, 175, 215) },
+            ["extraction_floor"] = new() { Id = "extraction_floor", Name = "Этаж Извлечения и Философии", Desc = "Чёрно-золотой зал Библиотеки и Корпорации Лоботомия со столпами Сефирот, цепями Замка и чайным павильоном Арбитра.", Ground = Rgb(24, 20, 18), Ruins = Rgb(52, 44, 34), Accent = Rgb(255, 205, 65), Sky = Rgb(10, 8, 8), Nebula = Rgb(165, 120, 35), Moon = Rgb(255, 225, 120) },
+            ["originium_core"] = new() { Id = "originium_core", Name = "Ядро Ассимилированной Вселенной (PRTS)", Desc = "Горизонт кристаллического Ориджиниума и саркофагов Первой Цивилизации под алым созвездием ромбов PRTS ◇.", Ground = Rgb(22, 24, 32), Ruins = Rgb(46, 52, 68), Accent = Rgb(255, 65, 75), Sky = Rgb(8, 10, 18), Nebula = Rgb(195, 38, 52), Moon = Rgb(255, 135, 145) },
+            ["penacony_theater"] = new() { Id = "penacony_theater", Name = "Большой Театр Пенаконии", Desc = "Величественная золотая оперная сцена Мира Грёз с органными трубами Порядка и софитами Гармонии.", Ground = Rgb(44, 26, 48), Ruins = Rgb(168, 136, 72), Accent = Rgb(255, 215, 95), Sky = Rgb(18, 10, 32), Nebula = Rgb(195, 135, 65), Moon = Rgb(255, 240, 185) },
+            ["prime_meridian"] = new() { Id = "prime_meridian", Name = "Изначальный Меридиан", Desc = "Расколотая грозовая вершина колоссальной статуи Провиденса, пронизанная золотыми жеодами Аурелионита и лунными молниями.", Ground = Rgb(34, 42, 58), Ruins = Rgb(66, 78, 104), Accent = Rgb(95, 215, 255), Sky = Rgb(12, 18, 34), Nebula = Rgb(65, 155, 235), Moon = Rgb(255, 215, 95) },
             ["safe_travels"] = new() { Id = "safe_travels", Name = "Корабль UES «Safe Travels»", Desc = "Орбитальный крейсер Объединённой Земли — мирный штаб экипажа выживших после победы над Митриксом.", Ground = Rgb(38, 46, 62), Ruins = Rgb(68, 82, 108), Accent = Rgb(75, 215, 255), Sky = Rgb(6, 10, 22), Nebula = Rgb(42, 115, 205), Moon = Rgb(185, 230, 255) }
         };
 
@@ -772,6 +1163,10 @@ namespace RiskOfCSharp2.Data
             AddItem("bungus", "Неугомонный Гриб", "BUNG", "white", "Стоя на месте >1.2с, создаёт зону лечения (4.5% HP/с вам и союзникам)", Rgb(95, 255, 125));
             AddItem("dorans_blade", "Клинок Дорана", "DORAN", "white", "[LoL] +20 к макс. HP, +8% к урону и +2 HP вампиризма при ударе", Rgb(215, 175, 95));
             AddItem("boots_swiftness", "Ботинки Стремительности", "SWIFT", "white", "[LoL] +16% к скорости бега и устойчивость к замедлению", Rgb(235, 245, 255));
+            AddItem("iron_branch", "Железная Ветвь", "BRNCH", "white", "[Dota 2] +12 к макс. HP, +6% к урону, +5% к атаке и +4% к скорости бега", Rgb(135, 215, 85));
+            AddItem("golden_apple", "Золотое Яблоко", "GAPPL", "white", "[Minecraft] +20 к макс. HP; при падении HP < 50% даёт +35 Золотого Щита (раз в 12с)", Rgb(255, 215, 55));
+            AddItem("sad_onion", "Грустная Луковица", "ONION", "white", "[Isaac] +18% к скорости атаки и брызги едких слёз при попадании", Rgb(215, 235, 175));
+            AddItem("orirock_cluster", "Кластер Орирока", "ORIRK", "white", "[Arknights] +18 к макс. HP и снижает весь входящий урон на 3 ед. за стак", Rgb(145, 132, 112));
 
             // Необычные (Green) — 3 открыты со старта (leeching_seed, infusion, red_whip), 18 за достижения
             AddItem("ukulele", "Укулеле", "UKU", "green", "25% шанс цепной молнии", Rgb(235, 80, 255));
@@ -795,6 +1190,10 @@ namespace RiskOfCSharp2.Data
             AddItem("liandrys_torment", "Мучения Лиандри", "LIAND", "green", "[LoL] Атаки поджигают врагов духовным огнём (6% макс. HP цели + урон за 3с)", Rgb(235, 245, 255));
             AddItem("ludens_companion", "Спутник Людена", "LUDEN", "green", "[LoL] Движение и навыки копят заряды; на 100 выпускает 4 магические сферы", Rgb(185, 95, 255));
             AddItem("statikk_shiv", "Заточка Статикка", "SHIV", "green", "[LoL] Каждая 4-я атака поражает до 5 врагов цепной молнией Статикка", Rgb(255, 235, 75));
+            AddItem("maelstrom", "Маэлстром", "MAELS", "green", "[Dota 2] 25% шанс выпустить синюю цепную молнию в 4 (+2 за стак) врагов (140% ур.)", Rgb(85, 195, 255));
+            AddItem("ender_pearl", "Эндер-Жемчуг", "PEARL", "green", "[Minecraft] Навык [Shift] выпускает Нову Края (160% ур.), даёт +22 Щита и -12% КД Shift", Rgb(65, 215, 185));
+            AddItem("holy_mantle", "Святая Мантия", "MANTL", "green", "[Isaac] Святой щит полностью блокирует 1 удар раз в 18 сек. (-20% КД за стак)", Rgb(135, 215, 255));
+            AddItem("poca_sp_battery", "Батарея SP Родоса", "SPBAT", "green", "[Arknights] Каждая 4-я атака сокращает КД навыков на 0.8с и усиливает след. навык (+15%)", Rgb(95, 245, 195));
 
             // Легендарные (Red) — 2 открыты со старта (behemoth, clover), 12 за достижения
             AddItem("behemoth", "Блистательный Бегемот", "BEHEM", "red", "Все атаки взрываются (+2.5м AoE, +25% ур.)", Rgb(255, 60, 40));
@@ -811,19 +1210,31 @@ namespace RiskOfCSharp2.Data
             AddItem("rabadons_deathcap", "Смертельная Шляпа Рабадона", "RABA", "red", "[LoL] Увеличивает весь наносимый урон атак и способностей на +35%", Rgb(215, 45, 75));
             AddItem("infinity_edge", "Грань Бесконечности", "IE", "red", "[LoL] +15% к шансу крита и увеличивает критический урон на +45%", Rgb(255, 195, 55));
             AddItem("zhonyas_hourglass", "Песочные Часы Жони", "ZHON", "red", "[LoL] При падении HP < 30% включает Золотой Стазис (2.5с неуязвимости, щит и лечение)", Rgb(255, 215, 65));
+            AddItem("black_king_bar", "Посох Чёрного Короля", "BKB", "red", "[Dota 2] Ультимейт [R] включает Аватар на 3.5с (+1с/стак): -50% урона, иммунитет к контролю и +30% ур.", Rgb(255, 205, 55));
+            AddItem("totem_undying", "Тотем Бессмертия", "TOTEM", "red", "[Minecraft] Спасает от гибели 1 раз за этап на стак (50% HP + 50% Щита + золотая взрывная волна)", Rgb(255, 225, 75));
+            AddItem("brimstone", "Сера (Brimstone)", "BRIMS", "red", "[Isaac] Каждая 6-я атака выжигает линию пробивным кровавым лазером Бездны (320% ур.)", Rgb(235, 35, 55));
+            AddItem("silverash_truesilver", "Истинно-Серебряный Разрез", "TRUSL", "red", "[Arknights] Каждые 2.8с обрушивает 3 серебряные волны по 5 врагам (210% ур. и раскол брони)", Rgb(225, 240, 255));
 
-            // Пустота (Void) — все 4 открыты со старта
+            // Пустота (Void) — все 8 открыты со старта
             AddItem("plasma_shrimp", "Плазменная Креветка", "SHRM", "void", "[ПУСТОТА] Пока есть щит (+20 щита), каждая атака пускает ракету (40% ур.)", Rgb(195, 95, 255), isVoid: true);
             AddItem("polylute", "Полилютня Бездны", "PLUTE", "void", "[ПУСТОТА] 25% шанс обрушить на цель серию из 3 ударов молнии Бездны", Rgb(215, 75, 255), isVoid: true);
             AddItem("safer_spaces", "Сфера Бездны", "SPACE", "void", "[ПУСТОТА] Гарантированно блокирует любой удар раз в 12 сек. (-15% КД за стак)", Rgb(180, 90, 255), isVoid: true);
             AddItem("lysate_cell", "Клетка Бездны", "CELL", "void", "[ПУСТОТА] Сокращает перезарядку Ультимейта [R] на 25% за стак", Rgb(225, 110, 255), isVoid: true);
+            AddItem("desolator_void", "Опустошитель Бездны", "DESOL", "void", "[ПУСТОТА / Dota 2] Удары накладывают Порчу Бездны (+8% получаемого урона за заряд до +40%)", Rgb(235, 55, 115), isVoid: true);
+            AddItem("sculk_catalyst", "Скалк-Катализатор", "SCULK", "void", "[ПУСТОТА / MC] Убийства создают зону Скалка (замедляет и бьёт врагов на 95% ур./с, +8 Щита)", Rgb(35, 195, 205), isVoid: true);
+            AddItem("maw_of_void", "Пасть Пустоты", "MAW", "void", "[ПУСТОТА / Isaac] Каждые 3.5с вокруг героя пульсирует чёрно-алое кольцо Бездны (180% ур. и щит)", Rgb(215, 45, 95), isVoid: true);
+            AddItem("seaborne_ichor", "Ихор Морских Рождений", "ICHOR", "void", "[ПУСТОТА / Arknights] Адаптация Морей: +2.5 HP/с регена за стак и шипы щупалец по атакующим", Rgb(95, 135, 255), isVoid: true);
 
-            // Лунные (Lunar) — 2 открыты со старта (shaped_glass, transcendence), 3 за достижения
+            // Лунные (Lunar) — 4 открыты со старта, 5 за достижения
             AddItem("shaped_glass", "Лунное Стекло", "GLASS", "lunar", "[ЛУННЫЙ] Урон x2 (+100%), но макс. HP снижено на 50%", Rgb(70, 175, 255), isLunar: true);
             AddItem("transcendence", "Жук Превосходства", "TRANS", "lunar", "[ЛУННЫЙ] +50% макс. HP и мощный регенерирующий щит", Rgb(65, 195, 255), isLunar: true);
             AddItem("purity", "Чистота", "PURE", "lunar", "[ЛУННЫЙ] Перезарядка всех навыков -2 сек., но удача ниже (-25% к шансам проков)", Rgb(140, 225, 255), isLunar: true);
             AddItem("lunar_pauldron", "Каменный Наплечник", "FLUX", "lunar", "[ЛУННЫЙ] Макс. HP +100% (x2), но скорость бега -30%", Rgb(90, 160, 255), isLunar: true);
             AddItem("spinel_tonic", "Лунный Тоник", "TONIC", "lunar", "[ЛУННЫЙ] На 25с все статы +25% (очищает старые тоники), затем портится!", Rgb(55, 140, 255), isLunar: true);
+            AddItem("armlet_mordiggian", "Армлет Мордиггиана", "ARMLT", "lunar", "[ЛУННЫЙ / Dota 2] +65% к урону и +35% к скорости атаки, но в бою отнимает 2.5% HP/с (до 1 HP)", Rgb(215, 75, 145), isLunar: true);
+            AddItem("elytra_curse", "Проклятые Элитры", "ELYTR", "lunar", "[ЛУННЫЙ / MC] +2 воздушных прыжка и +28% к скорости бега, но макс. HP снижено на 20%", Rgb(125, 165, 245), isLunar: true);
+            AddItem("damocles", "Дамоклов Меч", "DAMOC", "lunar", "[ЛУННЫЙ / Isaac] Каждый сундук роняет 2 предмета! Но удар по HP с шансом 3% обрушивает меч (1 HP)", Rgb(195, 225, 255), isLunar: true);
+            AddItem("originium_prime", "Чистый Ориджиниум", "OPRIM", "lunar", "[ЛУННЫЙ / Arknights] Перезарядка всех навыков -35% и урон навыков +40%, но входящий урон +25%", Rgb(255, 195, 75), isLunar: true);
             AddItem("tonic_affliction", "Испорченный Тоник", "AFLT", "lunar", "[ПРОКЛЯТИЕ ТОНИКА] Все характеристики (-Урон, -HP, -Атака, -Бег) снижены на 12% за стак", Rgb(95, 70, 135), isLunar: false);
 
             foreach (var ach in Achievements.Values)

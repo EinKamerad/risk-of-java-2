@@ -22,9 +22,18 @@ namespace RiskOfCSharp2.Entities
         public int LastAnimStep = 0;
         public float Hp = 110f;
         public float MaxHp = 110f;
+        public float Shield = 0f;
+        public int Gold = 15;
+        public int LunarCoins = 2;
+        public string PlayerName = "";
+        public bool IsSpectator = false;
+        public readonly float[] SkillCds = new float[4];
+        public string SyncedItemsCompact = "";
         public string ActiveEmote = "";
         public string RpsChoiceText = "";
         public float RpsChoiceTimer = 0f;
+
+        public bool IsAliveCombatant => !IsSpectator && Hp > 0f && Enabled && !IsDestroyed;
 
         private SurvivorParts _parts;
         private readonly Entity _labelEnt;
@@ -35,7 +44,8 @@ namespace RiskOfCSharp2.Entities
         {
             PlayerId = playerId;
             CharKey = SurvivorDatabase.Classes.ContainsKey(charKey) ? charKey : "commando";
-            SkinIdx = Math.Clamp(skinIdx, 0, 2);
+            int maxSk = SurvivorDatabase.Classes.TryGetValue(CharKey, out var initCfg) && initCfg.Skins.Count > 0 ? initCfg.Skins.Count - 1 : 2;
+            SkinIdx = Math.Clamp(skinIdx, 0, maxSk);
             _parts = SurvivorDatabase.BuildSurvivorMesh(this, CharKey, SkinIdx);
             _labelEnt = new Entity(parent: this, position: new(0, 2.75f, 0), color: Color.SkyBlue);
             UpdateBillboard();
@@ -85,13 +95,21 @@ namespace RiskOfCSharp2.Entities
 
         private void UpdateBillboard()
         {
+            if (IsSpectator || Hp <= 0f)
+            {
+                _labelEnt.Enabled = false;
+                return;
+            }
+            _labelEnt.Enabled = true;
             string cName = SurvivorDatabase.Classes[CharKey].Name;
+            string dispId = string.IsNullOrWhiteSpace(PlayerName) ? PlayerId.ToUpper() : $"{PlayerName} [{PlayerId.ToUpper()}]";
             string extra = "";
             if (RpsChoiceTimer > 0f && !string.IsNullOrEmpty(RpsChoiceText))
                 extra = $"\n{RpsChoiceText}";
             else if (ActiveEmote == "rps_wait")
                 extra = "\n[E] СЫГРАТЬ В КАМЕНЬ-НОЖНИЦЫ-БУМАГУ!";
-            _labelEnt.BillboardText = $"[{PlayerId.ToUpper()}] {cName}\n{(int)Hp}/{(int)MaxHp} HP{extra}";
+            string shTxt = Shield >= 1f ? $" (+{(int)Shield})" : "";
+            _labelEnt.BillboardText = $"{dispId} — {cName}\n{(int)Hp}{shTxt}/{(int)MaxHp} HP{extra}";
         }
 
         public void SetRpsOutcome(string emote, string badgeText, float duration = 3.2f)
@@ -104,10 +122,19 @@ namespace RiskOfCSharp2.Entities
             UpdateBillboard();
         }
 
+        public void MarkDead()
+        {
+            Hp = 0f;
+            _parts.Root.Enabled = false;
+            EnsureChairProp(false);
+            UpdateBillboard();
+        }
+
         public void RebuildClass(string newCharKey, int newSkinIdx = 0)
         {
-            newSkinIdx = Math.Clamp(newSkinIdx, 0, 2);
-            if (!SurvivorDatabase.Classes.ContainsKey(newCharKey)) return;
+            if (!SurvivorDatabase.Classes.TryGetValue(newCharKey, out var newCfg)) return;
+            int maxSk = newCfg.Skins.Count > 0 ? newCfg.Skins.Count - 1 : 2;
+            newSkinIdx = Math.Clamp(newSkinIdx, 0, maxSk);
             if (newCharKey == CharKey && newSkinIdx == SkinIdx) return;
             CharKey = newCharKey;
             SkinIdx = newSkinIdx;
@@ -137,15 +164,33 @@ namespace RiskOfCSharp2.Entities
             ShieldStance = msg["shield_stance"]?.GetValue<bool>() ?? false;
             Hp = msg["hp"]?.GetValue<float>() ?? Hp;
             MaxHp = MathF.Max(1f, msg["max_hp"]?.GetValue<float>() ?? MaxHp);
+            Shield = msg["shield"]?.GetValue<float>() ?? Shield;
+            Gold = msg["gold"]?.GetValue<int>() ?? Gold;
+            LunarCoins = msg["lunar"]?.GetValue<int>() ?? LunarCoins;
+            string? netName = msg["name"]?.GetValue<string>();
+            if (!string.IsNullOrWhiteSpace(netName)) PlayerName = netName!;
+            IsSpectator = msg["spectator"]?.GetValue<bool>() ?? false;
+            if (msg["cds"] is JsonArray cdArr && cdArr.Count >= 4)
+            {
+                for (int i = 0; i < 4; i++)
+                    SkillCds[i] = cdArr[i]?.GetValue<float>() ?? 0f;
+            }
+            string? netItems = msg["items"]?.GetValue<string>();
+            if (netItems != null) SyncedItemsCompact = netItems;
+
+            bool bodyVis = !IsSpectator && Hp > 0f;
+            _parts.Root.Enabled = bodyVis;
+            if (!bodyVis) EnsureChairProp(false);
+
             bool ultForm = msg["ult_form"]?.GetValue<bool>() ?? false;
             _parts.SetUltForm(ultForm);
 
-            string netEmote = msg["emote"]?.GetValue<string>() ?? "";
+            string netEmote = bodyVis ? (msg["emote"]?.GetValue<string>() ?? "") : "";
             if (RpsChoiceTimer <= 0f)
             {
                 ActiveEmote = netEmote;
                 _parts.SetEmote(ActiveEmote);
-                EnsureChairProp(ActiveEmote == "chair");
+                EnsureChairProp(bodyVis && ActiveEmote == "chair");
             }
 
             int animStep = msg["anim_step"]?.GetValue<int>() ?? LastAnimStep;

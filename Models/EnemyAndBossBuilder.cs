@@ -27,7 +27,7 @@ namespace RiskOfCSharp2.Models
         public Entity? PhaseRing;
     }
 
-    public static class EnemyAndBossBuilder
+    public static partial class EnemyAndBossBuilder
     {
         public static EnemyParts BuildEnemyMesh(Entity parentEntity, string enemyType)
         {
@@ -1711,6 +1711,10 @@ namespace RiskOfCSharp2.Models
                 parts.Torso = torso;
                 parts.LeftArm = lArm;
                 parts.RightArm = rArm;
+            }
+            else
+            {
+                TryBuildExpansionBossMesh(root, parts, enemyType);
             }
 
             return parts;

@@ -11,7 +11,7 @@ using static RiskOfCSharp2.Core.Utils;
 
 namespace RiskOfCSharp2.World
 {
-    public static class StageBuilder
+    public static partial class StageBuilder
     {
         public static readonly List<Entity> GroundTiles = new();
         public static Color CurrentGroundColor = Rgb(48, 56, 52);
@@ -367,6 +367,7 @@ namespace RiskOfCSharp2.World
                 "moon" => 118.0f,
                 "safe_travels" => 96.0f,
                 "tracen_derby" => 68.0f,
+                "dark_sanctuary" or "terminal_lucidity" or "extraction_floor" or "originium_core" or "penacony_theater" or "prime_meridian" => 66.0f,
                 "bazaar" or "pvp" or "pizzeria" or "black_mesa" or "qliphoth" or "hell_cybergrind" or "tartarus" or "hakurei_shrine" => 62.0f,
                 _ => 86.0f
             };
@@ -386,6 +387,12 @@ namespace RiskOfCSharp2.World
                 "tartarus" => GameData.SpecialPalettes["tartarus"],
                 "hakurei_shrine" => GameData.SpecialPalettes["hakurei_shrine"],
                 "tracen_derby" => GameData.SpecialPalettes["tracen_derby"],
+                "dark_sanctuary" => GameData.SpecialPalettes["dark_sanctuary"],
+                "terminal_lucidity" => GameData.SpecialPalettes["terminal_lucidity"],
+                "extraction_floor" => GameData.SpecialPalettes["extraction_floor"],
+                "originium_core" => GameData.SpecialPalettes["originium_core"],
+                "penacony_theater" => GameData.SpecialPalettes["penacony_theater"],
+                "prime_meridian" => GameData.SpecialPalettes["prime_meridian"],
                 "safe_travels" => GameData.SpecialPalettes["safe_travels"],
                 _ => GameData.GetLoopedStagePalette(stageNum, rng)
             };
@@ -408,7 +415,8 @@ namespace RiskOfCSharp2.World
 
             float groundSize = specialMode == "moon" ? 260f
                 : (specialMode is "tracen_derby" ? 156f
-                : (specialMode is "bazaar" or "pvp" or "pizzeria" or "black_mesa" or "qliphoth" or "hell_cybergrind" or "tartarus" or "hakurei_shrine" ? 142f : 220f));
+                : (specialMode is "dark_sanctuary" or "terminal_lucidity" or "extraction_floor" or "originium_core" or "penacony_theater" or "prime_meridian" ? 152f
+                : (specialMode is "bazaar" or "pvp" or "pizzeria" or "black_mesa" or "qliphoth" or "hell_cybergrind" or "tartarus" or "hakurei_shrine" ? 142f : 220f)));
             var ground = new Entity(model: "cube", scale: new(groundSize, 2f, groundSize), position: new(0, -1.0f, 0), color: palette.Ground);
             entitiesList.Add(ground);
             GroundTiles.Add(ground);
@@ -473,25 +481,32 @@ namespace RiskOfCSharp2.World
                 entitiesList.Add(new LunarCauldron(PlaceFixed(new Vector3(10, 0, -6), 1.3f, 2.5f), GameData.RollItemFromPool("red"), reqCount: 5));
                 entitiesList.Add(new BluePortal(PlaceFixed(new Vector3(0, 0, -18), 2.0f, 4.0f), "next_stage"));
 
-                // Замёрзший Кристалл Времени для разблокировки Изобретательницы (Artificer) прямо на Базаре!
-                if (!ProgressData.Instance.UnlockedAchievements.Contains("ach_char_artificer") && !ProgressData.Instance.IsCharacterUnlocked("artificer"))
-                    entitiesList.Add(new CharacterQuestMonument(PlaceFixed(new Vector3(14f, 0f, 16f), 1.6f, 3.6f), "artificer"));
+                // Замёрзший Термальный Кристалл Artificer + скрытые триггеры Пиццерии Fazbear и Сектора C Black Mesa прямо на Базаре
+                CharacterUnlockSystems.PopulateBazaarUnlocks(entitiesList);
 
-                // Секретные порталы во все 7 особых измерений испытаний по внешнему кольцу Базара
-                (string mode, string charKey, float px, float pz)[] bazaarSecretPortals =
+                // Секретные порталы во все 13 особых измерений испытаний по внешнему кольцу Базара
+                (string mode, string[] charKeys, float px, float pz)[] bazaarSecretPortals =
                 {
-                    ("pizzeria", "freddy", -24f, 14f),
-                    ("black_mesa", "freeman", -28f, -2f),
-                    ("qliphoth", "dmc_trio", -22f, -18f),
-                    ("hell_cybergrind", "v1", 22f, -18f),
-                    ("tartarus", "aigis", 28f, -2f),
-                    ("hakurei_shrine", "reimu", 24f, 14f),
-                    ("tracen_derby", "gold_ship", -15f, 24f)
+                    ("pizzeria", new[] { "freddy" }, -24f, 14f),
+                    ("black_mesa", new[] { "freeman" }, -28f, -2f),
+                    ("qliphoth", new[] { "dmc_trio" }, -22f, -18f),
+                    ("hell_cybergrind", new[] { "v1" }, 22f, -18f),
+                    ("tartarus", new[] { "aigis" }, 28f, -2f),
+                    ("hakurei_shrine", new[] { "reimu", "komeiji" }, 24f, 14f),
+                    ("tracen_derby", new[] { "gold_ship", "daitaku_helios" }, -15f, 24f),
+                    ("dark_sanctuary", new[] { "susie" }, -37f, 22f),
+                    ("terminal_lucidity", new[] { "spamton" }, -40f, -12f),
+                    ("extraction_floor", new[] { "binah", "don_quixote" }, -14f, -34f),
+                    ("originium_core", new[] { "priestess", "closure" }, 14f, -34f),
+                    ("penacony_theater", new[] { "robin" }, 40f, -12f),
+                    ("prime_meridian", new[] { "false_son" }, 37f, 22f)
                 };
-                foreach (var (sMode, sChar, spx, spz) in bazaarSecretPortals)
+                foreach (var (sMode, sChars, spx, spz) in bazaarSecretPortals)
                 {
-                    if (!ProgressData.Instance.UnlockedAchievements.Contains($"ach_char_{sChar}") &&
-                        (sChar == "v1" || !ProgressData.Instance.IsCharacterUnlocked(sChar)))
+                    bool anyLocked = sChars.Any(sChar =>
+                        !ProgressData.Instance.UnlockedAchievements.Contains($"ach_char_{sChar}") &&
+                        (sChar == "v1" || !ProgressData.Instance.IsCharacterUnlocked(sChar)));
+                    if (anyLocked)
                     {
                         entitiesList.Add(new SecretStagePortal(PlaceFixed(new Vector3(spx, 0f, spz), 1.8f, 4.5f), sMode));
                     }
@@ -500,7 +515,8 @@ namespace RiskOfCSharp2.World
                 return (entitiesList, null, palette);
             }
 
-            if (specialMode is "pizzeria" or "black_mesa" or "qliphoth" or "hell_cybergrind" or "tartarus" or "hakurei_shrine" or "tracen_derby")
+            if (specialMode is "pizzeria" or "black_mesa" or "qliphoth" or "hell_cybergrind" or "tartarus" or "hakurei_shrine" or "tracen_derby"
+                or "dark_sanctuary" or "terminal_lucidity" or "extraction_floor" or "originium_core" or "penacony_theater" or "prime_meridian")
             {
                 BuildSecretStageArena(entitiesList, palette, specialMode, stageNum, rng);
                 return (entitiesList, null, palette);
@@ -798,86 +814,28 @@ namespace RiskOfCSharp2.World
                 entitiesList.Add(prop);
             }
 
-            // 8. Уникальные памятники для всех 31 испытания персонажей и секретные порталы.
-            // Используют отдельный генератор случайных чисел: их набор зависит от личного прогресса игрока
-            // и не должен сдвигать общую раскладку этапа (важно для синхронизации в кооперативе).
-            var questRng = new Random(seed * 7919 + stageNum * 31 + 17);
-            string[] allQuestChars =
-            {
-                "commando", "huntress", "sol", "gwen", "v1", "cheburashka",
-                "artificer", "buzz", "enforcer", "scout", "m4a1", "medic", "aigis", "reimu",
-                "mindustry", "slark", "tidehunter", "freeman", "dante", "ahri", "lappland",
-                "w_arknights", "gold_ship", "pushnoy", "freddy", "steve", "jotaro", "vyper", "haze", "dmc_trio", "jack_o"
-            };
-            var lockedChars = allQuestChars.Where(ck =>
-                !ProgressData.Instance.UnlockedAchievements.Contains($"ach_char_{ck}") &&
-                (ck == "commando" || !ProgressData.Instance.IsCharacterUnlocked(ck))).ToList();
-            if (lockedChars.Count > 0)
-            {
-                int spawnCount = Math.Min(6, lockedChars.Count);
-                int startOffset = ((stageNum - 1) * 5 + Math.Abs(seed % 7)) % lockedChars.Count;
-                for (int qIdx = 0; qIdx < spawnCount; qIdx++)
-                {
-                    string qChar = lockedChars[(startOffset + qIdx) % lockedChars.Count];
-                    float qAng = (qIdx / (float)spawnCount) * MathF.PI * 2f + 0.35f;
-                    float qDist = 24f + (float)questRng.NextDouble() * 30f;
-                    Vector3 qDesired = new(MathF.Cos(qAng) * qDist, 0f, MathF.Sin(qAng) * qDist);
-                    Vector3 qPos = PlaceFixed(qDesired, 1.6f, 3.6f, 0.8f);
-                    entitiesList.Add(new CharacterQuestMonument(qPos, qChar));
-
-                    // Дополнительно спавним секретный портал рядом для всех 7 персонажей с собственными секретными измерениями
-                    string? secMode = qChar switch
-                    {
-                        "freddy" => "pizzeria",
-                        "freeman" => "black_mesa",
-                        "dmc_trio" => "qliphoth",
-                        "v1" => "hell_cybergrind",
-                        "aigis" => "tartarus",
-                        "reimu" => "hakurei_shrine",
-                        "gold_ship" => "tracen_derby",
-                        _ => null
-                    };
-                    if (secMode != null)
-                    {
-                        Vector3 portalPos = PlaceFixed(qPos + new Vector3(6.5f, 0f, 4.5f), 1.8f, 4.5f, 0.6f);
-                        entitiesList.Add(new SecretStagePortal(portalPos, secMode));
-                    }
-                }
-            }
+            // 8. Уникальные каноничные события разблокировки 44 выживших (отдельный RNG — не сдвигает реплеи и кооператив).
+            CharacterUnlockSystems.PopulateRegularStageUnlocks(entitiesList, stageNum, seed, tp);
 
             return (entitiesList, tp, palette);
         }
 
         // =========================================================================================
-        // 7 УНИКАЛЬНЫХ СЕКРЕТНЫХ ИЗМЕРЕНИЙ И АРЕН ИСПЫТАНИЙ
+        // 13 УНИКАЛЬНЫХ СЕКРЕТНЫХ ИЗМЕРЕНИЙ И АРЕН ИСПЫТАНИЙ
         // =========================================================================================
         private static void BuildSecretStageArena(
             List<Entity> entitiesList, StagePalette palette, string specialMode, int stageNum, Random rng)
         {
             int secChestCost = (int)(28 * MathF.Pow(1.38f, Math.Max(0, stageNum - 1)));
-            string targetChar = specialMode switch
-            {
-                "pizzeria" => "freddy",
-                "black_mesa" => "freeman",
-                "qliphoth" => "dmc_trio",
-                "hell_cybergrind" => "v1",
-                "tartarus" => "aigis",
-                "hakurei_shrine" => "reimu",
-                "tracen_derby" => "gold_ship",
-                _ => "freddy"
-            };
-
-            Vector3 monumentPos = specialMode == "tracen_derby" ? new Vector3(-24f, 0f, 0f) : new Vector3(0f, 0f, 15f);
 
             // Сначала строится геометрия арены (с коллайдерами), а уже потом в свободные точки ставятся
-            // памятник, портал, сундуки и святилище — чтобы они никогда не оказывались внутри столов, колонн и сцен.
+            // уникальные испытания разблокировки, портал, сундуки и святилище.
             BuildSecretArenaGeometry(entitiesList, palette, specialMode, rng);
 
             // Точка высадки игрока в центре арены остаётся свободной
             Physics.RegisterSpawnBlocker(Vector3.Zero, 3.5f, 4.0f);
 
-            if (!ProgressData.Instance.UnlockedAchievements.Contains($"ach_char_{targetChar}"))
-                entitiesList.Add(new CharacterQuestMonument(PlaceFixed(monumentPos, 1.6f, 3.6f, 0.8f), targetChar));
+            CharacterUnlockSystems.PopulateSecretArenaUnlocks(entitiesList, specialMode, stageNum);
 
             entitiesList.Add(new BluePortal(PlaceFixed(new Vector3(0f, 0f, -26f), 2.0f, 4.0f), "next_stage"));
             if (!GameData.HasArtifact("sacrifice"))
@@ -1101,6 +1059,9 @@ namespace RiskOfCSharp2.World
                     Physics.Obstacles.Add(new ObstacleCircle(0f, 5.5f, 2.2f, 4.5f, 0f));
                     break;
                 }
+                default:
+                    BuildExpansionSecretArenaGeometry(entitiesList, palette, specialMode, rng);
+                    break;
             }
 
             // Внешняя ограда по периметру арены: видимая балюстрада с твёрдым коллайдером
@@ -1544,10 +1505,16 @@ namespace RiskOfCSharp2.World
                     entitiesList.Add(new SafeTravelsNpc(PlaceCrewMember(pos, key == "dmc_vergil" ? 0.9f : 0.6f), key, yaw, zone, emote));
             }
 
-            // Страховочная проверка: гарантируем присутствие всех 39 персон из SafeTravelsDialogues.AllPersonaKeys
+            PopulateExpansionSafeTravelsCrew(entitiesList, spawnedSet);
+
+            // Страховочная проверка: гарантируем присутствие всех доступных персон из SafeTravelsDialogues.AllPersonaKeys
             int extraIdx = 0;
             foreach (var pk in SafeTravelsDialogues.AllPersonaKeys)
             {
+                if ((pk is "bird_trio" or "bird_long" or "bird_small") && !ProgressData.Instance.IsBirdTrioAuthorized())
+                    continue;
+                if (pk == "apocalypse_bird" && !ProgressData.Instance.IsCharacterUnlocked("apocalypse_bird"))
+                    continue;
                 if (spawnedSet.Add(pk))
                 {
                     float ang = extraIdx * 0.85f;

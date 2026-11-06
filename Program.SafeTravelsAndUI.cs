@@ -117,10 +117,154 @@ namespace RiskOfCSharp2
 
         private static void RestoreInGameCursorIfNeeded()
         {
-            if (_paused || HasAnyInGameModalOpen() || (_run != null && (SurvivorDatabase.IsMobaCharacter(_run.CharKey) || _run.CharKey == "mindustry")))
+            bool shouldShowCursor = _screen != "in_game"
+                || _paused
+                || HasAnyInGameModalOpen()
+                || Raylib.IsKeyDown(KeyboardKey.Tab)
+                || (_run != null && !IsSpectating && (SurvivorDatabase.IsMobaCharacter(_run.CharKey) || _run.CharKey == "mindustry"));
+
+            if (shouldShowCursor)
+            {
+                bool wasHidden = Raylib.IsCursorHidden();
                 Raylib.EnableCursor();
+                if (wasHidden)
+                {
+                    int sw = Raylib.GetScreenWidth();
+                    int sh = Raylib.GetScreenHeight();
+                    if (sw > 0 && sh > 0)
+                        Raylib.SetMousePosition(sw / 2, sh / 2);
+                }
+            }
             else
-                Raylib.DisableCursor();
+            {
+                if (!Raylib.IsCursorHidden())
+                {
+                    Raylib.DisableCursor();
+                    _skipMouseDeltaFrames = 2;
+                }
+            }
+        }
+
+        private static void DrawItemIconGlyph(int cx, int cy, float r, string itemKey, Data.ItemInfo info)
+        {
+            Color col = info.Color;
+            Color soft = Rgb(col.R, col.G, col.B, 90);
+            if (info.IsLunar)
+            {
+                Raylib.DrawPoly(new Vector2(cx, cy), 4, r, 45f, soft);
+                Raylib.DrawPolyLinesEx(new Vector2(cx, cy), 4, r, 45f, 1.8f, col);
+                Raylib.DrawCircle(cx, cy, r * 0.34f, Color.White);
+                return;
+            }
+            if (info.IsVoid)
+            {
+                Raylib.DrawCircle(cx, cy, r * 0.88f, Rgb(95, 28, 138, 140));
+                Raylib.DrawPolyLinesEx(new Vector2(cx, cy), 6, r, 15f, 1.8f, col);
+                Raylib.DrawCircle(cx, cy, r * 0.28f, Rgb(245, 195, 255));
+                return;
+            }
+
+            if (itemKey is "bungus" or "wungus" or "medkit" or "bison_steak" or "infusion" or "tarrasque" or "leeching_seed" or "aegis" or "warmogs" or "rejuv_rack")
+            {
+                int arm = Math.Max(2, (int)(r * 0.36f));
+                int len = Math.Max(5, (int)(r * 0.92f));
+                Raylib.DrawCircle(cx, cy, r * 0.95f, soft);
+                Raylib.DrawRectangle(cx - arm, cy - len, arm * 2, len * 2, col);
+                Raylib.DrawRectangle(cx - len, cy - arm, len * 2, arm * 2, col);
+            }
+            else if (itemKey is "bear" or "repulsion_armor" or "opal" or "rose_buckler" or "guardian_angel" or "zhonyas")
+            {
+                Raylib.DrawPoly(new Vector2(cx, cy), 6, r * 0.95f, 30f, soft);
+                Raylib.DrawPolyLinesEx(new Vector2(cx, cy), 6, r * 0.95f, 30f, 2.0f, col);
+                Raylib.DrawCircle(cx, cy, r * 0.32f, Color.White);
+            }
+            else if (itemKey is "hoof" or "energy_drink" or "red_whip" or "boots_swiftness" or "feather" or "wax_quill" or "hardlight" or "ender_pearl")
+            {
+                Raylib.DrawCircle(cx, cy, r * 0.9f, soft);
+                int d = Math.Max(4, (int)(r * 0.65f));
+                Raylib.DrawLineEx(new Vector2(cx - d, cy + d * 0.6f), new Vector2(cx, cy - d * 0.7f), 2.2f, col);
+                Raylib.DrawLineEx(new Vector2(cx, cy - d * 0.7f), new Vector2(cx + d, cy + d * 0.6f), 2.2f, col);
+                Raylib.DrawLineEx(new Vector2(cx - d * 0.7f, cy + d), new Vector2(cx, cy + d * 0.1f), 2.0f, Color.White);
+                Raylib.DrawLineEx(new Vector2(cx, cy + d * 0.1f), new Vector2(cx + d * 0.7f, cy + d), 2.0f, Color.White);
+            }
+            else if (itemKey is "lens" or "laser_scope" or "infinity_edge" or "predatory" or "crowbar" or "tri_tip" or "dorans_blade" or "blade_ruined_king" or "harvester_scythe" or "syringe")
+            {
+                Raylib.DrawCircleLines(cx, cy, r * 0.85f, col);
+                int d = Math.Max(4, (int)(r * 0.95f));
+                Raylib.DrawLineEx(new Vector2(cx - d, cy + d), new Vector2(cx + d, cy - d), 2.2f, col);
+                Raylib.DrawCircle(cx, cy, r * 0.25f, Color.White);
+            }
+            else
+            {
+                Raylib.DrawPoly(new Vector2(cx, cy), 4, r * 0.95f, 0f, soft);
+                Raylib.DrawPolyLinesEx(new Vector2(cx, cy), 4, r * 0.95f, 0f, 1.8f, col);
+                Raylib.DrawPoly(new Vector2(cx, cy), 4, r * 0.48f, 45f, Color.White);
+            }
+        }
+
+        private static bool DrawItemIconCell(Rectangle rect, string itemKey, Data.ItemInfo info, int count, Vector2 mousePos, bool compactHud = false)
+        {
+            bool hovered = Raylib.CheckCollisionPointRec(mousePos, rect);
+            Color bg = hovered
+                ? Rgb(44, 62, 96, 246)
+                : Rgb(22, 30, 46, compactHud ? 215 : 238);
+            Raylib.DrawRectangleRec(rect, bg);
+            Raylib.DrawRectangle((int)rect.X, (int)rect.Y, (int)rect.Width, 3, info.Color);
+            Raylib.DrawRectangleLinesEx(rect, hovered ? 2.0f : 1.0f,
+                hovered ? Color.Yellow : Rgb(info.Color.R, info.Color.G, info.Color.B, compactHud ? 120 : 165));
+
+            if (compactHud)
+            {
+                DrawItemIconGlyph((int)(rect.X + 12f), (int)(rect.Y + rect.Height * 0.52f), 7.5f, itemKey, info);
+                Engine.DrawTextCentered(info.Short, rect.X + rect.Width * 0.62f, rect.Y + 11f, 11f, info.Color);
+                Engine.DrawTextCentered($"x{count}", rect.X + rect.Width * 0.62f, rect.Y + 25f, 11.5f, Color.White);
+            }
+            else
+            {
+                float glyphR = MathF.Min(rect.Width, rect.Height) * 0.24f;
+                DrawItemIconGlyph((int)(rect.X + rect.Width * 0.5f), (int)(rect.Y + rect.Height * 0.40f), glyphR, itemKey, info);
+                Engine.DrawTextCentered(info.Short, rect.X + rect.Width * 0.5f, rect.Y + rect.Height - 21f, 11.5f, info.Color);
+                string stackStr = $"x{count}";
+                Raylib.DrawRectangle((int)(rect.X + rect.Width - 30), (int)(rect.Y + rect.Height - 16), 28, 14, Rgb(10, 14, 24, 215));
+                Engine.DrawTextCentered(stackStr, rect.X + rect.Width - 16f, rect.Y + rect.Height - 9f, 11.5f, Color.White);
+            }
+            return hovered;
+        }
+
+        private static void DrawClampedItemTooltip(Data.ItemInfo info, int count, Vector2 mousePos, bool forceDetailed = false)
+        {
+            int sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();
+            bool holdAlt = Raylib.IsKeyDown(KeyboardKey.LeftAlt) || Raylib.IsKeyDown(KeyboardKey.RightAlt);
+            bool useAbbrev = !forceDetailed && (Data.UserSettings.Instance.CompactItemTooltips ^ holdAlt);
+
+            int tipW = Math.Min(useAbbrev ? 340 : 410, sw - 28);
+            int innerW = tipW - 24;
+            string bodyText = useAbbrev ? info.GetAbbreviatedDesc(68) : info.Desc;
+            float bodyFont = 14f;
+            float bodyH = Engine.MeasureWrappedHeight(bodyText, innerW, bodyFont, 4f);
+            string footerHint = useAbbrev
+                ? "[Alt — подробные статы | C в TAB — переключить вид]"
+                : "[Alt — краткий вид | C в TAB — переключить вид]";
+            int tipH = (int)MathF.Ceiling(56f + bodyH + 24f);
+
+            float tx = mousePos.X + 16f;
+            float ty = mousePos.Y + 16f;
+            if (tx + tipW > sw - 12) tx = mousePos.X - tipW - 14f;
+            if (ty + tipH > sh - 12) ty = mousePos.Y - tipH - 12f;
+            tx = Math.Clamp(tx, 10f, Math.Max(10f, sw - tipW - 10f));
+            ty = Math.Clamp(ty, 10f, Math.Max(10f, sh - tipH - 10f));
+
+            Rectangle box = new(tx, ty, tipW, tipH);
+            Raylib.DrawRectangle((int)tx + 4, (int)ty + 4, tipW, tipH, Rgb(0, 0, 0, 165));
+            Raylib.DrawRectangleRec(box, Rgb(12, 16, 28, 250));
+            Raylib.DrawRectangle((int)tx, (int)ty, tipW, 4, info.Color);
+            Raylib.DrawRectangleLinesEx(box, 1.5f, info.Color);
+
+            string title = count > 0 ? $"{info.Name}  [x{count}]" : info.Name;
+            Engine.DrawTextLeft(title, tx + 12f, ty + 10f, 16.5f, info.Color);
+            Engine.DrawTextLeft($"Редкость: {info.TierName}  ·  Код: [{info.Short}]", tx + 12f, ty + 31f, 12.5f, Color.Gold);
+            Engine.DrawTextWrapped(bodyText, tx + 12f, ty + 52f, innerW, bodyFont, Color.White, 4f);
+            Engine.DrawTextLeft(footerHint, tx + 12f, ty + tipH - 19f, 11.5f, Rgb(145, 175, 210));
         }
 
         private static void EnsureLocalChairProp(bool visible)
@@ -179,7 +323,7 @@ namespace RiskOfCSharp2
 
         private static void UpdateEmoteWheelAndActiveEmote(float dt)
         {
-            if (_run == null) return;
+            if (_run == null || IsSpectating) return;
 
             // Открытие / закрытие колеса эмоций по клавише [L]
             if (!_dialogueOpen && !_rpsOpen && !_workbenchOpen && _commandPickerQueue.Count == 0 && !_safeTravelsWardrobeOpen && _cutsceneTimer <= 0f)
@@ -200,7 +344,7 @@ namespace RiskOfCSharp2
 
                 int sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();
                 Vector2 center = new(sw * 0.5f, sh * 0.5f);
-                Vector2 mp = Raylib.GetMousePosition();
+                Vector2 mp = Engine.GetUiMousePosition();
                 Vector2 delta = mp - center;
                 float dist = delta.Length();
 
@@ -381,7 +525,7 @@ namespace RiskOfCSharp2
 
             string charKey = overrideCharKey ?? _selectedChar;
             bool charAllowedOnShip = charKey == "sanabi"
-                ? (ProgressData.Instance.IsSanabiAuthorized() || IsSafeTravelsUnlocked())
+                ? (ProgressData.Instance.IsCharacterUnlocked("sanabi") || IsSafeTravelsUnlocked())
                 : ProgressData.Instance.IsCharacterUnlocked(charKey);
             if (!SurvivorDatabase.Classes.ContainsKey(charKey) || !charAllowedOnShip)
                 charKey = "commando";
@@ -391,8 +535,9 @@ namespace RiskOfCSharp2
             _workbenchOpen = false;
             _mainPedestal.Enabled = false;
             _menuCrystal.Enabled = false;
+            PurgeWorldEntities(keepCurrentRunPlayer: false);
             if (SurvivorDatabase.IsMobaCharacter(charKey) || charKey == "mindustry") Raylib.EnableCursor();
-            else Raylib.DisableCursor();
+            else { Raylib.DisableCursor(); _skipMouseDeltaFrames = 2; }
 
             RunKills = 0;
             RunBossKills = 0;
@@ -549,8 +694,9 @@ namespace RiskOfCSharp2
             {
                 var (cKey, sIdx) = SafeTravelsDialogues.SplitPersonaKey(pKey);
                 if (!SurvivorDatabase.Classes.TryGetValue(cKey, out var cfg)) continue;
+                if (!ProgressData.Instance.IsCharacterVisible(cKey)) continue;
                 bool charUnlocked = cKey == "sanabi"
-                    ? (ProgressData.Instance.IsSanabiAuthorized() || IsSafeTravelsUnlocked())
+                    ? (ProgressData.Instance.IsCharacterUnlocked("sanabi") || IsSafeTravelsUnlocked())
                     : ProgressData.Instance.IsCharacterUnlocked(cKey);
                 bool skinUnlocked = sIdx <= 0 || (sIdx < cfg.Skins.Count && ProgressData.Instance.IsSkinUnlocked(cKey, sIdx, cfg.Skins[sIdx].UnlockAchievementKey));
                 bool unlocked = charUnlocked && skinUnlocked;
@@ -563,18 +709,19 @@ namespace RiskOfCSharp2
                 entries.Add((cKey, sIdx, SafeTravelsDialogues.GetPersonaDisplayName(pKey), sub, col, unlocked));
             }
 
-            int mw = 1040, mh = 640, mx = (sw - mw) / 2, my = (sh - mh) / 2;
+            int mw = Math.Min(1040, sw - 28), mh = Math.Min(640, sh - 28), mx = (sw - mw) / 2, my = (sh - mh) / 2;
             Raylib.DrawRectangle(0, 0, sw, sh, Rgb(6, 10, 18, 175));
             Raylib.DrawRectangle(mx, my, mw, mh, Rgb(12, 18, 32, 250));
             Raylib.DrawRectangle(mx, my, mw, 4, Color.SkyBlue);
 
-            Engine.DrawTextLeft("ТЕРМИНАЛ ЭКИПАЖА UES «SAFE TRAVELS» :: ВЫБОР ПЕРСОНАЖА ИЛИ АЛЬТ-ВЕРСИИ", mx + 24, my + 16, 19f, Color.SkyBlue);
-            Engine.DrawTextLeft("Переключайтесь между любыми открытыми героями и их альт-версиями, чтобы увидеть уникальные диалоги со всем экипажем!", mx + 24, my + 42, 13f, Color.Gold);
+            Engine.DrawTextLeft("ТЕРМИНАЛ ЭКИПАЖА UES «SAFE TRAVELS» :: ВЫБОР ПЕРСОНАЖА ИЛИ АЛЬТ-ВЕРСИИ", mx + 20, my + 14, 17.5f, Color.SkyBlue);
+            Engine.DrawTextLeft("Переключайтесь между любыми открытыми героями и их альт-версиями, чтобы увидеть уникальные диалоги со всем экипажем!", mx + 20, my + 38, 12.5f, Color.Gold);
 
-            if (Engine.DrawButton(new Rectangle(mx + mw - 180, my + 12, 156, 34), "ЗАКРЫТЬ [ESC/H]",
+            if (Engine.DrawButton(new Rectangle(mx + mw - 176, my + 12, 156, 32), "ЗАКРЫТЬ [ESC/H]",
                 Rgb(115, 38, 48), Rgb(160, 55, 68), Color.White, 13f, Color.Red))
             {
                 _safeTravelsWardrobeOpen = false;
+                ConsumeGameplayClickOnResume();
                 RestoreInGameCursorIfNeeded();
                 return;
             }
@@ -585,19 +732,25 @@ namespace RiskOfCSharp2
             int start = _safeTravelsWardrobePage * perPage;
 
             string curPersona = SafeTravelsDialogues.GetPersonaKey(_run.CharKey, ProgressData.Instance.GetSelectedSkin(_run.CharKey));
+            int gridW = mw - 40;
+            int cellStepX = gridW / 4;
+            int cellW = cellStepX - 10;
+            int gridH = mh - 140;
+            int cellStepY = gridH / 4;
+            int cellH = Math.Max(68, cellStepY - 10);
 
             for (int i = 0; i < perPage && start + i < entries.Count; i++)
             {
                 var item = entries[start + i];
                 int r = i / 4, col = i % 4;
-                Rectangle rect = new(mx + 24 + col * 248, my + 74 + r * 116, 238, 104);
+                Rectangle rect = new(mx + 20 + col * cellStepX, my + 68 + r * cellStepY, cellW, cellH);
                 string itemPersona = SafeTravelsDialogues.GetPersonaKey(item.CharKey, item.SkinIdx);
                 bool isCur = itemPersona == curPersona;
 
                 string titlePrefix = item.Unlocked ? "" : "[ЗАКР.] ";
                 if (Engine.DrawButton(rect, $"{titlePrefix}{item.Title}\n{item.Sub}",
                     isCur ? Rgb(42, 86, 148) : (item.Unlocked ? Rgb(20, 28, 44) : Rgb(14, 16, 26)), Rgb(56, 104, 175),
-                    isCur ? Color.Yellow : (item.Unlocked ? Color.White : Rgb(145, 155, 175)), 13f,
+                    isCur ? Color.Yellow : (item.Unlocked ? Color.White : Rgb(145, 155, 175)), 12.5f,
                     isCur ? Color.Yellow : (item.Unlocked ? item.Col : Color.Gray)))
                 {
                     if (item.Unlocked)
@@ -617,16 +770,18 @@ namespace RiskOfCSharp2
                 }
             }
 
-            int botY = my + mh - 62;
-            if (Engine.DrawButton(new Rectangle(mx + 24, botY, 150, 40), "<- ПРЕД.", Rgb(36, 48, 72), Rgb(58, 78, 114), Color.White, 14f))
+            int botY = my + mh - 54;
+            if (Engine.DrawButton(new Rectangle(mx + 20, botY, 136, 38), "<- ПРЕД.", Rgb(36, 48, 72), Rgb(58, 78, 114), Color.White, 13.5f))
                 _safeTravelsWardrobePage = Math.Clamp(_safeTravelsWardrobePage - 1, 0, totalPages - 1);
-            Engine.DrawTextCentered($"Страница {_safeTravelsWardrobePage + 1} / {totalPages}  (Открыто личностей: {unlockedCount}/{entries.Count})", mx + 360, botY + 20, 15f, Color.White);
-            if (Engine.DrawButton(new Rectangle(mx + 560, botY, 150, 40), "СЛЕД. ->", Rgb(36, 48, 72), Rgb(58, 78, 114), Color.White, 14f))
+            Engine.DrawTextCentered($"Стр. {_safeTravelsWardrobePage + 1}/{totalPages} ({unlockedCount}/{entries.Count})", mx + mw * 0.36f, botY + 19, 14f, Color.White);
+            if (Engine.DrawButton(new Rectangle(mx + (int)(mw * 0.54f), botY, 136, 38), "СЛЕД. ->", Rgb(36, 48, 72), Rgb(58, 78, 114), Color.White, 13.5f))
                 _safeTravelsWardrobePage = Math.Clamp(_safeTravelsWardrobePage + 1, 0, totalPages - 1);
 
-            if (Engine.DrawButton(new Rectangle(mx + 730, botY, 286, 40),
+            int cdBtnX = mx + (int)(mw * 0.54f) + 148;
+            int cdBtnW = Math.Max(180, mx + mw - 20 - cdBtnX);
+            if (Engine.DrawButton(new Rectangle(cdBtnX, botY, cdBtnW, 38),
                 _run.ZeroCooldownSandbox ? "КД НАВЫКОВ: 0 СЕК [ВКЛ]" : "ОТКЛЮЧИТЬ КД НА ПОЛИГОНЕ",
-                _run.ZeroCooldownSandbox ? Rgb(36, 105, 68) : Rgb(44, 56, 82), Rgb(62, 128, 92), Color.White, 13f, Color.Lime))
+                _run.ZeroCooldownSandbox ? Rgb(36, 105, 68) : Rgb(44, 56, 82), Rgb(62, 128, 92), Color.White, 12.5f, Color.Lime))
             {
                 _run.ToggleSafeTravelsZeroCooldowns();
             }
@@ -1273,14 +1428,6 @@ namespace RiskOfCSharp2
         // =========================================================================================
         public static (string HowTo, string Reward) GetCharacterUnlockInfo(string charKey)
         {
-            if (charKey == "sanabi")
-            {
-                return (
-                    "Авторизуйтесь в главном меню под секретным кодовым позывным Бригадного Генерала (или посетите UES «Safe Travels»).",
-                    "Секретный выживший «Бригадный Генерал (SANABI)»"
-                );
-            }
-
             string achKey = $"ach_char_{charKey}";
             if (GameData.Achievements.TryGetValue(achKey, out var ach) && ach.UnlocksCharacter == charKey)
             {
@@ -1319,7 +1466,11 @@ namespace RiskOfCSharp2
             if (skinIdx <= 0 || skinIdx >= cfg.Skins.Count) return "Открыт по умолчанию";
             var sk = cfg.Skins[skinIdx];
             if (!string.IsNullOrEmpty(sk.UnlockAchKey) && GameData.Achievements.TryGetValue(sk.UnlockAchKey, out var ach))
+            {
+                if (sk.UnlockAchKey.StartsWith("ach_persona_", StringComparison.Ordinal))
+                    return $"Испытание «{ach.Name}»: {ach.Desc}";
                 return $"Играя за «{cfg.Name}», выполните «{ach.Name}»: {ach.Desc}";
+            }
             return !string.IsNullOrEmpty(sk.UnlockReqText) ? sk.UnlockReqText : "Открывается испытанием персонажа";
         }
 
@@ -1482,8 +1633,8 @@ namespace RiskOfCSharp2
             }
             else if (cat == "bosses")
             {
-                _logDetailActorBaseScale = key == "magma_worm" ? 0.44f : 0.52f;
-                float yOff = key is "vagrant" or "solus_control" ? -0.30f : (key == "magma_worm" ? 0.35f : 0.12f);
+                _logDetailActorBaseScale = key == "magma_worm" ? 0.44f : (key is "great_septimus" or "prts_source" ? 0.46f : 0.52f);
+                float yOff = key is "vagrant" or "solus_control" or "prts_source" or "great_septimus" ? -0.30f : (key == "magma_worm" ? 0.35f : 0.12f);
                 _logDetailTargetY = 1.25f;
                 _logDetailPreviewActor.Position = new Vector3(0f, yOff, 0f);
                 _logDetailPreviewRing.Color = key == "mithrix" ? Color.SkyBlue : Color.Red;
@@ -1526,6 +1677,12 @@ namespace RiskOfCSharp2
                         "meadow" => "astral_ring",
                         "roost" or "moon" or "qliphoth" => "arch",
                         "acres" or "bazaar" or "pizzeria" => "monolith",
+                        "dark_sanctuary" => "dark_fountain_spire",
+                        "terminal_lucidity" => "pipis_billboard",
+                        "extraction_floor" => "qliphoth_cage",
+                        "originium_core" => "originium_monolith",
+                        "penacony_theater" => "penacony_organ",
+                        "prime_meridian" => "aurelionite_geode",
                         _ => "crystals"
                     };
                     WorldStructuresBuilder.BuildMapStructure(root, stType, pal, Vector3.Zero, 25f);
@@ -1591,7 +1748,7 @@ namespace RiskOfCSharp2
             Rectangle leftRect = new(leftX, leftY, leftW, leftH);
             Rectangle vpRect = new(rightX, rightY, rightW, rightH);
 
-            Vector2 mp = Raylib.GetMousePosition();
+            Vector2 mp = Engine.GetUiMousePosition();
             float wheel = Raylib.GetMouseWheelMove();
 
             // Вращение и зум 3D-модели справа

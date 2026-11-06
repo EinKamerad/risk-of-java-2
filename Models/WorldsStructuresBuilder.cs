@@ -72,10 +72,16 @@ namespace RiskOfCSharp2.Models
         }
     }
 
-    public static class WorldStructuresBuilder
+    public static partial class WorldStructuresBuilder
     {
         public static float GetStructureFootprintRadius(string structType) => structType switch
         {
+            "dark_fountain_spire" => 5.4f,
+            "pipis_billboard" => 4.2f,
+            "qliphoth_cage" => 5.0f,
+            "originium_monolith" => 4.8f,
+            "penacony_organ" => 6.0f,
+            "aurelionite_geode" => 4.2f,
             "arch" => 6.4f,
             "monolith" => 3.6f,
             "crystals" => 3.2f,
@@ -869,6 +875,10 @@ namespace RiskOfCSharp2.Models
                     obstacles.Add(new ObstacleCircle(rwx, rwz, 2.35f, r * 1.15f, pos.Y));
                 }
                 outBoxes?.Add(new ObstacleBox(pos.X, pos.Z, r * 0.86f, 1.12f, rotY, r * 1.2f, pos.Y, walkableTop: false));
+            }
+            else
+            {
+                TryBuildExpansionMapStructure(root, structType, palette, pos, rotY, rng, obstacles, outBoxes);
             }
 
             return (root, obstacles);

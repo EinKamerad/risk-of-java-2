@@ -14,4 +14,16 @@
     <PackageReference Include="Raylib-cs" Version="6.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Native\steam_api64.dll" Condition="Exists('Native\steam_api64.dll')">
+      <Link>steam_api64.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <None Include="steam_appid.txt" Condition="Exists('steam_appid.txt')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

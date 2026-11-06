@@ -9,7 +9,7 @@ using static RiskOfCSharp2.Core.Utils;
 
 namespace RiskOfCSharp2.Entities
 {
-    public static class CombatManager
+    public static partial class CombatManager
     {
         public static readonly List<CombatTarget> Enemies = new();
         public static SurvivorCombatController? Controller;
@@ -49,7 +49,7 @@ namespace RiskOfCSharp2.Entities
 
             // Armor-Piercing Rounds
             int apr = GetItemCount("ap_rounds");
-            if (apr > 0 && target.IsBoss) bonusMult += 0.20f * apr;
+            if (apr > 0 && (target.IsBoss || target.IsHordeBoss)) bonusMult += 0.20f * apr;
 
             // Focus Crystal (<13m)
             int focus = GetItemCount("focus_crystal");
@@ -69,6 +69,18 @@ namespace RiskOfCSharp2.Entities
             }
 
             dmg *= bonusMult;
+
+            if (canProc && IsValid(target) && (p.CharKey == "artificer" || p.CharKey == "pushnoy"))
+            {
+                if (baseDmg <= p.BaseDamage * 1.45f)
+                {
+                    target.ApplyArtificerElement(p.SkillVar("m1") == 1 ? "shock" : "fire", p.BaseDamage);
+                }
+                else if (p.CharKey == "artificer" && baseDmg >= p.BaseDamage * 2.5f && baseDmg <= p.BaseDamage * 3.3f)
+                {
+                    target.ApplyArtificerElement(p.SkillVar("m2") == 1 ? "ice" : "shock", p.BaseDamage);
+                }
+            }
 
             // Sheen (Сияние — Чародейский клинок после навыка)
             int sheen = GetItemCount("sheen");
@@ -92,8 +104,10 @@ namespace RiskOfCSharp2.Entities
                 p.BorkSpeedTimer = 2.5f;
             }
 
-            // Критический удар + Infinity Edge + Harvester's Scythe + Predatory Instincts
-            bool isCrit = _rng.NextDouble() < p.CritChance;
+            // Критический удар + Infinity Edge + Harvester's Scythe + Predatory Instincts + Скан Разведчика
+            float effCrit = p.CritChance + (target.WeakpointScanTimer > 0f ? 0.25f : 0f);
+            if (p.CharKey == "freddy" && p.FreddyPowerOutageTimer > 0f) effCrit += 0.35f;
+            bool isCrit = _rng.NextDouble() < effCrit;
             if (isCrit)
             {
                 float critMult = 2.0f + 0.45f * GetItemCount("infinity_edge");
@@ -104,11 +118,11 @@ namespace RiskOfCSharp2.Entities
                 if (GetItemCount("predatory") > 0) p.PredatoryTimer = 3.0f;
             }
 
-            // ULTRAKILL V1: Blood is Fuel!
+            // ULTRAKILL V1 (Blood is Fuel) vs V2 (Титановая Обшивка — без бесплатного ближнего отхила!)
             if (p.CharKey == "v1")
             {
                 dmg *= p.V1StyleDmgMult;
-                if (Vector3.Distance(g.PlayerPos, targetPos) <= 11.0f)
+                if (!p.IsV2Persona && Vector3.Distance(g.PlayerPos, targetPos) <= 11.0f)
                 {
                     float bloodHeal = Math.Clamp(dmg * 0.18f * p.V1StyleDmgMult, 2.0f, 18.0f);
                     g.HealPlayer(bloodHeal);
@@ -119,10 +133,23 @@ namespace RiskOfCSharp2.Entities
             {
                 target.ArmorBreakTimer = MathF.Max(target.ArmorBreakTimer, 5.0f);
                 target.SlowTimer = MathF.Max(target.SlowTimer, 2.5f);
+                target.SilenceTimer = MathF.Max(target.SilenceTimer, 4.0f);
+                if (canProc)
+                {
+                    foreach (var fam in p.DecadenzaFamiliars)
+                        if (IsValid(fam)) fam.CommandFocus(target);
+                }
             }
             else if (p.CharKey == "haze")
             {
                 int addStacks = (p.SkillVar("m1") == 1) ? 2 : 1;
+                if (p.HazeAmbushReady)
+                {
+                    p.HazeAmbushReady = false;
+                    p.HazeSmokeTimer = 0f;
+                    addStacks += 16;
+                    g.ShowBanner("ВЫСТРЕЛ ИЗ ТУМАНА! [+16 ФИКСАЦИИ]", Rgb(255, 195, 70), 1.3f);
+                }
                 target.FixationStacks = Math.Min(20, target.FixationStacks + addStacks);
                 if (target.FixationStacks >= 20)
                 {
@@ -133,6 +160,31 @@ namespace RiskOfCSharp2.Entities
                     new VisualFX(hitPos, Rgb(255, 195, 70), 3.6f, 0.28f);
                 }
             }
+            else if (p.CharKey == "sol")
+            {
+                p.SolTension = Math.Clamp(p.SolTension + 3.2f, 0f, 100f);
+            }
+            else if (p.CharKey == "huntress" && target.HuntressMarkTimer > 0f && canProc)
+            {
+                int splits = 0;
+                foreach (var other in Enemies.ToArray())
+                {
+                    if (other != target && IsValid(other) && !other.IsAlly && Vector3.Distance(target.Position, other.Position) <= 14.0f)
+                    {
+                        Vector3 sDir = Vector3.Normalize((other.Position + Vector3.UnitY) - hitPos);
+                        new Projectile(hitPos, sDir, 56f, p.BaseDamage * 0.65f, 0.26f, Rgb(255, 85, 115), isPlayer: true, homing: true, canProc: false);
+                        if (++splits >= 2) break;
+                    }
+                }
+            }
+
+            if (canProc && p.CharKey == "robin")
+                p.TryTriggerRobinConcertFollowUp(hitPos);
+
+            if (target.D12StickyTimer > 0f)
+                target.D12AccumDmg += dmg * 0.28f;
+            if (p.ZaWarudoTimer > 0f)
+                target.TheWorldStoredDmg += dmg * 0.35f;
 
             // Leeching Seed + Doran's Blade + врождённый вампиризм навыка
             float healAmt = lifesteal + 1.5f * GetItemCount("leeching_seed") + 2.0f * GetItemCount("dorans_blade");
@@ -170,6 +222,8 @@ namespace RiskOfCSharp2.Entities
                 SoundManager.Play3D("explosion", hitPos, g.PlayerPos, 55f, 0.65f);
             Program.TriggerHitMarker(isCrit, dmg);
             target.TakeDamage(dmg);
+            if (g is GameRunContext grcHit)
+                World.CharacterUnlockSystems.OnEnemyDamagedByPlayer(grcHit, target, dmg);
             new VisualFX(hitPos, hitColor, effAoe == 0f ? 1.3f : effAoe * 1.35f, 0.22f);
 
             // Old Guillotine: казнь только обычных врагов с низким уровнем здоровья (порог снижен вдвое)
@@ -334,6 +388,8 @@ namespace RiskOfCSharp2.Entities
                     }
                 }
             }
+
+            ApplyExpansionItemHitEffects(p, g, target, hitPos, dmg, isCrit, luckBonus);
         }
 
         public static void OnEnemyKilled(CombatTarget dead)
@@ -348,12 +404,33 @@ namespace RiskOfCSharp2.Entities
             new VisualFX(deathPos + new Vector3(0, 1.2f, 0), Color.Orange, 3.5f, 0.38f);
             g.Gold += dead.GoldReward;
             ProgressData.Instance.Kills++;
+            if (ProgressData.Instance.Kills >= 25)
+                g.UnlockAchievement("ach_item_orirock");
+            ApplyExpansionItemKillEffects(p, g, dead, deathPos);
             Program.RecordEnemyKill(dead.GoldReward, dead);
+            if (g is GameRunContext grcKill)
+                World.CharacterUnlockSystems.OnEnemyKilledByPlayer(grcKill, dead);
 
             if (p.CharKey == "v1")
+            {
                 p.V1AddStyle(dead.IsBoss ? "+ КРУПНОЕ УБИЙСТВО" : "+ УБИЙСТВО", dead.IsBoss ? Color.Red : Color.White, dead.IsBoss ? 160f : 45f);
+                if (p.IsV2Persona && p.V1StylePoints >= 450f)
+                    p.OnV2StylishActionHeal(dead.IsBoss ? 35f : 10f, dead.IsBoss ? 45f : 16f);
+            }
             else if (p.CharKey == "ahri")
+            {
                 p.AddAhriEssence(dead.IsBoss ? 3 : 1);
+                if (dead.CharmTimer > 0f && p.AhriDashCharges < 3)
+                    p.AhriDashCharges++;
+            }
+            else if (p.CharKey == "vyper" && p.VyperSlideTimer > 0f)
+            {
+                p.VyperSlideTimer = MathF.Min(3.0f, p.VyperSlideTimer + 0.85f);
+            }
+            else if (p.CharKey == "don_quixote")
+            {
+                p.OnDonLanternEnemyKilled(dead);
+            }
 
             if (dead.IsBoss || _rng.NextDouble() < 0.08)
             {
@@ -454,10 +531,23 @@ namespace RiskOfCSharp2.Entities
                 g.UnlockAchievement("ach_boss");
                 if (Program.RunBossKills >= 2)
                     g.UnlockAchievement("ach_boss_hunter");
+                switch (dead.EnemyType)
+                {
+                    case "echo_providence": g.UnlockAchievement("ach_boss_echo_providence"); break;
+                    case "false_son_boss": g.UnlockAchievement("ach_boss_false_son"); break;
+                    case "prts_source": g.UnlockAchievement("ach_boss_prts"); break;
+                    case "binah_arbiter": g.UnlockAchievement("ach_boss_binah"); break;
+                    case "roaring_knight": g.UnlockAchievement("ach_boss_roaring_knight"); break;
+                    case "great_septimus": g.UnlockAchievement("ach_boss_septimus"); break;
+                }
                 if (dead.EnemyType == "mithrix")
                     g.OnMithrixDefeated(deathPos);
                 else if (Net.NetworkManager.Instance.Mode != "client")
                     g.SpawnItemDrop(deathPos, null, "boss");
+            }
+            else if (dead.IsHordeBoss && g is GameRunContext hordeRun)
+            {
+                hordeRun.OnHordeMemberKilled(dead, deathPos);
             }
 
             ProgressData.Instance.Save();
@@ -512,6 +602,10 @@ namespace RiskOfCSharp2.Entities
         public bool IsV1Core = false;
         public bool IsV1Nail = false;
         public float GravityArc = 0f;
+        public int WallBounces = 0;
+        public float BounceDamageMult = 1.0f;
+        public float StunOnHit = 0f;
+        private bool _grazedByReimu = false;
 
         private readonly HashSet<Entity> _hitMemory = new();
 
@@ -543,7 +637,12 @@ namespace RiskOfCSharp2.Entities
                     SourceIsElite = SourceEnemy.IsElite;
                     SourceIsBoss = SourceEnemy.IsBoss;
                     SourceIsDoppel = SourceEnemy.IsDoppelganger;
+                    SourceEnemy.TriggerBinahFairyAttackPunish();
                 }
+            }
+            else
+            {
+                Program.NotifyPlayerProjectileSpawned(pos, Direction, Speed, scaleVal, projColor, maxLifetime);
             }
         }
 
@@ -630,6 +729,21 @@ namespace RiskOfCSharp2.Entities
             // «перепрыгивают» тонкие стены, переборки и колонны
             if (!Pierce && Physics.SegmentHitsSolid(prevFramePos, Position, 0.2f, out Vector3 wallHit))
             {
+                if (WallBounces > 0)
+                {
+                    WallBounces--;
+                    Damage *= BounceDamageMult;
+                    bool hitX = Physics.IsInsideSolidObstacle(new Vector3(prevFramePos.X + Direction.X * 0.6f, prevFramePos.Y, prevFramePos.Z), 0.25f);
+                    bool hitZ = Physics.IsInsideSolidObstacle(new Vector3(prevFramePos.X, prevFramePos.Y, prevFramePos.Z + Direction.Z * 0.6f), 0.25f);
+                    if (hitX) Direction.X = -Direction.X;
+                    if (hitZ) Direction.Z = -Direction.Z;
+                    if (!hitX && !hitZ) Direction.Y = MathF.Abs(Direction.Y) + 0.25f;
+                    Direction = Direction.LengthSquared() > 0.001f ? Vector3.Normalize(Direction) : -Direction;
+                    Position = prevFramePos + Direction * 0.35f;
+                    SoundManager.Play("coin_flip", 0.55f, 1.35f);
+                    new VisualFX(wallHit, Color, 1.5f, 0.18f);
+                    return;
+                }
                 Position = wallHit;
                 new VisualFX(Position, Color, 1.2f, 0.18f);
                 SafeDestroy();
@@ -643,6 +757,7 @@ namespace RiskOfCSharp2.Entities
                 {
                     if (Physics.SpecialMode != "pvp" && Program.TryHealRemotePlayerCoop(Position, ScaleX * 0.4f + 1.15f, HealAllies))
                     {
+                        World.CharacterUnlockSystems.OnAllyHealedByPlayer(g, HealAllies);
                         g.HealPlayer(HealAllies * 0.25f);
                         new VisualFX(Position, Color.Lime, 2.2f, 0.25f);
                         SafeDestroy();
@@ -657,6 +772,7 @@ namespace RiskOfCSharp2.Entities
                             {
                                 _hitMemory.Add(al);
                                 al.HealAlly(HealAllies);
+                                World.CharacterUnlockSystems.OnAllyHealedByPlayer(g, HealAllies);
                                 g.HealPlayer(HealAllies * 0.25f);
                                 new VisualFX(alCenter, Color.Lime, 2.2f, 0.25f);
                                 SafeDestroy();
@@ -692,6 +808,8 @@ namespace RiskOfCSharp2.Entities
                     if (Vector3.Distance(Position, hitCenter) <= e.HitRadius + ScaleX * 0.4f)
                     {
                         _hitMemory.Add(e);
+                        if (StunOnHit > 0f && !e.IsBoss)
+                            e.StunTimer = MathF.Max(e.StunTimer, StunOnHit);
                         CombatManager.ApplyPlayerHitEffects(e, Position, Damage, Color, Aoe, Lifesteal, CanProc);
 
                         if (Bounces > 0)
@@ -765,6 +883,89 @@ namespace RiskOfCSharp2.Entities
                     }
                 }
 
+                // Попадание вражеских снарядов по Теневым Тотемам Вис'адель, Голему Стива, Дронам Mindustry и Шершням Зурга
+                foreach (var tot in p.WisadelShadows.ToArray())
+                {
+                    if (IsValid(tot) && Vector3.Distance(Position, tot.Position + new Vector3(0, 1.4f, 0)) <= tot.HitRadius + 0.35f)
+                    {
+                        tot.TakeTotemDamage(Damage);
+                        new VisualFX(Position, Rgb(235, 38, 58), 1.5f, 0.2f);
+                        SafeDestroy();
+                        return;
+                    }
+                }
+                if (IsValid(p.SteveActiveGolem) && Vector3.Distance(Position, p.SteveActiveGolem!.Position + new Vector3(0, 1.5f, 0)) <= p.SteveActiveGolem.HitRadius + 0.35f)
+                {
+                    p.SteveActiveGolem.Hp -= Damage * 0.65f;
+                    new VisualFX(Position, Color.White, 1.6f, 0.2f);
+                    SafeDestroy();
+                    return;
+                }
+                foreach (var dr in p.MindustryDrones.ToArray())
+                {
+                    if (IsValid(dr) && Vector3.Distance(Position, dr.Position) <= dr.HitRadius + 0.35f)
+                    {
+                        dr.Hp -= Damage;
+                        new VisualFX(Position, Color.Gold, 1.4f, 0.18f);
+                        SafeDestroy();
+                        return;
+                    }
+                }
+                foreach (var hb in p.ZurgHornetBots.ToArray())
+                {
+                    if (IsValid(hb) && Vector3.Distance(Position, hb.Position) <= hb.HitRadius + 0.35f)
+                    {
+                        hb.Hp -= Damage;
+                        new VisualFX(Position, Rgb(215, 55, 255), 1.4f, 0.18f);
+                        SafeDestroy();
+                        return;
+                    }
+                }
+
+                // Широкий бунт-щит Силовика (перехватывает снаряды и защищает союзников позади!)
+                if (g.CanPlayerInteract && p.CharKey == "enforcer" && p.ShieldStance)
+                {
+                    Vector3 shCenter = g.PlayerPos + new Vector3(0, 1.15f, 0) + g.PlayerForward * 0.95f;
+                    if (Vector3.Distance(Position, shCenter) <= 2.65f)
+                    {
+                        if (p.TryReflectOrParryProjectile(this)) return;
+                        SoundManager.Play("shield_block", 0.70f, 1.10f);
+                        new VisualFX(Position, Color.SkyBlue, 1.5f, 0.18f);
+                        SafeDestroy();
+                        return;
+                    }
+                }
+
+                // Магнитный отражатель Императора Зурга
+                if (g.CanPlayerInteract && p.CharKey == "buzz" && p.ZurgReflectTimer > 0f &&
+                    Vector3.Distance(Position, g.PlayerPos + new Vector3(0, 1.2f, 0)) <= 2.35f)
+                {
+                    p.ZurgReflectedCount++;
+                    SoundManager.Play("parry", 0.75f, 1.25f);
+                    new VisualFX(Position, Rgb(215, 55, 255), 1.8f, 0.20f);
+                    SafeDestroy();
+                    return;
+                }
+
+                // Рейму Хакурей: Грейз пуль впритирку (Danmaku Graze!)
+                if (!_grazedByReimu && g.CanPlayerInteract && p.CharKey == "reimu")
+                {
+                    float rDist = Vector3.Distance(Position, g.PlayerPos + new Vector3(0, 1.1f, 0));
+                    if (rDist > 1.26f && rDist <= 2.75f)
+                    {
+                        _grazedByReimu = true;
+                        p.ReimuGrazeStacks = Math.Min(10, p.ReimuGrazeStacks + 1);
+                        p.ReimuGrazeDecayTimer = 4.0f;
+                        p.ReimuFlightFuel = MathF.Min(4.5f, p.ReimuFlightFuel + 0.55f);
+                        SoundManager.Play("coin_flip", 0.45f, 1.55f);
+                        new VisualFX(Position, Color.White, 1.1f, 0.14f);
+                        Vector3 needleDir = IsValid(SourceEnemy)
+                            ? Vector3.Normalize((SourceEnemy!.Position + Vector3.UnitY) - (g.PlayerPos + Vector3.UnitY))
+                            : p.GetAimDirection();
+                        new Projectile(g.PlayerPos + new Vector3(0, 1.35f, 0), needleDir, 68f, p.BaseDamage * 0.75f, 0.24f, Color.Red, isPlayer: true, homing: true, canProc: false);
+                    }
+                }
+
                 if (g.CanPlayerInteract && Vector3.Distance(Position, g.PlayerPos + new Vector3(0, 1.0f, 0)) <= 1.25f)
                 {
                     if (p.TryReflectOrParryProjectile(this))
@@ -782,6 +983,53 @@ namespace RiskOfCSharp2.Entities
                     SafeDestroy();
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Лёгкий чисто визуальный снаряд для кооператива и режима наблюдателя, чтобы гость видел стрельбу союзников.
+    /// </summary>
+    public class RemoteVisualProjectile : Entity
+    {
+        private readonly Vector3 _dir;
+        private readonly float _speed;
+        private float _life;
+
+        public RemoteVisualProjectile(Vector3 pos, Vector3 dir, float speed, float scaleVal, Color col, float lifetime)
+            : base(model: "sphere", position: pos, scaleUniform: MathF.Max(0.14f, scaleVal), color: col, unlit: true)
+        {
+            new Entity(parent: this, model: "diamond", scaleUniform: 1.42f, color: Color.White, unlit: true);
+            _dir = dir.LengthSquared() > 0.0001f ? Vector3.Normalize(dir) : Vector3.UnitZ;
+            _speed = speed;
+            _life = Math.Clamp(lifetime, 0.08f, 3.0f);
+        }
+
+        public override void OnUpdate(float dt)
+        {
+            if (IsDestroyed) return;
+            var g = WorldContext.Game;
+            if (g == null)
+            {
+                Destroy(this);
+                return;
+            }
+            Position += _dir * _speed * dt;
+            RotationY += 320f * dt;
+            RotationZ += 280f * dt;
+            _life -= dt;
+
+            // Чисто визуальное попадание во врагов или пол
+            foreach (var e in CombatManager.Enemies)
+            {
+                if (IsValid(e) && !e.IsAlly && Vector3.Distance(Position, e.Position + new Vector3(0f, e.HitHeight, 0f)) <= e.HitRadius + 0.35f)
+                {
+                    new VisualFX(Position, Color, 1.2f, 0.16f);
+                    Destroy(this);
+                    return;
+                }
+            }
+            if (_life <= 0f || Y < -1.5f)
+                Destroy(this);
         }
     }
 }

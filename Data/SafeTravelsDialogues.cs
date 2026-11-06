@@ -39,16 +39,19 @@ namespace RiskOfCSharp2.Data
 
     public static partial class SafeTravelsDialogues
     {
-        // All 39 distinct character personas (30 standard + 1 secret "sanabi" + 5 full alt-kit characters + 2 iconic rival personas)
+        // All 57 distinct character personas (44 base characters + 13 alternative character versions)
         public static readonly string[] AllPersonaKeys =
         {
             "commando", "artificer", "huntress", "buzz", "v1", "sol", "gwen", "enforcer",
             "scout", "m4a1", "medic", "aigis", "reimu", "mindustry", "slark", "tidehunter",
             "freeman", "dante", "cheburashka", "ahri", "lappland", "w_arknights", "gold_ship",
             "pushnoy", "freddy", "steve", "jotaro", "vyper", "haze", "dmc_trio", "sanabi", "jack_o",
+            "susie", "spamton", "binah", "don_quixote", "priestess", "closure",
+            "daitaku_helios", "robin", "bird_trio", "apocalypse_bird", "komeiji", "false_son",
             // Alternative character versions (counted as separate characters!)
             "sol_ky", "lappland_decadenza", "w_wisadel", "dmc_nero", "dmc_vergil",
-            "buzz_zurg", "v1_v2"
+            "buzz_zurg", "v1_v2",
+            "spamton_neo", "don_lantern", "don_manager", "bird_long", "bird_small", "komeiji_koishi"
         };
 
         public static string CanonicalPair(string a, string b)
@@ -66,6 +69,12 @@ namespace RiskOfCSharp2.Data
                 "dmc_trio" when skinIdx == 2 => "dmc_vergil",
                 "buzz" when skinIdx == 2 => "buzz_zurg",
                 "v1" when skinIdx == 2 => "v1_v2",
+                "spamton" when skinIdx == 2 => "spamton_neo",
+                "don_quixote" when skinIdx == 1 => "don_lantern",
+                "don_quixote" when skinIdx == 2 => "don_manager",
+                "bird_trio" when skinIdx == 1 => "bird_long",
+                "bird_trio" when skinIdx == 2 => "bird_small",
+                "komeiji" when skinIdx == 1 => "komeiji_koishi",
                 _ => charKey
             };
         }
@@ -81,6 +90,12 @@ namespace RiskOfCSharp2.Data
                 "dmc_vergil" => ("dmc_trio", 2),
                 "buzz_zurg" => ("buzz", 2),
                 "v1_v2" => ("v1", 2),
+                "spamton_neo" => ("spamton", 2),
+                "don_lantern" => ("don_quixote", 1),
+                "don_manager" => ("don_quixote", 2),
+                "bird_long" => ("bird_trio", 1),
+                "bird_small" => ("bird_trio", 2),
+                "komeiji_koishi" => ("komeiji", 1),
                 _ => (personaKey, 0)
             };
         }
@@ -128,6 +143,24 @@ namespace RiskOfCSharp2.Data
                 "dmc_nero" => "Неро",
                 "dmc_vergil" => "Вергилий",
                 "sanabi" => "Генерал и Мари (SANABI)",
+                "susie" => "Сьюзи",
+                "spamton" => "Спамтон G. Спамтон",
+                "spamton_neo" => "Спамтон НЕО",
+                "binah" => "Бина (Арбитр)",
+                "don_quixote" => "Дон Кихот",
+                "don_lantern" => "Дон Кихот (Фонарь E.G.O)",
+                "don_manager" => "Управляющая Ла-Манчаленда",
+                "priestess" => "Пристесс",
+                "closure" => "Кложер",
+                "daitaku_helios" => "Дайтаку Гелиос",
+                "robin" => "Зарянка (Робин)",
+                "bird_trio" => "Большая Птица",
+                "bird_long" => "Длинная Птица (Судия)",
+                "bird_small" => "Маленькая Птица (Карающая)",
+                "apocalypse_bird" => "Птица Апокалипсиса",
+                "komeiji" => "Сатори Комейдзи",
+                "komeiji_koishi" => "Коиши Комейдзи",
+                "false_son" => "Ложный Сын",
                 _ => personaKey
             };
         }
@@ -138,28 +171,39 @@ namespace RiskOfCSharp2.Data
 
         private static Dictionary<string, List<DialogueLine[]>> BuildAllPairDialogues()
         {
-            var dict = new Dictionary<string, List<DialogueLine[]>>(1024, StringComparer.Ordinal);
+            var dict = new Dictionary<string, List<DialogueLine[]>>(2048, StringComparer.Ordinal);
+            RegisterCollegePairs(dict);
             RegisterPairsPart1(dict);
             RegisterPairsPart2(dict);
             RegisterPairsPart3(dict);
             RegisterAltPersonaPairs(dict);
-            RegisterCollegePairs(dict);
+            RegisterExpansionPairs(dict);
+            RegisterExpCross1(dict);
+            RegisterExpCross2(dict);
+            RegisterExpCross3(dict);
+            RegisterExpCross4(dict);
+            RegisterExpCross5(dict);
+            RegisterExpCross6(dict);
+            RegisterExpCross7(dict);
+            RegisterExpCross8(dict);
             return dict;
         }
 
         private static Dictionary<string, List<DialogueLine[]>> BuildAllMirrorDialogues()
         {
-            var dict = new Dictionary<string, List<DialogueLine[]>>(64, StringComparer.Ordinal);
+            var dict = new Dictionary<string, List<DialogueLine[]>>(96, StringComparer.Ordinal);
             RegisterMirrorDialogues(dict);
             RegisterCollegeMirrors(dict);
+            RegisterExpansionMirrors(dict);
             return dict;
         }
 
         private static Dictionary<string, PersonaDialogueProfile> BuildAllPersonaProfiles()
         {
-            var dict = new Dictionary<string, PersonaDialogueProfile>(48, StringComparer.Ordinal);
+            var dict = new Dictionary<string, PersonaDialogueProfile>(64, StringComparer.Ordinal);
             RegisterPersonaProfiles(dict);
             RegisterCollegeQuipsAndJackO(dict);
+            RegisterExpansionPersonaProfiles(dict);
             return dict;
         }
 
@@ -232,8 +276,8 @@ namespace RiskOfCSharp2.Data
                 }
             }
 
-            // 2. Additional full multi-turn conversations generated from both characters' rich canonical profiles
-            // so EVERY pair has multiple distinct conversations (Combat Synergy, Shipboard Life on Safe Travels, Mithrix & Moon)!
+            // 2. Additional multi-turn lore conversations generated from both characters' canonical profiles
+            // (Crew Quarters & Life Aboard UES «Safe Travels», and Philosophical Reflections on Mithrix & the Shattered Moon)
             if (_profiles.TryGetValue(playerPersona, out var pProf) && _profiles.TryGetValue(npcPersona, out var nProf))
             {
                 (string pBase, _) = SplitPersonaKey(playerPersona);
@@ -244,15 +288,6 @@ namespace RiskOfCSharp2.Data
                     if (string.IsNullOrEmpty(template)) return "...";
                     return template.Replace("{NAME}", target.DisplayName).Replace("{ROLE}", target.RoleTag);
                 }
-
-                // Conversation Theme A: Combat & Tactical Synergy
-                all.Add(new[]
-                {
-                    new DialogueLine(pBase, FormatLine(pProf.CombatOpen, nProf), pProf.DisplayName),
-                    new DialogueLine(nBase, FormatLine(nProf.CombatReply, pProf), nProf.DisplayName),
-                    new DialogueLine(pBase, FormatLine(pProf.CombatFollow, nProf), pProf.DisplayName),
-                    new DialogueLine(nBase, FormatLine(nProf.CombatClose, pProf), nProf.DisplayName)
-                });
 
                 // Conversation Theme B: Crew Quarters & Life Aboard UES «Safe Travels»
                 all.Add(new[]
@@ -372,6 +407,24 @@ namespace RiskOfCSharp2.Data
                     "dmc_nero" => "Эй, одновременно! У меня аж протез заискрил от азарта — давай ещё раз!",
                     "dmc_vergil" => "Хм. Абсолютное равенство концентрации. Завершим этот поединок как положено.",
                     "sanabi" => "Генерал: Паритет. — Мари: Эй, я же просчитала твой жест, как ты успел поменять?!",
+                    "susie" => "Эй, не повторяй за мной! Кидаем заново — проигравший тащит коробку мела!",
+                    "spamton" => "НИЧЬЯ?! КУРС [[Кроумера]] ЗАМЕР НА НУЛЕ!! ПЕРЕБРАСЫВАЕМ БЕЗ КОМИССИИ!!",
+                    "spamton_neo" => "ОДИНАКОВЫЙ ХОД?! ВИДНО, НАШИ [[Зелёные Нити]] ДЁРНУЛ ОДИН И ТОТ ЖЕ РЕЖИССЁР!!",
+                    "binah" => "Любопытная симметрия. Даже Замок и Фея порой замирают в равновесии над чашкой чая.",
+                    "don_quixote" => "О ЧУДО!! Наши копья преломились одновременно в честнейшей рыцарской ничьей!!",
+                    "don_lantern" => "Хи-хи, одинаково~! Подойди чуть ближе к огонёчку и кинем ещё разок~",
+                    "don_manager" => "...Равный счёт. Как тишина между двумя актами багрового парада.",
+                    "priestess" => "Наши выборы совпали с точностью до кванта ◇. Попробуем ещё раз?",
+                    "closure" => "Опа, ничья! В магазине «Родос Айленд» ничья округляется в пользу продавца... шутка, кидаем снова!",
+                    "daitaku_helios" => "ВЭЙ~★!! ПОЛНЫЙ СИНХРОН НА ОДНОМ БИТЕ!! Это судьба, бро — перебрасываем под дроп!!",
+                    "robin" => "Ой, мы вступили в унисон ♫! Какое чудесное созвучие — сыграем ещё один такт?",
+                    "bird_trio" => "Ух-ух! Все мои сорок глаз видели, что мы показали одно и то же! Никто не в обиде!",
+                    "bird_long" => "...Дзинь. Чаши Наклонённых Весов замерли в редком равновесии. Повторим суд.",
+                    "bird_small" => "Чирик-чирик! Ничья — это хорошо, значит, пока никого клевать не надо!",
+                    "apocalypse_bird" => "[ТРИ ГОЛОСА]: Знамение совпало... Врата Чёрного Леса дают тебе право на второй бросок.",
+                    "komeiji" => "Прости, я невольно услышала твой выбор Третьим Глазом, и рука сама повторила его.",
+                    "komeiji_koishi" => "Дзынь-дзынь, одинаково~! А что мы вообще сейчас показывали? Я уже забыла, хи-хи!",
+                    "false_son" => "Камень о камень — без трещин. Равная выдержка, друг.",
                     _ => "Ничья! Перебрасываем."
                 };
             }
@@ -419,6 +472,24 @@ namespace RiskOfCSharp2.Data
                     "dmc_nero" => "ХА, ВЫКУСИ! Видел бы это Данте — а теперь кто тут у нас номер один?!",
                     "dmc_vergil" => "Предсказуемый исход. Тебе не хватило мотивации.",
                     "sanabi" => "Мари: УРА, МЫ ВЫИГРАЛИ! Я же говорила — ставь бумагу, пап! — Генерал: Хм. Тактический успех.",
+                    "susie" => "БУМ, СЪЕЛ?! Аха-ха-ха, Крис мне так уже десять пачек школьного мела проиграл!",
+                    "spamton" => "ХАЕАЕАЕАХА!! ДЖЕКПОТ 1997!! ТВОЙ КОШЕЛЁК ТЕПЕРЬ СОБСТВЕННОСТЬ [[Спамтон G. Спамтон]]!!",
+                    "spamton_neo" => "ПОБЕДА [[БОЛЬШОЙ ШИШКИ]]!! ЗРИТЕЛИ В ЗАЛЕ РЫДАЮТ ОТ ВОСТОРГА, РЕЙТИНГИ В НЕБЕСАХ!!",
+                    "binah" => "Ключ Феи всегда находит нужную скважину. Твоё колебание было очаровательно прозрачным.",
+                    "don_quixote" => "ВИКТОРИЯ!! Восславим же сей доблестный турнир, ибо рука странствующего рыцаря не дрогнула!!",
+                    "don_lantern" => "Ура-а, я выиграла~! За это можно один ма-аленький дружеский кусь за рукав? Шутка, хи-хи~!",
+                    "don_manager" => "Исход предрешён. За двести лет управления парком учишься видеть чужую уловку насквозь.",
+                    "priestess" => "Победа зафиксирована в архиве ◇. Не грусти — в бесконечности у тебя ещё миллионы попыток.",
+                    "closure" => "ЕСТЬ! Пятьсот кредитов в кассу инженерного отдела ✓! Ладно-ладно, шучу, с тебя просто кофе!",
+                    "daitaku_helios" => "ВЭ-Э-ЭЙ, ЧИСТАЯ ПОБЕДА СО СТАРТА~★!! С тебя лимитированный брелок для Палмер!!",
+                    "robin" => "Ох, кажется, победа за мной ♫! Спасибо за такую весёлую партию между репетициями!",
+                    "bird_trio" => "Ух-ух, я выиграла! За победу я посвечу тебе своей тёплой лампой совершенно бесплатно!",
+                    "bird_long" => "...Дзинь. Наклонённые Весы склонились на мою сторону. Закон восторжествовал.",
+                    "bird_small" => "Чирик-ура!! Я победила честно-пречестно, и даже никого кусать не пришлось!",
+                    "apocalypse_bird" => "[ТРИ ГОЛОСА]: Ни один смертный жест не укроется от всевидящих крыл Чёрного Леса.",
+                    "komeiji" => "Хе-хе, извини — играть в «камень-ножницы-бумага» против открытого Третьего Глаза чуточку нечестно.",
+                    "komeiji_koishi" => "УРА-А, Я ПОБЕДИЛА~!! Сама не знала, что выкину, пока пальчики не разжались — вот секрет успеха!",
+                    "false_son" => "Конечно, я выбрал Камень... Приятно побеждать в игре, где никто не несёт урона.",
                     _ => "Моя взяла! Отличная партия."
                 };
             }
@@ -464,6 +535,24 @@ namespace RiskOfCSharp2.Data
                 "dmc_nero" => "Аргх, чёрт! Нико мне со смеху прохода не даст! Давай реванш до трёх побед!",
                 "dmc_vergil" => "...Любопытно. Ты сумел прочитать моё намерение раньше удара. Достойно уважения.",
                 "sanabi" => "Мари: Э-э?! Папа, у тебя кибер-рука зависла, почему мы проиграли?! — Генерал: Противник прочитал финт. Достойно.",
+                "susie" => "Э-Э, ЧЕГО?! У меня просто коготь за куртку зацепился, не считается! Давай до трёх побед!!",
+                "spamton" => "ОШИБКА 404: [[Победа Не Найдена]]!! МОИ АКЦИИ РУХНУЛИ В МУСОРНЫЙ БАК — ТРЕБУЮ ПЕРЕСЧЁТА ГОЛОСОВ!!",
+                "spamton_neo" => "КАК?! ДАЖЕ БРОНЯ [[НЕО]] НЕ СПАСЛА ОТ ПРОСТОЙ [[Бумажки]]?! ПРОКЛЯТЫЕ КАБЕЛИ ЗАЕЛО!!",
+                "binah" => "Ох, ты изменил решение в последний миг без единой мысли в голове? Восхитительный урок для Арбитра.",
+                "don_quixote" => "УВЫ И АХ!! Сражена в честном поединке!! Примите же мой поклон, о великий гроссмейстер турнира!!",
+                "don_lantern" => "Ой, мой огонёк проиграл... Только чур не задувать светлячок, ладно~?",
+                "don_manager" => "...Чистый выпад. Признаю твоё первенство в этом малом раунде.",
+                "priestess" => "Надо же, ты сумел удивить даже расчёт PRTS ◇. Твоя непредсказуемость прекрасна.",
+                "closure" => "Ай! Ты точно не взломал мой планшет перед броском?! Ладно, держи купон на бесплатную батарейку!",
+                "daitaku_helios" => "А-А-А, ОБХОД НА САМОМ ФИНИШЕ~★!! Полный #РазгромВэй, но было дико весело — давай реванш!!",
+                "robin" => "Ах, я сбилась с ритма на последней доле ♫! Заслуженная победа — аплодирую вам от души!",
+                "bird_trio" => "Ух... Я смотрела слишком многими глазами сразу и совсем запуталась! Ты честно победил!",
+                "bird_long" => "...Весы качнулись в твою пользу. Судия принимает поражение без ропота.",
+                "bird_small" => "ЧИРИК?! Я проиграла?! Это... это очень подозрительный грех, но я держу клювик закрытым... фьюить!",
+                "apocalypse_bird" => "[ТРИ ГОЛОСА]: Невероятно... Даже Судный День отступил перед твоей бесхитростной ладонью.",
+                "komeiji" => "Поразительно! Ты очистил разум за миг до броска, и Третий Глаз увидел лишь тихую гладь воды!",
+                "komeiji_koishi" => "Ой, проиграла~! Ну и ладно, зато у тебя было такое сосредоточенное и смешное лицо, хи-хи!",
+                "false_son" => "Бумага накрыла мой камень... Урок смирения принят. Хороший ход.",
                 _ => "Твоя взяла! Чистая победа."
             };
         }

@@ -79,6 +79,9 @@ namespace RiskOfCSharp2.Entities
                     bestE, weakpoint, baseDmg * (1.25f + 0.35f * chainCount),
                     beamCol, aoe: isRail ? 5.5f : 2.2f, lifesteal: 6.0f, canProc: true);
 
+                if (p.IsV2Persona)
+                    p.OnV2StylishActionHeal(10f * chainCount, 18f * chainCount);
+
                 p.V1AddStyle(isRail ? $"+ УЛЬТРАРИКОШЕТ x{chainCount}" : $"+ РИКОШЕТ x{chainCount}",
                     beamCol, (isRail ? 150f : 85f) * chainCount);
             }
@@ -437,6 +440,8 @@ namespace RiskOfCSharp2.Entities
                     hitSet.Add(e.NetId);
                     new VisualFX(eCenter, hitCol, 2.0f, 0.20f);
                     CombatManager.ApplyPlayerHitEffects(e, eCenter, dmg, hitCol, aoe: 1.8f, lifesteal: _returning ? 4.0f : 2.0f, canProc: true);
+                    if (_returning && IsValid(e))
+                        e.TakeDamage(dmg * 0.40f); // Чистый урон возвращающейся Сферы Обмана!
                     p.AddAhriEssence(1);
                 }
             }
@@ -1305,13 +1310,23 @@ namespace RiskOfCSharp2.Entities
                 _buffRing.RotationY += 160f * dt;
             }
 
-            // Полёт после пинка Джек-О (Servant Shoot)
+            // Полёт после пинка Джек-О (Servant Shoot + Бильярдный цепной рикошет миньонов!)
             if (_kickFlyTimer > 0f)
             {
                 _kickFlyTimer -= dt;
                 Position = Physics.ResolveHorizontalCollision(Position + _kickFlyDir * 44f * dt, 0.55f, Y + 0.5f);
                 Y = Physics.GetSurfaceHeight(X, Z, Y + 1.2f);
                 _bodyRig.RotationX += 720f * dt;
+                foreach (var otherSv in c.JackOServants.ToArray())
+                {
+                    if (otherSv == this || !IsValid(otherSv) || otherSv._kickFlyTimer > 0f) continue;
+                    if (Vector3.Distance(Position, otherSv.Position) <= 1.85f)
+                    {
+                        new LightningBeam(Position + new Vector3(0, 0.6f, 0), otherSv.Position + new Vector3(0, 0.6f, 0), Rgb(155, 255, 65), 0.24f);
+                        otherSv.LaunchByKick(_kickFlyDir, _kickImpactDmg * 1.35f);
+                        c.Run.ShowBanner("БИЛЬЯРД ДЖЕК-О :: ЦЕПНОЙ РИКОШЕТ СЛУГ (x1.35 УРОН)!", Rgb(155, 255, 65), 1.2f);
+                    }
+                }
                 foreach (var e in CombatManager.Enemies.ToArray())
                 {
                     if (!IsValid(e) || e.IsAlly) continue;
@@ -1438,7 +1453,7 @@ namespace RiskOfCSharp2.Entities
         }
     }
 
-    public class SurvivorCombatController
+    public partial class SurvivorCombatController
     {
         public readonly GameRunContext Run;
         public string CharKey => Run.CharKey;
@@ -1523,11 +1538,12 @@ namespace RiskOfCSharp2.Entities
             ("drill", "1.БУР", "Пневмо-Бур (+Медь/Жилы)", 25f, 0f, 0f),
             ("smelter", "2.ПЛАВ", "Плавильщик (Медь->Кремний)", 40f, 0f, 0f),
             ("refinery", "3.СИНТ", "Синтезатор (Кремний->Торий)", 55f, 30f, 0f),
-            ("pylon", "4.ПИЛОН", "Ремонтный Купол (Хил+Щит)", 45f, 25f, 0f),
+            ("pylon", "4.ПИЛОН", "Энергоузел и Купол (+28% Турели)", 45f, 25f, 0f),
             ("core_omega", "5.ЯДРО", "Ядро «Цитадель» (+45% Урон)", 80f, 55f, 25f),
             ("duo", "6.ДУЭТ", "Турель «Дуэт» (Лёгкая)", 35f, 0f, 0f),
             ("salvo", "7.ЗАЛП", "Ракетница «Залп» (Самонав.)", 65f, 40f, 0f),
-            ("spectre", "8.ЛАЗЕР", "Лазер «Испепелитель» (Тяж.)", 100f, 70f, 40f)
+            ("spectre", "8.ЛАЗЕР", "Лазер «Испепелитель» (Тяж.)", 100f, 70f, 40f),
+            ("drone_pad", "9.ДРОН", "Фабрика Штурмовых Дронов", 75f, 45f, 15f)
         };
 
         // Грави-пушка и Тау-пушка Гордона Фримана
@@ -1562,10 +1578,13 @@ namespace RiskOfCSharp2.Entities
         public float ZhonyasCooldownTimer = 0f;
         public Entity? ZhonyasSphere = null;
 
-        // Поля управления и прицеливания для MOBA-режима
+        // Поля управления и прицеливания для MOBA-режима и точной сходимости перекрестия камеры
         public Vector3 MobaCursorPos = Vector3.Zero;
         public Vector3? MobaMoveTarget = null;
         public CombatTarget? MobaAttackTarget = null;
+        public Vector3 LastCameraWorldPos = Vector3.Zero;
+        public Vector3 LastCameraLookDir = Vector3.UnitZ;
+        public bool HasCameraAimRay = false;
 
         public bool GrappleActive = false;
         public Vector3 GrappleTarget = Vector3.Zero;
@@ -1863,7 +1882,8 @@ namespace RiskOfCSharp2.Entities
                 float goldShipMult = CharKey == "gold_ship" ? GoldShipSpeedScale : (CharKey == "sanabi" ? SanabiSpeedScale : 1.0f);
                 float newFormMult = (LapplandFormTimer > 0f || PushnoyRockBuffTimer > 0f || DmcDevilTriggerTimer > 0f || SanabiOverdriveTimer > 0f) ? 1.45f : 1.0f;
                 float artGlassMult = GameData.HasArtifact("glass") ? 5.0f : 1.0f;
-                return raw * glassMult * artGlassMult * tonicMult * lolDmgMult * orgiaMult * uberMult * danteMult * beaconMult * genaMult * steveSwordMult * goldShipMult * newFormMult;
+                float expDmgMult = GetExpansionBaseDamageMult() * GetPack1DamageMult() * GetPack2DamageMult() * GetReworkDamageMult();
+                return raw * glassMult * artGlassMult * tonicMult * lolDmgMult * orgiaMult * uberMult * danteMult * beaconMult * genaMult * steveSwordMult * goldShipMult * newFormMult * expDmgMult;
             }
         }
 
@@ -1896,7 +1916,8 @@ namespace RiskOfCSharp2.Entities
                     + 0.08f * CombatManager.GetItemCount("energy_drink")
                     + 0.12f * CombatManager.GetItemCount("red_whip")
                     + 0.16f * CombatManager.GetItemCount("boots_swiftness");
-                return Cfg.Speed * spdBonus * diMult * genaMult * orgiaMult * uberMult * stanceMult * scoutMult * ahriMult * goldShipSpd * jackOSpd * borkMult * tonicMult * fluxPen;
+                float expSpdMult = GetExpansionMoveSpeedMult() * GetPack1MoveSpeedMult() * GetPack2MoveSpeedMult() * GetReworkMoveSpeedMult();
+                return Cfg.Speed * spdBonus * diMult * genaMult * orgiaMult * uberMult * stanceMult * scoutMult * ahriMult * goldShipSpd * jackOSpd * borkMult * tonicMult * fluxPen * expSpdMult;
             }
         }
 
@@ -1915,7 +1936,8 @@ namespace RiskOfCSharp2.Entities
                 float tonicMult = (1.0f + 0.25f * CombatManager.GetItemCount("spinel_tonic"))
                                   * MathF.Pow(0.88f, CombatManager.GetItemCount("tonic_affliction"));
                 float predBonus = PredatoryTimer > 0f ? 0.12f * CombatManager.GetItemCount("predatory") : 0f;
-                return Cfg.FireRate * diMult * genaMult * orgiaMult * uberMult * stanceMult * gwenMistMult * vyperMult * danteMult * tonicMult * (1.0f + 0.15f * CombatManager.GetItemCount("syringe") + predBonus);
+                float expRateMult = GetExpansionFireRateMult() * GetPack1FireRateMult() * GetPack2FireRateMult() * GetReworkFireRateMult();
+                return Cfg.FireRate * diMult * genaMult * orgiaMult * uberMult * stanceMult * gwenMistMult * vyperMult * danteMult * tonicMult * expRateMult * (1.0f + 0.15f * CombatManager.GetItemCount("syringe") + predBonus);
             }
         }
 
@@ -1933,7 +1955,8 @@ namespace RiskOfCSharp2.Entities
             + 0.10f * CombatManager.GetItemCount("lens")
             + 0.05f * CombatManager.GetItemCount("harvester_scythe")
             + 0.07f * CombatManager.GetItemCount("clover")
-            + 0.15f * CombatManager.GetItemCount("infinity_edge"));
+            + 0.15f * CombatManager.GetItemCount("infinity_edge")
+            + GetExpansionCritChanceBonus() + GetPack1CritBonus() + GetPack2CritBonus());
 
         public void SpawnMindustryMainCore(Vector3 pos)
         {
@@ -1975,7 +1998,7 @@ namespace RiskOfCSharp2.Entities
                 MindustryShieldSphere.Enabled = MindustryBuildMode;
             Run.ShowBanner(
                 MindustryBuildMode
-                    ? "СТРОИТЕЛЬНЫЙ РЕЖИМ :: ВЫ ПАРИТЕ И НЕУЯЗВИМЫ! ВЫБЕРИТЕ ЧЕРТЁЖ СПРАВА СНИЗУ [1-8]"
+                    ? "СТРОИТЕЛЬНЫЙ РЕЖИМ :: ВЫ ПАРИТЕ И НЕУЯЗВИМЫ! ВЫБЕРИТЕ ЧЕРТЁЖ СПРАВА СНИЗУ [1-9]"
                     : "БОЕВОЙ РЕЖИМ :: КОРАБЛЬ УЯЗВИМ! ДОСТУПНА СТРЕЛЬБА [ЛКМ] И ИНТЕРАКТИВ [E]",
                 MindustryBuildMode ? Color.SkyBlue : Color.Gold, 2.4f);
         }
@@ -2036,18 +2059,8 @@ namespace RiskOfCSharp2.Entities
             Run.ShowBanner($"ПОСТРОЕНО: {bp.Name}!", Color.Lime, 1.6f);
         }
 
-        public Vector3 GetAimDirection()
+        public Vector3 GetCameraLookDirection()
         {
-            if (SurvivorDatabase.IsMobaCharacter(CharKey) || CharKey == "mindustry")
-            {
-                Vector3 from = new(Run.PlayerPos.X, MobaCursorPos.Y + 1.25f, Run.PlayerPos.Z);
-                Vector3 to = MobaCursorPos + new Vector3(0, 1.15f, 0);
-                Vector3 diff = to - from;
-                if (diff.LengthSquared() > 0.01f)
-                    return Vector3.Normalize(diff);
-                return Run.PlayerForward;
-            }
-
             float pitchRad = Run.CamPitch * (MathF.PI / 180f);
             float yawRad = Run.PlayerEntity.RotationY * (MathF.PI / 180f);
             return Vector3.Normalize(new Vector3(
@@ -2055,6 +2068,110 @@ namespace RiskOfCSharp2.Entities
                 -MathF.Sin(pitchRad),
                 MathF.Cos(yawRad) * MathF.Cos(pitchRad)
             ));
+        }
+
+        private static bool TryRaySphereHitDistance(Vector3 rayOrigin, Vector3 rayDir, Vector3 sphereCenter, float radius, float minT, float maxT, out float hitT)
+        {
+            Vector3 oc = sphereCenter - rayOrigin;
+            float proj = Vector3.Dot(oc, rayDir);
+            if (proj < minT || proj > maxT + radius)
+            {
+                hitT = 0f;
+                return false;
+            }
+            float distSq = oc.LengthSquared() - proj * proj;
+            float rSq = radius * radius;
+            if (distSq > rSq)
+            {
+                hitT = 0f;
+                return false;
+            }
+            float halfChord = MathF.Sqrt(MathF.Max(0f, rSq - distSq));
+            float tNear = proj - halfChord;
+            hitT = tNear >= minT ? tNear : proj;
+            return hitT >= minT && hitT <= maxT;
+        }
+
+        public Vector3 GetAimDirection(Vector3? fromOrigin = null)
+        {
+            if (SurvivorDatabase.IsMobaCharacter(CharKey) || CharKey == "mindustry")
+            {
+                Vector3 from = fromOrigin ?? new Vector3(Run.PlayerPos.X, Run.PlayerPos.Y + 1.25f, Run.PlayerPos.Z);
+                Vector3 to = MobaCursorPos + new Vector3(0, 1.15f, 0);
+                Vector3 diff = to - from;
+                if (diff.LengthSquared() > 0.01f)
+                    return Vector3.Normalize(diff);
+                return Run.PlayerForward;
+            }
+
+            Vector3 camLook = HasCameraAimRay && LastCameraLookDir.LengthSquared() > 0.25f
+                ? Vector3.Normalize(LastCameraLookDir)
+                : GetCameraLookDirection();
+
+            if (!HasCameraAimRay)
+                return camLook;
+
+            Vector3 muzzle = fromOrigin ?? (Run.PlayerPos + new Vector3(0f, 1.48f, 0f) + Run.PlayerForward * 0.72f);
+            Vector3 camPos = LastCameraWorldPos;
+
+            // В режиме от 1-го лица пушка практически совпадает с камерой — луч идёт прямо по центру экрана
+            if (CharKey == "v1" && fromOrigin == null)
+                return camLook;
+
+            float muzzleProj = Vector3.Dot(muzzle - camPos, camLook);
+            float minRayT = MathF.Max(0.45f, muzzleProj + 1.05f);
+            const float maxRayT = 145f;
+            float bestT = maxRayT;
+
+            if (Physics.RaycastAimWorld(camPos, camLook, minRayT, bestT, out Vector3 worldHit))
+            {
+                float wDist = Vector3.Distance(camPos, worldHit);
+                if (wDist >= minRayT && wDist < bestT)
+                    bestT = wDist;
+            }
+
+            for (int i = 0; i < CombatManager.Enemies.Count; i++)
+            {
+                var e = CombatManager.Enemies[i];
+                if (!IsValid(e) || e.IsAlly) continue;
+                Vector3 center = e.Position + new Vector3(0f, e.HitHeight, 0f);
+                float hitRad = MathF.Max(0.65f, e.HitRadius * 1.08f);
+                if (TryRaySphereHitDistance(camPos, camLook, center, hitRad, minRayT, bestT, out float eT))
+                    bestT = eT;
+            }
+
+            if (Physics.SpecialMode == "pvp" && Net.NetworkManager.Instance.Connected)
+            {
+                foreach (var rp in Program.GetRemotePlayersReadOnly().Values)
+                {
+                    if (!IsValid(rp)) continue;
+                    Vector3 rpCenter = rp.Position + new Vector3(0f, 1.25f, 0f);
+                    if (TryRaySphereHitDistance(camPos, camLook, rpCenter, 1.05f, minRayT, bestT, out float pT))
+                        bestT = pT;
+                }
+            }
+
+            if (CharKey == "v1")
+            {
+                for (int i = 0; i < V1ActiveCoins.Count; i++)
+                {
+                    var coin = V1ActiveCoins[i];
+                    if (IsValid(coin) && TryRaySphereHitDistance(camPos, camLook, coin.Position, 0.95f, minRayT, bestT, out float cT))
+                        bestT = cT;
+                }
+                for (int i = 0; i < V1ActiveCores.Count; i++)
+                {
+                    var core = V1ActiveCores[i];
+                    if (IsValid(core) && TryRaySphereHitDistance(camPos, camLook, core.Position, 1.05f, minRayT, bestT, out float kT))
+                        bestT = kT;
+                }
+            }
+
+            Vector3 aimPoint = camPos + camLook * bestT;
+            Vector3 toAim = aimPoint - muzzle;
+            if (toAim.LengthSquared() < 0.04f)
+                return camLook;
+            return Vector3.Normalize(toAim);
         }
 
         public void V1AddStyle(string text, Color col, float points = 60f)
@@ -2092,6 +2209,7 @@ namespace RiskOfCSharp2.Entities
                 if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, cPos) <= rad)
                     CombatManager.ApplyPlayerHitEffects(e, cPos, BaseDamage * dmgMult, col, aoe: 0f, lifesteal: 5.0f);
             }
+            if (IsV2Persona) OnV2StylishActionHeal(isNuke ? 28f : 14f, isNuke ? 45f : 22f);
             if (isNuke) V1AddStyle("+ ЯДЕРНЫЙ ВЗРЫВ!", Color.Red, 175f);
         }
 
@@ -2227,7 +2345,11 @@ namespace RiskOfCSharp2.Entities
                     SoundManager.Play("shoot_heavy", 0.85f, slabMode ? 0.86f : 1.08f);
                     V1AnimateWeaponRecoil(-0.12f * slabDmg, -16f);
                     if (V1CheckHitscanCoinOrCore(eyePos, aimDir, BaseDamage * 2.2f * slabDmg, false)) return;
-                    new Projectile(muzzlePos, aimDir, 115f, BaseDamage * 1.25f * slabDmg, slabMode ? 0.30f : 0.22f, Color.Gold, isPlayer: true, aoe: slabMode ? 2.2f : 0f, pierce: slabMode, lifesteal: 2.0f * slabDmg);
+                    new Projectile(muzzlePos, aimDir, 115f, BaseDamage * 1.25f * slabDmg, slabMode ? 0.30f : 0.22f, Color.Gold, isPlayer: true, aoe: slabMode ? 2.2f : 0f, pierce: slabMode, lifesteal: 2.0f * slabDmg)
+                    {
+                        WallBounces = slabMode ? 3 : (IsV2Persona ? 1 : 0),
+                        BounceDamageMult = 1.35f
+                    };
                 }
                 else if (V1Weapon == 2)
                 {
@@ -2289,11 +2411,28 @@ namespace RiskOfCSharp2.Entities
                 else if (CharKey is "enforcer" or "reimu" or "artificer") m1RateMult = 1.35f;
             }
             M1Cd = 1.0f / (FireRate * m1RateMult);
+            OnExpansionItemM1Fired();
+            if (TryUsePack1M1() || TryUsePack2M1())
+                return;
             FirePrimaryProjectile(1.0f, null);
         }
 
         public bool TryReflectOrParryProjectile(Projectile proj)
         {
+            if (CharKey == "dmc_trio" && Data.ProgressData.Instance.GetSelectedSkin("dmc_trio") == 0 && DanteStyle == 3 && DanteRoyalBlockTimer > 0f)
+            {
+                DanteRoyalGauge = MathF.Min(100f, DanteRoyalGauge + 35f);
+                Shield = MathF.Min(Run.PlayerMaxHp, Shield + 25f);
+                proj.IsPlayer = true;
+                proj.Damage = MathF.Max(proj.Damage * 2.5f, BaseDamage * 3.5f);
+                proj.Speed = MathF.Max(proj.Speed * 1.5f, 80f);
+                proj.Direction = GetAimDirection();
+                proj.Color = Color.Red;
+                SoundManager.Play("parry");
+                new VisualFX(proj.Position, Color.Red, 3.8f, 0.28f);
+                Run.ShowBanner($"ROYAL BLOCK! (+35% ROYAL GAUGE :: {(int)DanteRoyalGauge}%)", Color.Red, 1.5f);
+                return true;
+            }
             if (CharKey != "enforcer") return false;
             Vector3 myPos = Run.PlayerPos + new Vector3(0, 1.4f, 0);
 
@@ -2336,6 +2475,15 @@ namespace RiskOfCSharp2.Entities
 
         public bool TryParryExternalAttack(float incomingDmg, Vector3 sourcePos)
         {
+            if (CharKey == "dmc_trio" && Data.ProgressData.Instance.GetSelectedSkin("dmc_trio") == 0 && DanteStyle == 3 && DanteRoyalBlockTimer > 0f)
+            {
+                DanteRoyalGauge = MathF.Min(100f, DanteRoyalGauge + 38f);
+                Shield = MathF.Min(Run.PlayerMaxHp, Shield + 30f);
+                SoundManager.Play("parry");
+                new VisualFX(Run.PlayerPos + new Vector3(0, 1.4f, 0), Color.Red, 4.8f, 0.32f);
+                Run.ShowBanner($"ROYAL BLOCK! (+38% ROYAL GAUGE :: {(int)DanteRoyalGauge}%)", Color.Red, 1.6f);
+                return true;
+            }
             if (CharKey != "enforcer") return false;
             Vector3 myPos = Run.PlayerPos + new Vector3(0, 1.4f, 0);
 
@@ -2406,6 +2554,9 @@ namespace RiskOfCSharp2.Entities
             Vector3 aimDir = GetAimDirection();
             Vector3 spawnPos = Run.PlayerPos + new Vector3(0, 1.55f, 0) + Run.PlayerForward * 0.95f;
             int m1Var = SkillVar("m1");
+
+            if (colOverride == null && (TryFireZurgPrimary(aimDir, spawnPos, damageMult, m1Var) || TryFirePack1Primary(aimDir, spawnPos, damageMult, m1Var) || TryFirePack2Primary(aimDir, spawnPos, damageMult, m1Var)))
+                return;
 
             if (CharKey == "sol" && colOverride == null)
             {
@@ -2491,6 +2642,16 @@ namespace RiskOfCSharp2.Entities
             }
             if (CharKey == "freeman" && colOverride == null)
             {
+                if (IsValid(FreemanGrabbedEnemy))
+                {
+                    var victim = FreemanGrabbedEnemy!;
+                    FreemanGrabbedEnemy = null;
+                    SoundManager.Play("railgun", 0.95f, 1.15f);
+                    V1AnimateWeaponRecoil(-0.22f, -18f);
+                    Run.StageEntities.Add(new FreemanThrownMonsterEntity(victim, spawnPos + aimDir * 1.4f, aimDir, BaseDamage * 4.8f));
+                    Run.ShowBanner("СИНЯЯ ГРАВИ-ПУШКА :: ЗАХВАЧЕННЫЙ ВРАГ ЗАПУЩЕН КАК СНАРЯД!", Color.SkyBlue, 1.5f);
+                    return;
+                }
                 V1AnimateLeftPunch(Color.Orange);
                 V1AnimateWeaponRecoil(-0.08f, -8f);
                 PerformMeleeAttack(4.5f, 3.0f, damageMult * 0.95f, Rgb(255, 70, 50), lifesteal: 2.0f);
@@ -2674,6 +2835,15 @@ namespace RiskOfCSharp2.Entities
                 bool isWisadel = Data.ProgressData.Instance.GetSelectedSkin("w_arknights") == 2;
                 if (isWisadel)
                 {
+                    if (WisadelAncestralCharges > 0)
+                    {
+                        WisadelAncestralCharges--;
+                        SoundManager.Play("railgun", 1.0f, 0.92f);
+                        new LightningBeam(spawnPos, spawnPos + aimDir * 44f, Rgb(255, 35, 65), 0.36f);
+                        new VisualFX(spawnPos + aimDir * 1.5f, Rgb(255, 45, 70), 3.4f, 0.25f);
+                        new Projectile(spawnPos, aimDir, 112f, BaseDamage * 2.85f * damageMult, 0.65f, Rgb(255, 35, 65), isPlayer: true, aoe: 7.5f, pierce: true, lifesteal: 4.5f);
+                        return;
+                    }
                     SoundManager.Play("railgun", 0.72f, 1.15f);
                     new LightningBeam(spawnPos, spawnPos + aimDir * 34f, Rgb(255, 55, 75), 0.20f);
                     new Projectile(spawnPos, aimDir, 96f, BaseDamage * (m1Var == 1 ? 1.55f : 1.35f) * damageMult, 0.42f, Rgb(255, 55, 75), isPlayer: true, aoe: m1Var == 1 ? 5.8f : 5.0f, pierce: m1Var == 1, lifesteal: 2.5f);
@@ -2798,11 +2968,16 @@ namespace RiskOfCSharp2.Entities
                 int dmcForm = Data.ProgressData.Instance.GetSelectedSkin("dmc_trio");
                 if (dmcForm == 1) // НЕРО
                 {
-                    NeroExceedCharges = Math.Min(3, NeroExceedCharges + 1);
-                    float exMult = 1.15f + NeroExceedCharges * 0.20f;
-                    PerformMeleeAttack(5.8f, 4.2f, damageMult * (m1Var == 1 ? 1.60f : exMult), Rgb(255, 110, 35), lifesteal: 3.0f, aoe: 2.6f);
-                    if (m1Var == 1)
-                        Run.StageEntities.Add(new GunFlamePillar(Run.PlayerPos + Run.PlayerForward * 3.5f, 0.02f, BaseDamage * 1.10f * damageMult));
+                    bool hasExceed = NeroExceedCharges > 0;
+                    if (hasExceed) NeroExceedCharges--;
+                    NeroMaxActWindow = 0.30f; // Окно для нажатия [Q] MAX-Act в такт удару!
+                    float exMult = hasExceed ? 1.85f : 1.18f;
+                    PerformMeleeAttack(hasExceed ? 6.8f : 5.8f, hasExceed ? 4.8f : 4.2f, damageMult * (m1Var == 1 ? exMult * 1.18f : exMult), hasExceed ? Rgb(255, 85, 20) : Rgb(255, 130, 45), lifesteal: hasExceed ? 5.0f : 3.0f, aoe: hasExceed ? 3.8f : 2.6f);
+                    if (hasExceed || m1Var == 1)
+                    {
+                        SoundManager.Play("flame", 0.85f, 1.05f);
+                        new Projectile(spawnPos, aimDir, 68f, BaseDamage * (hasExceed ? 1.45f : 1.05f) * damageMult, 0.48f, Rgb(255, 95, 25), isPlayer: true, aoe: 3.4f, pierce: true, maxLifetime: 0.45f);
+                    }
                     else
                     {
                         SoundManager.Play("shoot_heavy", 0.78f, 1.05f);
@@ -2811,7 +2986,9 @@ namespace RiskOfCSharp2.Entities
                 }
                 else if (dmcForm == 2) // ВЕРГИЛИЙ
                 {
-                    PerformMeleeAttack(5.8f, 4.4f, damageMult * (m1Var == 1 ? 1.65f : 1.15f), Rgb(85, 205, 255), lifesteal: 3.5f, scissorCross: true, aoe: 2.6f);
+                    VergilJustCutWindow = 0.32f; // Окно для Perfect Judgement Cut на ПКМ!
+                    int vHits = PerformMeleeAttack(5.8f, 4.4f, damageMult * (m1Var == 1 ? 1.65f : 1.15f), Rgb(85, 205, 255), lifesteal: 3.5f, scissorCross: true, aoe: 2.6f);
+                    if (vHits > 0) VergilConcentration = MathF.Min(100f, VergilConcentration + 8f * vHits);
                     if (m1Var == 0)
                     {
                         new VisualFX(spawnPos + aimDir * 8.5f, Rgb(95, 225, 255), 3.4f, 0.20f);
@@ -2931,6 +3108,37 @@ namespace RiskOfCSharp2.Entities
             TriggerLoLSpellblade();
             Color projCol = colOverride ?? Cfg.VisorColor;
 
+            // Ручные выстрелы Небесной Баллисты и Заряженная Стрела Хищницы для Охотницы!
+            if (CharKey == "huntress" && colOverride == null)
+            {
+                if (HuntressBallistaShots > 0)
+                {
+                    HuntressBallistaShots--;
+                    if (HuntressBallistaShots <= 0) HuntressBallistaTimer = 0f;
+                    SoundManager.Play("railgun", 0.90f, 1.22f);
+                    new LightningBeam(spawnPos, spawnPos + aimDir * 48f, Rgb(255, 85, 130), 0.28f);
+                    new Projectile(spawnPos, aimDir, 135f, BaseDamage * 3.85f * damageMult, 0.56f, Rgb(255, 85, 130), isPlayer: true, aoe: 4.5f, pierce: true, lifesteal: 4.0f);
+                    return;
+                }
+                if (HuntressMomentumCharge >= 0.98f)
+                {
+                    HuntressMomentumCharge = 0f;
+                    damageMult *= 2.20f;
+                    projCol = Rgb(255, 95, 145);
+                    new VisualFX(spawnPos, projCol, 2.2f, 0.20f);
+                }
+            }
+
+            // Тяжёлая тактическая обойма Коммандо после кувырка!
+            bool commandoHeavyShot = false;
+            if (CharKey == "commando" && colOverride == null && CommandoHeavyRounds > 0)
+            {
+                CommandoHeavyRounds--;
+                commandoHeavyShot = true;
+                damageMult *= 1.38f;
+                projCol = Color.Gold;
+            }
+
             if (m1Var == 1 && colOverride == null)
             {
                 if (CharKey == "commando")
@@ -2938,7 +3146,7 @@ namespace RiskOfCSharp2.Entities
                     for (int i = 0; i < 4; i++)
                     {
                         Vector3 off = new((float)_rng.NextDouble() * 0.09f - 0.045f, (float)_rng.NextDouble() * 0.06f - 0.03f, (float)_rng.NextDouble() * 0.09f - 0.045f);
-                        new Projectile(spawnPos, Vector3.Normalize(aimDir + off), 88f, BaseDamage * 0.45f * damageMult, 0.20f, projCol, isPlayer: true, pierce: true, maxLifetime: 0.48f);
+                        new Projectile(spawnPos, Vector3.Normalize(aimDir + off), 88f, BaseDamage * 0.45f * damageMult, 0.20f, projCol, isPlayer: true, aoe: commandoHeavyShot ? 1.8f : 0f, pierce: true, maxLifetime: 0.48f);
                     }
                     return;
                 }
@@ -2961,7 +3169,11 @@ namespace RiskOfCSharp2.Entities
                 if (CharKey == "buzz")
                 {
                     foreach (float sideOff in new[] { -0.26f, 0.26f })
-                        new Projectile(spawnPos + Run.PlayerEntity.Right * sideOff, aimDir, 76f, BaseDamage * 0.65f * damageMult, 0.26f, Color.Lime, isPlayer: true, bounces: 3);
+                        new Projectile(spawnPos + Run.PlayerEntity.Right * sideOff, aimDir, 76f, BaseDamage * 0.65f * damageMult, 0.26f, Color.Lime, isPlayer: true, bounces: 3)
+                        {
+                            WallBounces = 2,
+                            BounceDamageMult = 1.25f
+                        };
                     return;
                 }
                 if (CharKey == "scout")
@@ -2987,8 +3199,13 @@ namespace RiskOfCSharp2.Entities
             }
 
             float allyHeal = CharKey == "medic" ? (12.0f + BaseDamage * 0.85f) : 0f;
-            new Projectile(spawnPos, aimDir, Cfg.ProjSpeed, BaseDamage * damageMult, Cfg.ProjScale, projCol,
-                isPlayer: true, aoe: Cfg.Aoe, homing: CharKey == "huntress", healAllies: allyHeal);
+            var mainProj = new Projectile(spawnPos, aimDir, Cfg.ProjSpeed, BaseDamage * damageMult, Cfg.ProjScale, projCol,
+                isPlayer: true, aoe: commandoHeavyShot ? MathF.Max(Cfg.Aoe, 2.0f) : Cfg.Aoe, pierce: commandoHeavyShot, homing: CharKey == "huntress", healAllies: allyHeal);
+            if (CharKey == "buzz" && colOverride == null)
+            {
+                mainProj.WallBounces = 2;
+                mainProj.BounceDamageMult = 1.25f;
+            }
         }
 
         public void UseM2Skill()
@@ -3000,11 +3217,21 @@ namespace RiskOfCSharp2.Entities
             }
 
             TriggerLoLSpellblade();
+            OnExpansionItemSkillUsed("m2");
             Vector3 aimDir = GetAimDirection();
             Vector3 spawnPos = Run.PlayerPos + new Vector3(0, 1.55f, 0) + Run.PlayerForward * 1.1f;
 
+            if (TryUsePack1M2(aimDir, spawnPos) || TryUsePack2M2(aimDir, spawnPos))
+                return;
+
             if (CharKey == "v1")
             {
+                if (TryUseV2M2(aimDir, spawnPos, SkillVar("m2")))
+                {
+                    float v2Cdr = MathF.Max(0.20f, (1.0f - 0.12f * CombatManager.GetItemCount("backup_mag")) * MathF.Pow(0.80f, CombatManager.GetItemCount("alien_head")));
+                    M2Cd = (SkillVar("m2") == 0 ? 3.2f : 2.6f) * v2Cdr;
+                    return;
+                }
                 Vector3 eyePos = Run.PlayerPos + new Vector3(0, 1.72f, 0);
                 if (V1Weapon == 1)
                 {
@@ -3165,6 +3392,41 @@ namespace RiskOfCSharp2.Entities
 
             if (CharKey == "freeman")
             {
+                if (IsValid(FreemanGrabbedEnemy))
+                {
+                    var victim = FreemanGrabbedEnemy!;
+                    FreemanGrabbedEnemy = null;
+                    M2Cd = 0.45f;
+                    SoundManager.Play("railgun", 0.95f, 1.15f);
+                    V1AnimateWeaponRecoil(-0.22f, -18f);
+                    Run.StageEntities.Add(new FreemanThrownMonsterEntity(victim, spawnPos + aimDir * 1.4f, aimDir, BaseDamage * 4.8f));
+                    Run.ShowBanner("СИНЯЯ ГРАВИ-ПУШКА :: ЗАХВАЧЕННЫЙ МОНСТР ВЫПУЩЕН ВО ВРАГОВ!", Color.SkyBlue, 1.5f);
+                    return;
+                }
+                if (!HasGrabbedObject && IsFreemanBlueGravityGunActive())
+                {
+                    CombatTarget? liveVictim = null;
+                    float bestScore = 0.55f;
+                    foreach (var e in CombatManager.Enemies)
+                    {
+                        if (!IsValid(e) || e.IsAlly || e.IsBoss) continue;
+                        Vector3 toE = (e.Position + new Vector3(0, e.HitHeight, 0)) - (Run.PlayerPos + new Vector3(0, 1.5f, 0));
+                        if (toE.Length() <= 22.0f && Vector3.Dot(aimDir, Vector3.Normalize(toE)) > bestScore)
+                        {
+                            bestScore = Vector3.Dot(aimDir, Vector3.Normalize(toE));
+                            liveVictim = e;
+                        }
+                    }
+                    if (liveVictim != null)
+                    {
+                        FreemanGrabbedEnemy = liveVictim;
+                        M2Cd = 0.28f;
+                        SoundManager.Play("grapple", 0.95f, 1.15f);
+                        new VisualFX(liveVictim.Position + Vector3.UnitY, Color.SkyBlue, 3.2f, 0.25f);
+                        Run.ShowBanner("СИНЯЯ ГРАВИ-ПУШКА ЦИТАДЕЛИ :: ЖИВОЙ ВРАГ ЗАХВАЧЕН! [ЛКМ/ПКМ — ШВЫРНУТЬ]", Color.SkyBlue, 2.0f);
+                        return;
+                    }
+                }
                 if (m2Var == 1 && !HasGrabbedObject)
                 {
                     // Сфера Тёмной Энергии AR2 (или захват сундука, если он рядом)
@@ -3245,11 +3507,14 @@ namespace RiskOfCSharp2.Entities
             {
                 if (m2Var == 1)
                 {
-                    for (int i = 0; i < 8; i++)
+                    SoundManager.Play("rocket", 0.85f, 1.15f);
+                    new Projectile(spawnPos, Vector3.Normalize(aimDir + new Vector3(0, 0.18f, 0)), 52f, BaseDamage * 3.4f, 0.44f, Color.Orange, isPlayer: true, aoe: 6.5f)
                     {
-                        Vector3 off = new((float)_rng.NextDouble() * 0.16f - 0.08f, (float)_rng.NextDouble() * 0.10f - 0.05f, (float)_rng.NextDouble() * 0.16f - 0.08f);
-                        new Projectile(spawnPos, Vector3.Normalize(aimDir + off), 68f, BaseDamage * 0.52f, 0.26f, Color.Orange, isPlayer: true, aoe: 2.0f, pierce: true, maxLifetime: 0.44f);
-                    }
+                        WallBounces = 2,
+                        BounceDamageMult = 1.18f,
+                        GravityArc = 1.35f,
+                        StunOnHit = 1.6f
+                    };
                 }
                 else new Projectile(spawnPos, aimDir, 68f, BaseDamage * 3.0f, 0.48f, Color.SkyBlue, isPlayer: true, pierce: true);
             }
@@ -3259,8 +3524,11 @@ namespace RiskOfCSharp2.Entities
                 {
                     new Projectile(spawnPos, aimDir, 62f, BaseDamage * 3.1f, 0.72f, Rgb(120, 235, 255), isPlayer: true, aoe: 5.5f, pierce: true);
                     foreach (var e in CombatManager.Enemies)
-                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, Run.PlayerPos + Run.PlayerForward * 7f) <= 7.5f && !e.IsBoss)
-                            e.StunTimer = MathF.Max(e.StunTimer, 2.0f);
+                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, Run.PlayerPos + Run.PlayerForward * 7f) <= 7.5f)
+                        {
+                            if (!e.IsBoss) e.StunTimer = MathF.Max(e.StunTimer, 2.0f);
+                            e.ApplyArtificerElement("ice", BaseDamage);
+                        }
                 }
                 else new Projectile(spawnPos, aimDir, 26f, BaseDamage * 2.8f, 0.95f, Color.SkyBlue, isPlayer: true, aoe: 7.5f);
             }
@@ -3270,9 +3538,23 @@ namespace RiskOfCSharp2.Entities
                     new Projectile(spawnPos, aimDir, 86f, BaseDamage * 3.2f, 0.58f, Rgb(255, 95, 145), isPlayer: true, aoe: 5.5f, pierce: true);
                 else
                     new Projectile(spawnPos, aimDir, 48f, BaseDamage * 2.2f, 0.55f, Color.SkyBlue, isPlayer: true, bounces: 5, homing: true);
+
+                int marked = 0;
+                foreach (var e in CombatManager.Enemies)
+                {
+                    if (!IsValid(e) || e.IsAlly) continue;
+                    Vector3 toE = (e.Position + new Vector3(0, e.HitHeight, 0)) - spawnPos;
+                    if (toE.Length() <= 32f && Vector3.Dot(aimDir, Vector3.Normalize(toE)) >= 0.72f)
+                    {
+                        e.HuntressMarkTimer = 6.5f;
+                        if (++marked >= 4) break;
+                    }
+                }
             }
             else if (CharKey == "buzz")
             {
+                if (TryUseZurgM2(aimDir, spawnPos, m2Var))
+                    return;
                 if (m2Var == 1)
                 {
                     new VisualFX(Run.PlayerPos + new Vector3(0, 1.3f, 0), Rgb(140, 255, 95), 7.5f, 0.35f);
@@ -3286,7 +3568,21 @@ namespace RiskOfCSharp2.Entities
                 {
                     FireGwenNeedleWave(3, 1.25f);
                 }
-                else PerformMeleeAttack(7.2f, 4.2f, 3.2f, Rgb(155, 240, 255), lifesteal: 6.5f, scissorCross: true, aoe: 2.8f);
+                else
+                {
+                    PerformMeleeAttack(7.2f, 4.2f, 3.2f, Rgb(155, 240, 255), lifesteal: 6.5f, scissorCross: true, aoe: 2.8f);
+                    // Сладкая точка по центру лезвий ножниц наносит чистый урон!
+                    foreach (var e in CombatManager.Enemies.ToArray())
+                    {
+                        if (!IsValid(e) || e.IsAlly) continue;
+                        Vector3 flat = new(e.X - Run.PlayerPos.X, 0f, e.Z - Run.PlayerPos.Z);
+                        if (flat.Length() <= 7.5f && flat.LengthSquared() > 0.01f && Vector3.Dot(Vector3.Normalize(flat), Run.PlayerForward) >= 0.90f)
+                        {
+                            new VisualFX(e.Position + new Vector3(0, e.HitHeight, 0), Color.White, 2.6f, 0.22f);
+                            e.TakeDamage(BaseDamage * 1.45f);
+                        }
+                    }
+                }
             }
             else if (CharKey == "enforcer")
             {
@@ -3301,6 +3597,9 @@ namespace RiskOfCSharp2.Entities
                 {
                     Run.ApplyDash(Run.PlayerForward * 16.0f, 0.16f);
                     Shield = MathF.Min(Run.PlayerMaxHp, Shield + 20.0f);
+                    foreach (var e in CombatManager.Enemies.ToArray())
+                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, Run.PlayerPos + Run.PlayerForward * 3.0f) <= 6.2f)
+                            ApplyEnforcerWallSplat(e, Run.PlayerForward, 6.0f);
                     PerformMeleeAttack(5.6f, 3.8f, 2.6f, Color.SkyBlue, stunDur: 2.0f, knockback: 5.5f, aoe: 2.5f);
                 }
             }
@@ -3344,6 +3643,7 @@ namespace RiskOfCSharp2.Entities
             else if (CharKey == "medic")
             {
                 V1AnimateWeaponRecoil(-0.14f, -12f);
+                MedicUberCharge = MathF.Min(100f, MedicUberCharge + 18f);
                 Vector3 myPos = Run.PlayerPos + new Vector3(0, 1.4f, 0);
                 if (m2Var == 1)
                 {
@@ -3362,6 +3662,8 @@ namespace RiskOfCSharp2.Entities
             }
             else if (CharKey == "aigis")
             {
+                AigisTetrakarnCharges = 2;
+                Shield = MathF.Min(Run.PlayerMaxHp, Shield + 25.0f);
                 if (m2Var == 1)
                 {
                     foreach (float deg in new[] { -10f, 0f, 10f })
@@ -3393,6 +3695,7 @@ namespace RiskOfCSharp2.Entities
                 else
                 {
                     Run.PlayerHp = MathF.Max(1f, Run.PlayerHp - Run.PlayerHp * 0.05f);
+                    SlarkDarkPactPulseTimer = 0.85f; // Отложенный второй импульс очищения и урона!
                     new VisualFX(Run.PlayerPos + new Vector3(0, 1.2f, 0), Rgb(115, 65, 245), 9.0f, 0.38f);
                     int hitCnt = 0;
                     foreach (var e in CombatManager.Enemies.ToArray())
@@ -3400,7 +3703,7 @@ namespace RiskOfCSharp2.Entities
                         if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, Run.PlayerPos) <= 8.5f)
                         {
                             hitCnt++;
-                            CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 3.2f, Rgb(130, 85, 255), aoe: 2.0f, lifesteal: 4.5f);
+                            CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 2.6f, Rgb(130, 85, 255), aoe: 2.0f, lifesteal: 4.5f);
                         }
                     }
                     if (hitCnt > 0) SlarkEssenceStacks = Math.Min(40, SlarkEssenceStacks + hitCnt);
@@ -3500,11 +3803,13 @@ namespace RiskOfCSharp2.Entities
                 {
                     if (m2Var == 1)
                     {
-                        Vector3 strikeP = Run.PlayerPos + Run.PlayerForward * 8.5f;
-                        new OrbitalStrikeFX(strikeP, BaseDamage * 4.2f);
-                        foreach (var e in CombatManager.Enemies)
-                            if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, strikeP) <= 6.5f && !e.IsBoss)
-                                e.StunTimer = MathF.Max(e.StunTimer, 2.0f);
+                        var nearT = CombatManager.FindNearestHostileAt(Run.PlayerPos + Run.PlayerForward * 8.5f);
+                        for (int s = -1; s <= 1; s += 2)
+                        {
+                            var wolf = new LapplandWolfSpiritEntity(spawnPos + Run.PlayerEntity.Right * (s * 0.9f), nearT, BaseDamage * 2.65f, Rgb(225, 75, 255));
+                            wolf.LookAt2D(Run.PlayerPos + aimDir * 14f);
+                            Run.StageEntities.Add(wolf);
+                        }
                     }
                     else
                     {
@@ -3521,7 +3826,9 @@ namespace RiskOfCSharp2.Entities
                 {
                     Shield = MathF.Min(Run.PlayerMaxHp, Shield + 25.0f);
                     PerformMeleeAttack(6.5f, 4.5f, 2.2f, Color.White, lifesteal: 5.0f, scissorCross: true, aoe: 3.5f);
-                    new Projectile(spawnPos, aimDir, 84f, BaseDamage * 2.8f, 0.58f, Color.White, isPlayer: true, aoe: 4.8f, pierce: true, lifesteal: 6.0f);
+                    var wolf = new LapplandWolfSpiritEntity(spawnPos, CombatManager.FindNearestHostileAt(Run.PlayerPos + aimDir * 10f), BaseDamage * 2.95f, Color.White);
+                    wolf.LookAt2D(Run.PlayerPos + aimDir * 14f);
+                    Run.StageEntities.Add(wolf);
                 }
             }
             else if (CharKey == "w_arknights")
@@ -3536,26 +3843,34 @@ namespace RiskOfCSharp2.Entities
                     }
                     else
                     {
-                        WisadelTurretPos = Run.PlayerPos + Run.PlayerForward * 4.0f;
+                        WisadelShadows.RemoveAll(s => !IsValid(s));
+                        if (WisadelShadows.Count >= 3) { Destroy(WisadelShadows[0]); WisadelShadows.RemoveAt(0); }
+                        Vector3 totemPos = Physics.ResolveHorizontalCollision(Run.PlayerPos + Run.PlayerForward * 4.2f, 0.8f, Run.PlayerPos.Y);
+                        var totem = new WisadelShadowTotemEntity(totemPos);
+                        WisadelShadows.Add(totem);
+                        Run.StageEntities.Add(totem);
+                        WisadelTurretPos = totem.Position;
                         WisadelTurretTimer = 8.0f;
-                        new VisualFX(WisadelTurretPos + new Vector3(0, 1.2f, 0), Rgb(255, 55, 75), 6.5f, 0.35f);
-                        new Projectile(spawnPos, aimDir, 76f, BaseDamage * 3.0f, 0.58f, Rgb(255, 55, 75), isPlayer: true, aoe: 5.8f, lifesteal: 5.0f);
-                        Run.ShowBanner("ТЕНЬ РЕВЕНАНТА РАЗВЁРНУТА (8 СЕК АВТО-АРТОБСТРЕЛА)!", Rgb(255, 75, 90), 2.0f);
+                        new Projectile(spawnPos, aimDir, 76f, BaseDamage * 2.8f, 0.58f, Rgb(255, 55, 75), isPlayer: true, aoe: 5.8f, lifesteal: 5.0f);
+                        Run.ShowBanner($"ТЕНЬ ВОССТАВШИХ РАЗВЁРНУТА ({WisadelShadows.Count}/3 :: ТАУНТ + АВТО-АРТОБСТРЕЛ)!", Rgb(255, 75, 90), 2.0f);
                     }
-                }
-                else if (m2Var == 1)
-                {
-                    Run.StageEntities.Add(new OrangeClusterProjectile(spawnPos, aimDir, BaseDamage * 2.8f, shardsCount: 6));
                 }
                 else
                 {
-                    SoundManager.Play("explosion", 0.90f, 0.95f);
-                    Vector3 c4Pos = Run.PlayerPos + Run.PlayerForward * 6.0f;
-                    new VisualFX(c4Pos + new Vector3(0, 1.0f, 0), Rgb(255, 70, 50), 8.5f, 0.38f);
-                    new Projectile(spawnPos, aimDir, 72f, BaseDamage * 3.4f, 0.62f, Rgb(255, 70, 50), isPlayer: true, aoe: 7.5f, lifesteal: 6.0f);
-                    foreach (var e in CombatManager.Enemies)
-                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, c4Pos) <= 7.5f && !e.IsBoss)
-                            e.StunTimer = MathF.Max(e.StunTimer, 2.0f);
+                    WMines.RemoveAll(m => !IsValid(m));
+                    int count = m2Var == 1 ? 2 : 1;
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (WMines.Count >= 6) { WMines[0].Detonate(1.0f); WMines.RemoveAt(0); }
+                        float side = count == 1 ? 0f : (i == 0 ? -1.4f : 1.4f);
+                        Vector3 mPos = Physics.ResolveHorizontalCollision(Run.PlayerPos + Run.PlayerForward * 3.8f + Run.PlayerEntity.Right * side, 0.5f, Run.PlayerPos.Y);
+                        var mine = new WC4ClaymoreMineEntity(mPos, BaseDamage * (m2Var == 1 ? 2.65f : 3.4f));
+                        WMines.Add(mine);
+                        Run.StageEntities.Add(mine);
+                    }
+                    if (m2Var == 0)
+                        new Projectile(spawnPos, aimDir, 72f, BaseDamage * 2.4f, 0.52f, Rgb(255, 70, 50), isPlayer: true, aoe: 6.5f, lifesteal: 5.0f);
+                    Run.ShowBanner($"МИНА «КЛЕЙМОР» УСТАНОВЛЕНА ({WMines.Count}/6) :: [Shift — ПОДРЫВ ВСЕХ МИН]!", Rgb(255, 85, 65), 1.6f);
                 }
             }
             else if (CharKey == "gold_ship")
@@ -3563,8 +3878,9 @@ namespace RiskOfCSharp2.Entities
                 float spdScale = GoldShipSpeedScale;
                 if (m2Var == 1)
                 {
-                    new Projectile(spawnPos, aimDir, 78f, BaseDamage * 3.1f * spdScale, 0.68f, Color.Gold, isPlayer: true, aoe: 6.5f * spdScale, pierce: true, lifesteal: 6.0f);
-                    Run.ShowBanner($"ЗОЛОТОЙ ЯКОРЬ ГОЛД ШИП! (СКОРОСТНОЙ БОНУС x{spdScale:F2})", Color.Gold, 1.6f);
+                    Vector3 anchorDrop = Run.PlayerPos + Run.PlayerForward * 9.5f;
+                    Run.StageEntities.Add(new GoldShipSkyAnchorEntity(anchorDrop, BaseDamage * 3.6f * spdScale));
+                    Run.ShowBanner($"НЕБЕСНЫЙ ЯКОРЬ ГОЛД ШИП СБРОШЕН! (СКОРОСТНОЙ БОНУС x{spdScale:F2})", Color.Gold, 1.6f);
                 }
                 else
                 {
@@ -3581,6 +3897,8 @@ namespace RiskOfCSharp2.Entities
                 if (m2Var == 1)
                 {
                     SoundManager.Play("zap", 0.95f, 1.05f);
+                    Vector3 towerPos = Physics.ResolveHorizontalCollision(Run.PlayerPos + Run.PlayerForward * 4.5f, 0.8f, Run.PlayerPos.Y);
+                    Run.StageEntities.Add(new PushnoyTeslaTowerEntity(towerPos));
                     Vector3 prevP = spawnPos;
                     int chained = 0;
                     foreach (var e in CombatManager.Enemies.ToArray())
@@ -3589,13 +3907,14 @@ namespace RiskOfCSharp2.Entities
                         {
                             Vector3 hitP = e.Position + new Vector3(0, e.HitHeight, 0);
                             new LightningBeam(prevP, hitP, Color.SkyBlue, 0.28f);
+                            e.ApplyArtificerElement("shock", BaseDamage);
                             if (!e.IsBoss) e.StunTimer = MathF.Max(e.StunTimer, 1.4f);
-                            CombatManager.ApplyPlayerHitEffects(e, hitP, BaseDamage * 3.1f, Color.SkyBlue, aoe: 2.5f, lifesteal: 3.0f);
+                            CombatManager.ApplyPlayerHitEffects(e, hitP, BaseDamage * 2.6f, Color.SkyBlue, aoe: 2.5f, lifesteal: 3.0f);
                             prevP = hitP;
-                            if (++chained >= 6) break;
+                            if (++chained >= 5) break;
                         }
                     }
-                    Run.ShowBanner("ЭКСПЕРИМЕНТ :: МЕГАВОЛЬТ-РАЗРЯД КАТУШКИ ТЕСЛЫ!", Color.SkyBlue, 1.8f);
+                    Run.ShowBanner("ЭКСПЕРИМЕНТ :: КАТУШКА ТЕСЛЫ РАЗВЁРНУТА!", Color.SkyBlue, 1.8f);
                 }
                 else
                 {
@@ -3612,6 +3931,7 @@ namespace RiskOfCSharp2.Entities
                             {
                                 if (!e.IsBoss) e.StunTimer = MathF.Max(e.StunTimer, 2.8f);
                                 e.SlowTimer = MathF.Max(e.SlowTimer, 5.0f);
+                                e.ApplyArtificerElement("ice", BaseDamage);
                                 CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 2.8f, Color.SkyBlue, aoe: 2.5f, lifesteal: 4.0f);
                             }
                         }
@@ -3626,8 +3946,7 @@ namespace RiskOfCSharp2.Entities
                             if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, expPos) <= 8.5f)
                             {
                                 e.ArmorBreakTimer = MathF.Max(e.ArmorBreakTimer, 8.0f);
-                                e.LiandryBurnTimer = MathF.Max(e.LiandryBurnTimer, 6.0f);
-                                e.LiandryBurnDps = MathF.Max(e.LiandryBurnDps, BaseDamage * 0.90f);
+                                e.ApplyArtificerElement("fire", BaseDamage);
                                 CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 3.4f, Rgb(255, 115, 25), aoe: 3.0f, lifesteal: 4.0f);
                             }
                         }
@@ -3645,6 +3964,7 @@ namespace RiskOfCSharp2.Entities
             }
             else if (CharKey == "freddy")
             {
+                SpendFreddyBattery(18f);
                 if (m2Var == 1)
                 {
                     Run.HealPlayer(22.0f);
@@ -3782,7 +4102,29 @@ namespace RiskOfCSharp2.Entities
                 }
                 else if (dmcForm == 2) // ВЕРГИЛИЙ
                 {
-                    if (m2Var == 1)
+                    if (VergilJustCutWindow > 0f)
+                    {
+                        VergilJustCutWindow = 0f;
+                        VergilConcentration = MathF.Min(100f, VergilConcentration + 18f);
+                        M2Cd *= 0.45f;
+                        SoundManager.Play("railgun", 0.95f, 1.35f);
+                        Vector3 jcPos = Run.PlayerPos + aimDir * 11.5f;
+                        var nearT = CombatManager.FindNearestHostileAt(jcPos);
+                        if (nearT != null && Vector3.Distance(nearT.Position, jcPos) <= 9.0f)
+                            jcPos = nearT.Position + new Vector3(0, nearT.HitHeight * 0.6f, 0);
+                        new VisualFX(jcPos, Rgb(95, 235, 255), 6.2f, 0.30f);
+                        for (int s = 0; s < 5; s++)
+                        {
+                            float a = s * 1.25f;
+                            Vector3 off = new(MathF.Cos(a) * 3.6f, MathF.Sin(a * 2f) * 2.0f, MathF.Sin(a) * 3.6f);
+                            new LightningBeam(jcPos - off, jcPos + off, Color.White, 0.24f);
+                        }
+                        foreach (var e in CombatManager.Enemies.ToArray())
+                            if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, jcPos) <= 6.5f)
+                                CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 4.4f, Rgb(95, 235, 255), aoe: 2.5f, lifesteal: 6.0f);
+                        Run.ShowBanner("★ PERFECT JUDGEMENT CUT!! (+18 КОНЦЕНТРАЦИИ) ★", Rgb(125, 240, 255), 1.6f);
+                    }
+                    else if (m2Var == 1)
                     {
                         Run.ApplyDash(Run.PlayerForward * 26.0f, 0.22f);
                         PerformMeleeAttack(7.5f, 5.2f, 3.2f, Rgb(95, 225, 255), lifesteal: 7.0f, stunDur: 1.4f, scissorCross: true, aoe: 4.8f);
@@ -3796,7 +4138,17 @@ namespace RiskOfCSharp2.Entities
                 }
                 else // ДАНТЕ
                 {
-                    if (m2Var == 1)
+                    if (DanteStyle == 3 && DanteRoyalGauge >= 25f)
+                    {
+                        float relMult = 3.2f + (DanteRoyalGauge / 100f) * 5.0f;
+                        DanteRoyalGauge = 0f;
+                        SoundManager.Play("explosion", 1.0f, 1.15f);
+                        Run.ApplyDash(Run.PlayerForward * 22.0f, 0.20f);
+                        new VisualFX(Run.PlayerPos + Run.PlayerForward * 3.0f + new Vector3(0, 1.3f, 0), Color.Red, 8.5f, 0.36f);
+                        PerformMeleeAttack(8.5f, 6.2f, relMult, Color.Gold, lifesteal: 12.0f, stunDur: 2.2f, knockback: 7.5f, aoe: 5.5f);
+                        Run.ShowBanner($"★ ROYAL RELEASE!! (УРОН x{relMult:F1}) ★", Color.Gold, 1.8f);
+                    }
+                    else if (m2Var == 1)
                     {
                         foreach (float s in new[] { -0.35f, 0.35f })
                             new Projectile(spawnPos + Run.PlayerEntity.Right * s, aimDir, 68f, BaseDamage * 2.1f, 0.48f, Rgb(255, 75, 55), isPlayer: true, aoe: 5.5f, lifesteal: 4.0f);
@@ -3894,6 +4246,7 @@ namespace RiskOfCSharp2.Entities
             if (SkillLockTimer > 0f) return;
 
             TriggerLoLSpellblade();
+            OnExpansionItemSkillUsed("shift");
             float alienCdr = MathF.Pow(0.80f, CombatManager.GetItemCount("alien_head"));
             float burnCdr = MathF.Pow(0.70f, CombatManager.GetItemCount("afterburner"));
             ShiftCd = MathF.Max(0.25f, Cfg.Skills["shift"].Cd * alienCdr * burnCdr);
@@ -3901,6 +4254,8 @@ namespace RiskOfCSharp2.Entities
             float nrgMult = 1.0f + 0.18f * CombatManager.GetItemCount("energy_drink") + 0.35f * CombatManager.GetItemCount("afterburner");
             int shVar = SkillVar("shift");
             Run.Parts.TriggerSkillAnim("shift", 0.38f);
+            if (TryUsePack1Shift(myPos, shVar, alienCdr * burnCdr, nrgMult) || TryUsePack2Shift(myPos, shVar, alienCdr * burnCdr, nrgMult))
+                return;
             if (CharKey == "scout") SoundManager.Play("grapple");
             else if (CharKey == "dante") SoundManager.Play("dante_clock");
             else SoundManager.Play("dash");
@@ -3944,8 +4299,11 @@ namespace RiskOfCSharp2.Entities
                     Shield = MathF.Min(Run.PlayerMaxHp, Shield + 35.0f);
                     EnforcerParryTimer = 0.50f;
                     Run.ApplyDash(Run.PlayerForward * 24.0f * nrgMult, 0.22f);
+                    foreach (var e in CombatManager.Enemies.ToArray())
+                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos + Run.PlayerForward * 3.5f) <= 6.5f)
+                            ApplyEnforcerWallSplat(e, Run.PlayerForward, 6.5f);
                     PerformMeleeAttack(6.0f, 4.2f, 2.5f, Color.SkyBlue, stunDur: 1.8f, knockback: 5.0f, aoe: 3.2f);
-                    Run.ShowBanner("ТАРАННЫЙ ПРОРЫВ ЩИТОМ :: +35 ЩИТА И ОТБРАСЫВАНИЕ!", Color.SkyBlue, 1.6f);
+                    Run.ShowBanner("ТАРАННЫЙ ПРОРЫВ ЩИТОМ :: +35 ЩИТА И ТАРАН В СТЕНУ!", Color.SkyBlue, 1.6f);
                     return;
                 }
                 ShieldStance = !ShieldStance;
@@ -3975,6 +4333,11 @@ namespace RiskOfCSharp2.Entities
             }
             if (CharKey == "v1")
             {
+                if (TryUseV2Shift(myPos, shVar, nrgMult))
+                {
+                    ShiftCd = MathF.Max(0.35f, (shVar == 1 ? 5.0f : 3.8f) * alienCdr * burnCdr);
+                    return;
+                }
                 if (V1Stamina < 1.0f) { ShiftCd = 0.1f; return; }
                 V1Stamina -= 1.0f;
                 ShiftCd = 0.12f;
@@ -3990,13 +4353,15 @@ namespace RiskOfCSharp2.Entities
             new VisualFX(myPos + new Vector3(0, 1f, 0), Color.SkyBlue, 2.4f, 0.3f);
             if (CharKey == "commando")
             {
+                CommandoHeavyRounds = 4;
+                M1Cd = 0f;
                 if (shVar == 1)
                 {
                     Shield = MathF.Min(Run.PlayerMaxHp, Shield + 25.0f);
-                    M1Cd = 0f;
                     Run.ApplyDash(Run.PlayerForward * 34.0f * nrgMult, 0.25f);
                 }
                 else Run.ApplyDash(Run.PlayerForward * 28.0f * nrgMult, 0.22f);
+                Run.ShowBanner("ТАКТИЧЕСКАЯ ПЕРЕЗАРЯДКА :: 4 БРОНЕБОЙНЫХ ПАТРОНА ГОТОВЫ!", Color.Gold, 1.3f);
             }
             else if (CharKey == "artificer")
             {
@@ -4019,6 +4384,9 @@ namespace RiskOfCSharp2.Entities
             }
             else if (CharKey == "buzz")
             {
+                if (TryUseZurgShift(myPos, shVar, nrgMult))
+                    return;
+                BuzzWingGlideReady = true;
                 Run.PlayerVelY = 18.5f; Run.PlayerGrounded = false;
                 Run.ApplyDash(Run.PlayerForward * 24.0f * nrgMult, 0.36f);
                 if (shVar == 1)
@@ -4138,8 +4506,16 @@ namespace RiskOfCSharp2.Entities
                 Run.PlayerVelY = 11.5f;
                 Run.PlayerGrounded = false;
                 Run.ApplyDash(Run.PlayerForward * (shVar == 1 ? 30.0f : 26.0f) * nrgMult, 0.26f);
-                int hits = PerformMeleeAttack(6.5f, 4.2f, 2.2f, Rgb(95, 255, 215), stunDur: 2.2f, aoe: 2.8f);
+                int hits = PerformMeleeAttack(6.5f, 4.2f, 2.2f, Rgb(95, 255, 215), stunDur: 1.2f, aoe: 2.8f);
                 if (shVar == 1 && hits > 0) SlarkEssenceStacks = Math.Min(40, SlarkEssenceStacks + hits * 2);
+                var leashT = CombatManager.FindNearestHostileAt(myPos + Run.PlayerForward * 4.5f);
+                if (leashT != null && Vector3.Distance(myPos, leashT.Position) <= 9.0f)
+                {
+                    leashT.LeashTimer = 3.8f;
+                    leashT.LeashOrigin = leashT.Position;
+                    new LightningBeam(myPos + Vector3.UnitY, leashT.Position + Vector3.UnitY, Rgb(85, 255, 215), 0.24f);
+                    Run.ShowBanner("ПОВОДОК СЛАРКА (POUNCE) :: ЦЕЛЬ ПРИКОВАННА В РАДИУСЕ 4.5М!", Rgb(85, 255, 215), 1.6f);
+                }
             }
             else if (CharKey == "tidehunter")
             {
@@ -4149,11 +4525,13 @@ namespace RiskOfCSharp2.Entities
             }
             else if (CharKey == "freeman")
             {
+                FreemanBlueGravTimer = 6.5f;
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + (shVar == 1 ? 50.0f : 25.0f));
                 if (shVar == 1) Run.HealPlayer(Run.PlayerMaxHp * 0.20f);
                 Run.PlayerVelY = 12.0f;
                 Run.PlayerGrounded = false;
                 Run.ApplyDash(Run.PlayerForward * 29.0f * nrgMult, 0.26f);
+                Run.ShowBanner("ПЕРЕГРУЗКА ЦИТАДЕЛИ :: СИНЯЯ ГРАВИ-ПУШКА АКТИВНА (6.5 СЕК — ЗАХВАТ ВРАГОВ [ПКМ])!", Color.SkyBlue, 2.0f);
             }
             else if (CharKey == "cheburashka")
             {
@@ -4229,23 +4607,49 @@ namespace RiskOfCSharp2.Entities
                 }
                 else
                 {
-                    SoundManager.Play("explosion", 0.75f, 1.15f);
+                    SoundManager.Play("explosion", 0.85f, 1.10f);
                     new VisualFX(myPos + new Vector3(0, 0.8f, 0), Rgb(255, 80, 45), 7.2f, 0.35f);
                     PerformMeleeAttack(6.2f, 5.2f, 2.4f, Rgb(255, 80, 45), stunDur: 1.4f, knockback: 5.0f, aoe: 4.5f);
+                    WMines.RemoveAll(m => !IsValid(m));
+                    int detCount = WMines.Count;
+                    foreach (var mine in WMines.ToArray())
+                        if (IsValid(mine)) mine.Detonate(1.35f);
+                    WMines.Clear();
                     Run.PlayerVelY = 16.5f; Run.PlayerGrounded = false;
-                    Run.ApplyDash(Run.PlayerForward * 25.0f * nrgMult, 0.26f);
-                    if (shVar == 1) HazeSmokeTimer = 2.8f;
+                    Run.ApplyDash((shVar == 1 ? -Run.PlayerForward : Run.PlayerForward) * 25.0f * nrgMult, 0.26f);
+                    if (detCount > 0)
+                        Run.ShowBanner($"ДЕТОНАТОР W :: ПОДОРВАНО МИН: {detCount} (x1.35 УРОН)!", Rgb(255, 75, 55), 1.8f);
                 }
             }
             else if (CharKey == "gold_ship")
             {
                 GoldShipMomentum = 1.0f;
-                GoldShipSpurtTimer = shVar == 1 ? 4.0f : 5.5f;
+                GoldShipSpurtTimer = shVar == 1 ? 4.5f : 5.5f;
                 if (shVar == 1) M2Cd = 0f;
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + 35.0f);
-                Run.ApplyDash(Run.PlayerForward * (shVar == 1 ? 38.0f : 33.0f) * nrgMult, 0.26f);
-                PerformMeleeAttack(6.5f, 4.5f, 2.2f * GoldShipSpeedScale, Color.Gold, knockback: 5.5f, aoe: 3.5f);
-                Run.ShowBanner("ФИНИШНЫЙ СПУРТ ГОЛД ШИП :: МАКСИМАЛЬНЫЙ РАЗБЕГ И ТАРАН!", Color.Gold, 2.0f);
+                int gateRoll = _rng.Next(3);
+                if (gateRoll == 0)
+                {
+                    Run.ApplyDash(Run.PlayerForward * 44.0f * nrgMult, 0.28f);
+                    PerformMeleeAttack(7.2f, 5.0f, 2.6f * GoldShipSpeedScale, Color.Gold, knockback: 6.5f, aoe: 4.0f);
+                    Run.ShowBanner("ВОРОТА СТАРТА [1/3] :: ИДЕАЛЬНЫЙ СТАРТ ГОЛД ШИП (СВЕРХЗВУКОВОЙ СПУРТ)!", Color.Gold, 2.0f);
+                }
+                else if (gateRoll == 1)
+                {
+                    Run.PlayerVelY = 18.5f; Run.PlayerGrounded = false;
+                    Run.ApplyDash(Run.PlayerForward * 28.0f * nrgMult, 0.26f);
+                    new VisualFX(myPos + Vector3.UnitY, Color.Gold, 9.5f, 0.38f);
+                    PerformMeleeAttack(8.5f, 7.0f, 3.1f * GoldShipSpeedScale, Color.Gold, stunDur: 2.2f, knockback: 7.0f, aoe: 5.5f);
+                    Run.ShowBanner("ВОРОТА СТАРТА [2/3] :: ВСТАЛА НА ДЫБЫ НА СТАРТЕ (ОГЛУШАЮЩИЙ ВЗРЫВ)!", Color.Orange, 2.0f);
+                }
+                else
+                {
+                    Shield = MathF.Min(Run.PlayerMaxHp, Shield + 35.0f);
+                    Run.ApplyDash(Vector3.Normalize(Run.PlayerForward + Run.PlayerEntity.Right * 0.45f) * 38.0f * nrgMult, 0.28f);
+                    for (int i = -1; i <= 1; i++)
+                        new Projectile(myPos + new Vector3(0, 1.4f, 0), Vector3.Normalize(GetAimDirection() + Run.PlayerEntity.Right * (i * 0.16f)), 68f, BaseDamage * 1.95f * GoldShipSpeedScale, 0.45f, Color.Gold, isPlayer: true, aoe: 4.2f, pierce: true);
+                    Run.ShowBanner("ВОРОТА СТАРТА [3/3] :: БЕЗУМНЫЙ БОКОВОЙ ОБГОН ПО ВНЕШНЕЙ БРОВКЕ!", Rgb(255, 215, 75), 2.0f);
+                }
             }
             else if (CharKey == "pushnoy")
             {
@@ -4270,6 +4674,8 @@ namespace RiskOfCSharp2.Entities
             }
             else if (CharKey == "freddy")
             {
+                SpendFreddyBattery(24f);
+                FreddyCamStealthTimer = 3.5f;
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + 35.0f);
                 if (shVar == 1)
                 {
@@ -4337,15 +4743,15 @@ namespace RiskOfCSharp2.Entities
                 M1Cd = 0f;
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + 35.0f);
                 Run.ApplyDash(Run.PlayerForward * 31.0f * nrgMult, 0.26f);
-                if (shVar == 1)
-                    Run.StageEntities.Add(new TearGasZone(myPos, BaseDamage * 0.85f));
-                Run.ShowBanner("ЗМЕИНЫЙ ПОДКАТ ВАЙПЕР :: +50% СКОРОСТРЕЛЬНОСТИ И УКЛОНЕНИЕ!", Rgb(85, 255, 95), 1.6f);
+                Run.StageEntities.Add(new VyperVenomPoolEntity(myPos, BaseDamage * (shVar == 1 ? 0.95f : 0.65f)));
+                Run.ShowBanner("ЗМЕИНЫЙ ПОДКАТ ВАЙПЕР :: ЯДОВИТЫЙ СЛЕД, УКЛОНЕНИЕ 25% И +50% АТАКИ!", Rgb(85, 255, 95), 1.6f);
             }
             else if (CharKey == "haze")
             {
                 HazeSmokeTimer = 4.5f;
+                HazeAmbushReady = true;
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + 35.0f);
-                Run.StageEntities.Add(new HallowedMistZone(myPos, BaseDamage * 0.55f));
+                new VisualFX(myPos + new Vector3(0, 1.1f, 0), Rgb(48, 42, 68), 6.5f, 0.45f);
                 if (shVar == 1)
                 {
                     Vector3 targetPos = myPos + Run.PlayerForward * (15.0f * nrgMult);
@@ -4358,7 +4764,7 @@ namespace RiskOfCSharp2.Entities
                 {
                     Run.ApplyDash(Run.PlayerForward * 26.0f * nrgMult, 0.22f);
                 }
-                Run.ShowBanner("ДЫМОВАЯ ЗАВЕСА ХЕЙЗ :: НЕВИДИМОСТЬ И +42% СКОРОСТИ!", Rgb(255, 195, 70), 1.8f);
+                Run.ShowBanner("ДЫМОВАЯ НЕВИДИМОСТЬ ХЕЙЗ :: ВРАГИ ТЕРЯЮТ ВАС ИЗ ВИДУ (+16 ФИКСАЦИИ ИЗ ЗАСАДЫ)!", Rgb(255, 195, 70), 1.8f);
             }
             else if (CharKey == "dmc_trio")
             {
@@ -4392,6 +4798,7 @@ namespace RiskOfCSharp2.Entities
                 else if (dmcForm == 2) // ВЕРГИЛИЙ
                 {
                     M1Cd = 0f;
+                    VergilJustCutWindow = 0.40f;
                     Shield = MathF.Min(Run.PlayerMaxHp, Shield + (shVar == 1 ? 55.0f : 35.0f));
                     if (shVar == 1)
                     {
@@ -4407,12 +4814,13 @@ namespace RiskOfCSharp2.Entities
                 }
                 else // ДАНТЕ
                 {
-                    if (shVar == 1)
+                    if (shVar == 1 || DanteStyle == 3)
                     {
+                        DanteStyle = 3;
+                        DanteRoyalBlockTimer = 1.35f;
                         Shield = MathF.Min(Run.PlayerMaxHp, Shield + 60.0f);
-                        EnforcerParryTimer = 1.2f;
-                        PerformMeleeAttack(6.5f, 5.0f, 3.2f, Color.Gold, lifesteal: 8.0f, stunDur: 1.8f, aoe: 4.5f);
-                        Run.ShowBanner("СТИЛЬ «ROYAL GUARD» :: КОРОЛЕВСКИЙ КОНТРУДАР И +60 ЩИТА!", Color.Gold, 1.8f);
+                        PerformMeleeAttack(6.5f, 5.0f, 2.8f, Color.Gold, lifesteal: 8.0f, stunDur: 1.8f, aoe: 4.5f);
+                        Run.ShowBanner("СТИЛЬ «ROYAL GUARD» :: БЛОК ОТКРЫТ (ПКМ — ROYAL RELEASE)!", Color.Gold, 1.8f);
                     }
                     else
                     {
@@ -4428,6 +4836,19 @@ namespace RiskOfCSharp2.Entities
                 SanabiMomentum = 1.0f;
                 M1Cd = 0f;
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + (shVar == 1 ? 60.0f : 45.0f));
+                var vaultEnemy = CombatManager.FindNearestHostileAt(myPos + Run.PlayerForward * 4.0f);
+                if (vaultEnemy != null && Vector3.Distance(myPos, vaultEnemy.Position) <= 9.0f)
+                {
+                    M2Cd = 0f;
+                    if (!vaultEnemy.IsBoss) vaultEnemy.StunTimer = MathF.Max(vaultEnemy.StunTimer, 1.6f);
+                    CombatManager.ApplyPlayerHitEffects(vaultEnemy, vaultEnemy.Position + Vector3.UnitY, BaseDamage * 2.5f, Rgb(70, 235, 255), aoe: 3.0f);
+                    Run.PlayerVelY = 22.5f;
+                    Run.PlayerGrounded = false;
+                    Run.ApplyDash(Run.PlayerForward * 26.0f * nrgMult, 0.28f);
+                    new VisualFX(vaultEnemy.Position + new Vector3(0, vaultEnemy.HitHeight, 0), Color.Gold, 4.5f, 0.28f);
+                    Run.ShowBanner("ОТСКОК ОТ ГОЛОВЫ ВРАГА :: СБРОС КРЮКА И ВЗЛЁТ!", Color.Gold, 1.5f);
+                    return;
+                }
                 Vector3 swingAnchor = myPos + Run.PlayerForward * 9.0f + new Vector3(0, 11.0f, 0);
                 new LightningBeam(myPos + new Vector3(0, 1.5f, 0), swingAnchor, Rgb(70, 235, 255), 0.24f);
                 if (shVar == 1)
@@ -4502,10 +4923,19 @@ namespace RiskOfCSharp2.Entities
         public void UseRSkill()
         {
             if (SkillLockTimer > 0f) return;
+            OnExpansionItemSkillUsed("r");
             int rVar = SkillVar("r");
+            if (TryUsePack1R(rVar) || TryUsePack2R(rVar))
+                return;
 
             if (CharKey == "v1")
             {
+                if (TryUseV2R(rVar))
+                {
+                    float v2Cell = MathF.Pow(0.80f, CombatManager.GetItemCount("alien_head")) * MathF.Pow(0.75f, CombatManager.GetItemCount("lysate_cell"));
+                    RCd = MathF.Max(0.8f, (rVar == 1 ? 14.0f : 4.5f) * v2Cell);
+                    return;
+                }
                 V1UseWhiplash();
                 if (rVar == 1)
                 {
@@ -4588,49 +5018,73 @@ namespace RiskOfCSharp2.Entities
                     BarrageTimer = 0.01f;
                 }
             }
-            else if (CharKey is "artificer" or "aigis")
+            else if (CharKey == "artificer")
             {
-                if (CharKey == "aigis") Shield = MathF.Min(Run.PlayerMaxHp, Shield + (rVar == 1 ? 65.0f : 45.0f));
-                if (CharKey == "artificer" && rVar == 1)
+                if (rVar == 1)
                 {
-                    for (int i = 1; i <= 7; i++)
-                        Run.StageEntities.Add(new GunFlamePillar(myPos + Run.PlayerForward * (i * 2.6f), i * 0.04f, BaseDamage * 2.2f));
-                    return;
+                    Run.StageEntities.Add(new ArtificerFlamethrowerEntity(this));
+                    Run.ShowBanner("ОГНЕМЁТ ТЕХНОМАГА :: ПОТОК ПЛАЗМЕННОГО ПЛАМЕНИ (2.3 СЕК)!", Rgb(255, 120, 30), 2.0f);
                 }
-                int count = CharKey == "aigis" ? (rVar == 1 ? 8 : 6) : 5;
-                for (int i = 0; i < count; i++)
+                else
                 {
-                    Vector3 tPos;
-                    if (i < CombatManager.Enemies.Count && IsValid(CombatManager.Enemies[i]) && !CombatManager.Enemies[i].IsAlly)
-                        tPos = CombatManager.Enemies[i].Position;
-                    else
+                    Run.PlayerVelY = 21.0f;
+                    Run.PlayerGrounded = false;
+                    Shield = MathF.Min(Run.PlayerMaxHp, Shield + 45.0f);
+                    new VisualFX(myPos + new Vector3(0, 1.2f, 0), Color.SkyBlue, 9.5f, 0.38f);
+                    foreach (var e in CombatManager.Enemies.ToArray())
                     {
-                        float ang = (i / (float)count) * MathF.PI * 2f;
-                        tPos = myPos + new Vector3(MathF.Cos(ang) * 8.5f, 0, MathF.Sin(ang) * 8.5f);
+                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(myPos, e.Position) <= 10.5f)
+                        {
+                            e.ApplyArtificerElement("shock", BaseDamage);
+                            CombatManager.ApplyPlayerHitEffects(e, e.Position + Vector3.UnitY, BaseDamage * 2.8f, Color.SkyBlue, aoe: 2.5f);
+                        }
                     }
-                    new OrbitalStrikeFX(tPos, BaseDamage * (CharKey == "aigis" ? 3.2f : 2.2f));
+                    Run.StageEntities.Add(new ArtificerIonSphereEntity(myPos + new Vector3(0, 2.4f, 0), BaseDamage * 1.95f));
+                    Run.ShowBanner("ИОННЫЙ ВСПЛЕСК :: ВЗЛЁТ ENV И ПАРЯЩАЯ СФЕРА ШОКА!", Color.SkyBlue, 2.2f);
                 }
+            }
+            else if (CharKey == "aigis")
+            {
+                Shield = MathF.Min(Run.PlayerMaxHp, Shield + (rVar == 1 ? 80.0f : 55.0f));
+                AigisTetrakarnCharges = 3;
+                Run.StageEntities.Add(new AthenaPersonaEntity(myPos));
+                new VisualFX(myPos + new Vector3(0, 1.8f, 0), Color.Gold, 11.0f, 0.42f);
+                if (rVar == 1)
+                {
+                    foreach (var e in CombatManager.Enemies.ToArray())
+                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(myPos, e.Position) <= 15.0f)
+                            CombatManager.ApplyPlayerHitEffects(e, e.Position + Vector3.UnitY, BaseDamage * 3.8f, Color.Gold, aoe: 3.0f, lifesteal: 5.0f);
+                }
+                Run.ShowBanner("ПЕРСОНА: АФИНА (ПАЛЛАДИОН) :: АВТО-КОПЬЁ И 3 ЗАРЯДА ТЕТРАКАРНА!", Color.Gold, 2.6f);
             }
             else if (CharKey == "huntress")
             {
-                Run.PlayerVelY = 14.0f; Run.PlayerGrounded = false;
+                Run.PlayerVelY = 17.5f; Run.PlayerGrounded = false;
                 if (rVar == 1)
                 {
-                    foreach (float deg in new[] { -8f, 0f, 8f })
-                    {
-                        float rad = deg * (MathF.PI / 180f);
-                        Vector3 d = Vector3.Normalize(new Vector3(aimDir.X * MathF.Cos(rad) - aimDir.Z * MathF.Sin(rad), aimDir.Y, aimDir.X * MathF.Sin(rad) + aimDir.Z * MathF.Cos(rad)));
-                        new Projectile(myPos + new Vector3(0, 1.8f, 0), d, 115f, BaseDamage * 3.1f, 0.55f, Rgb(255, 85, 130), isPlayer: true, aoe: 4.8f, pierce: true);
-                    }
+                    HuntressBallistaShots = 3;
+                    HuntressBallistaTimer = 5.5f;
+                    M1Cd = 0f;
+                    Run.ShowBanner("НЕБЕСНАЯ БАЛЛИСТА :: НАЖМИТЕ [ЛКМ] 3 РАЗА В ПАРЕНИИ ДЛЯ ПРИЦЕЛЬНЫХ ЗАЛПОВ!", Rgb(255, 85, 130), 2.4f);
                 }
                 else Run.StageEntities.Add(new ArrowRainZone(myPos + Run.PlayerForward * 12.0f, BaseDamage * 0.75f));
             }
             else if (CharKey == "buzz")
             {
+                if (TryUseZurgR(rVar))
+                    return;
+                BuzzWingGlideReady = true;
                 if (rVar == 1)
                 {
-                    new OrbitalStrikeFX(myPos + Run.PlayerForward * 10.0f, BaseDamage * 5.2f);
                     Shield = MathF.Min(Run.PlayerMaxHp, Shield + 45.0f);
+                    foreach (float deg in new[] { -18f, 0f, 18f })
+                    {
+                        float rad = deg * (MathF.PI / 180f);
+                        Vector3 f = Run.PlayerForward;
+                        Vector3 d = Vector3.Normalize(new Vector3(f.X * MathF.Cos(rad) - f.Z * MathF.Sin(rad), 0f, f.X * MathF.Sin(rad) + f.Z * MathF.Cos(rad)));
+                        Run.StageEntities.Add(new BuzzStarLaserSweepEntity(myPos + d * 4.5f, d, BaseDamage * 1.85f));
+                    }
+                    Run.ShowBanner("ЗВЁЗДНОЕ КОМАНДОВАНИЕ :: ОРБИТАЛЬНАЯ ЛАЗЕРНАЯ РАЗВЁРТКА!", Color.Lime, 2.2f);
                 }
                 else
                 {
@@ -4787,11 +5241,12 @@ namespace RiskOfCSharp2.Entities
                     }
                 }
                 foreach (var c in DummyClones) { c.Hp = c.MaxHp; c.CommandBurstShot(); }
+                Vector3 jupPos = Physics.ResolveHorizontalCollision(myPos + Run.PlayerForward * 3.2f, 0.9f, myPos.Y);
+                jupPos.Y = Physics.GetSurfaceHeight(jupPos.X, jupPos.Z, myPos.Y + 1.5f);
+                Run.StageEntities.Add(new M4JupiterCannonEntity(jupPos, Run.PlayerEntity.RotationY));
                 if (rVar == 1)
-                {
-                    new OrbitalStrikeFX(myPos + Run.PlayerForward * 10.0f, BaseDamage * 3.8f);
-                }
-                Run.ShowBanner($"СИСТЕМА DUMMY LINK :: АВТОНОМНЫЙ ОТРЯД M4A1 ({DummyClones.Count}/4 КЛОНОВ)!", Rgb(95, 255, 135), 2.6f);
+                    Shield = MathF.Min(Run.PlayerMaxHp, Shield + 65.0f);
+                Run.ShowBanner($"ОРУДИЕ «ЮПИТЕР» + DUMMY LINK ({DummyClones.Count}/4 КЛОНОВ ПИТАЮТ ЛУЧ)!", Rgb(95, 255, 135), 2.6f);
             }
             else if (CharKey == "medic")
             {
@@ -4814,9 +5269,12 @@ namespace RiskOfCSharp2.Entities
                     Run.ShowBanner("КОНТРОЛЬ РАЗУМА :: ПРОТИВНИК ПЕРЕШЁЛ НА ВАШУ СТОРОНУ!", Color.Lime, 3.2f);
                     return;
                 }
-                UberTimer = rVar == 1 ? 8.0f : 6.5f;
-                Run.HealPlayer(Run.PlayerMaxHp * 0.50f);
-                Shield = MathF.Min(Run.PlayerMaxHp, Shield + 65.0f);
+                bool fullUber = MedicUberCharge >= 50f;
+                float bonusDur = fullUber ? 3.5f * (MedicUberCharge / 100f) : 0f;
+                if (fullUber) MedicUberCharge = 0f;
+                UberTimer = (rVar == 1 ? 8.0f : 6.5f) + bonusDur;
+                Run.HealPlayer(Run.PlayerMaxHp * (fullUber ? 0.80f : 0.50f));
+                Shield = MathF.Min(Run.PlayerMaxHp, Shield + (fullUber ? 110.0f : 65.0f));
                 if (Net.NetworkManager.Instance.Connected && Physics.SpecialMode != "pvp")
                 {
                     Net.NetworkManager.Instance.Broadcast(new System.Text.Json.Nodes.JsonObject
@@ -4878,6 +5336,8 @@ namespace RiskOfCSharp2.Entities
                     Run.Parts.ShieldAura.Enabled = true;
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + (rVar == 1 ? 85.0f : 50.0f));
                 Run.HealPlayer(Run.PlayerMaxHp * (rVar == 1 ? 0.50f : 0.35f));
+                Vector3 housePos = Physics.ResolveHorizontalCollision(myPos + Run.PlayerForward * 3.8f, 1.1f, myPos.Y);
+                Run.StageEntities.Add(new ChebFriendsHouseEntity(housePos));
                 new VisualFX(myPos + new Vector3(0, 1.5f, 0), Color.Gold, 11.0f, 0.45f);
                 foreach (var e in CombatManager.Enemies.ToArray())
                 {
@@ -4887,45 +5347,54 @@ namespace RiskOfCSharp2.Entities
                         CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 2.8f, Color.Gold, aoe: 2.5f);
                     }
                 }
-                Run.ShowBanner("СТЕНД ПРИЗВАН: «КРОКОДИЛ ГЕНА» (30 СЕКУНД) :: ПУСТЬ БЕГУТ НЕУКЛЮЖЕ!", Color.Gold, 4.0f);
+                Run.ShowBanner("СТЕНД «КРОКОДИЛ ГЕНА» + ДОМИК ДРУЗЕЙ ПОСТРОЕН!", Color.Gold, 4.0f);
             }
             else if (CharKey == "tidehunter")
             {
                 new VisualFX(myPos + new Vector3(0, 1.0f, 0), Rgb(75, 235, 185), 18.0f, 0.55f);
-                int cnt = rVar == 1 ? 16 : 12;
-                for (int i = 0; i < cnt; i++)
+                int innerCnt = rVar == 1 ? 10 : 8;
+                for (int i = 0; i < innerCnt; i++)
                 {
-                    float ang = (i / (float)cnt) * MathF.PI * 2f;
-                    Vector3 tPos = myPos + new Vector3(MathF.Cos(ang) * 10.5f, 0, MathF.Sin(ang) * 10.5f);
-                    new OrbitalStrikeFX(tPos, 0f);
+                    float ang = (i / (float)innerCnt) * MathF.PI * 2f;
+                    Vector3 tPos = myPos + new Vector3(MathF.Cos(ang) * 7.0f, 0, MathF.Sin(ang) * 7.0f);
+                    Run.StageEntities.Add(new AbyssalTentacleEntity(tPos, 0.03f, BaseDamage * (rVar == 1 ? 2.4f : 2.0f)));
+                }
+                int outerCnt = rVar == 1 ? 14 : 10;
+                for (int i = 0; i < outerCnt; i++)
+                {
+                    float ang = (i / (float)outerCnt) * MathF.PI * 2f + 0.2f;
+                    Vector3 tPos = myPos + new Vector3(MathF.Cos(ang) * 14.0f, 0, MathF.Sin(ang) * 14.0f);
+                    Run.StageEntities.Add(new AbyssalTentacleEntity(tPos, 0.18f, BaseDamage * (rVar == 1 ? 2.4f : 2.0f)));
                 }
                 foreach (var e in CombatManager.Enemies.ToArray())
                 {
                     if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= (rVar == 1 ? 21.0f : 18.0f))
                     {
-                        if (!e.IsBoss) e.StunTimer = MathF.Max(e.StunTimer, 2.8f);
+                        if (!e.IsBoss) { e.StunTimer = MathF.Max(e.StunTimer, 2.8f); e.VelY = MathF.Max(e.VelY, 13.5f); e.IsGrounded = false; }
                         e.SlowTimer = MathF.Max(e.SlowTimer, 4.5f);
                         if (rVar == 1) e.ArmorBreakTimer = MathF.Max(e.ArmorBreakTimer, 7.0f);
-                        CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * (rVar == 1 ? 4.4f : 3.8f), Rgb(80, 245, 195), aoe: 2.5f, lifesteal: 3.0f);
+                        CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * (rVar == 1 ? 3.2f : 2.6f), Rgb(80, 245, 195), aoe: 2.5f, lifesteal: 3.0f);
                     }
                 }
-                Run.ShowBanner("ОПУСТОШЕНИЕ (RAVAGE) :: ЗОВ ЛЕВИАФАНА БЕЗДНЫ!", Rgb(95, 255, 200), 3.0f);
+                Run.ShowBanner("ОПУСТОШЕНИЕ (RAVAGE) :: ЩУПАЛЬЦА ЛЕВИАФАНА ПРОНЗАЮТ АРЕНУ!", Rgb(95, 255, 200), 3.0f);
             }
             else if (CharKey == "dante")
             {
+                string[] sinnerNames = { "И САН", "ФАУСТ", "ДОН КИХОТ", "РЁШУ", "ХИТКЛИФФ", "ИЗМАИЛ" };
+                Color[] sinnerCols = { Rgb(185, 225, 255), Rgb(235, 235, 255), Color.Gold, Rgb(255, 65, 75), Rgb(165, 95, 245), Rgb(255, 145, 55) };
                 if (rVar == 1 && !Net.NetworkManager.Instance.Connected)
                 {
-                    // Судный Полдень: мощный взрыв Золотой Ветви вокруг без потери жизни Данте!
                     Shield = MathF.Min(Run.PlayerMaxHp, Shield + 80.0f);
                     DanteAtkBuffTimer = 9.0f;
                     DanteSpdBuffTimer = 9.0f;
-                    for (int i = 0; i < 8; i++)
+                    for (int i = 0; i < 6; i++)
                     {
-                        float ang = (i / 8f) * MathF.PI * 2f;
-                        Vector3 tPos = myPos + new Vector3(MathF.Cos(ang) * 9.0f, 0, MathF.Sin(ang) * 9.0f);
-                        new OrbitalStrikeFX(tPos, BaseDamage * 3.5f);
+                        float ang = (i / 6f) * MathF.PI * 2f;
+                        Vector3 tPos = myPos + new Vector3(MathF.Cos(ang) * 5.5f, 0, MathF.Sin(ang) * 5.5f);
+                        var targetE = CombatManager.FindNearestHostileAt(tPos);
+                        Run.StageEntities.Add(new DanteSinnerProjectionEntity(tPos, targetE, BaseDamage * 3.6f, sinnerNames[i], sinnerCols[i]));
                     }
-                    Run.ShowBanner("СУДНЫЙ ПОЛДЕНЬ :: КАРАЮЩИЙ РЕЗОНАНС ЗОЛОТОЙ ВЕТВИ!", Color.Gold, 3.0f);
+                    Run.ShowBanner("СУДНЫЙ ПОЛДЕНЬ :: 6 ГРЕШНИКОВ LIMBUS COMPANY АТАКУЮТ ЦЕЛИ!", Color.Gold, 3.0f);
                     return;
                 }
                 bool anyInjuredMinion = false;
@@ -4970,10 +5439,11 @@ namespace RiskOfCSharp2.Entities
                     DanteSpdBuffTimer = 9.0f;
                     for (int i = 0; i < 6; i++)
                     {
-                        Vector3 tPos = myPos + new Vector3(MathF.Cos(i * 1.047f) * 8.5f, 0, MathF.Sin(i * 1.047f) * 8.5f);
-                        new OrbitalStrikeFX(tPos, BaseDamage * 3.2f);
+                        Vector3 tPos = myPos + new Vector3(MathF.Cos(i * 1.047f) * 5.5f, 0, MathF.Sin(i * 1.047f) * 5.5f);
+                        var targetE = CombatManager.FindNearestHostileAt(tPos);
+                        Run.StageEntities.Add(new DanteSinnerProjectionEntity(tPos, targetE, BaseDamage * 3.4f, sinnerNames[i], sinnerCols[i]));
                     }
-                    Run.ShowBanner("ПОВОРОТ ЧАСОВ ВСПЯТЬ :: ЖЕРТВА HP РАДИ БАРЬЕРА И СИЛЫ ВЕТВИ!", Color.Gold, 3.2f);
+                    Run.ShowBanner("ПОВОРОТ ЧАСОВ ВСПЯТЬ :: ФАНТОМЫ ГРЕШНИКОВ ЗАЩИЩАЮТ МЕНЕДЖЕРА!", Color.Gold, 3.2f);
                 }
             }
             else if (CharKey == "lappland")
@@ -4985,15 +5455,21 @@ namespace RiskOfCSharp2.Entities
                 Run.HealPlayer(Run.PlayerMaxHp * 0.35f);
                 Color uCol = isDecadenza ? Rgb(225, 75, 255) : Color.White;
                 new VisualFX(myPos + new Vector3(0, 1.4f, 0), uCol, 14.0f, 0.45f);
-                for (int i = 0; i < (isDecadenza ? 8 : 6); i++)
+                int wolfCnt = isDecadenza ? 8 : 6;
+                for (int i = 0; i < wolfCnt; i++)
                 {
-                    float ang = (i / (isDecadenza ? 8f : 6f)) * MathF.PI * 2f;
-                    new OrbitalStrikeFX(myPos + new Vector3(MathF.Cos(ang) * 8.5f, 0, MathF.Sin(ang) * 8.5f), BaseDamage * 3.8f);
+                    float ang = (i / (float)wolfCnt) * MathF.PI * 2f;
+                    Vector3 wPos = myPos + new Vector3(MathF.Cos(ang) * 3.0f, 1.2f, MathF.Sin(ang) * 3.0f);
+                    var targetE = CombatManager.FindNearestHostileAt(myPos + new Vector3(MathF.Cos(ang) * 10f, 0, MathF.Sin(ang) * 10f));
+                    var wolf = new LapplandWolfSpiritEntity(wPos, targetE, BaseDamage * 2.8f, uCol);
+                    wolf.LookAt2D(myPos + new Vector3(MathF.Cos(ang) * 14f, 0, MathF.Sin(ang) * 14f));
+                    Run.StageEntities.Add(wolf);
                 }
                 foreach (var e in CombatManager.Enemies.ToArray())
                 {
                     if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 15.0f)
                     {
+                        e.SilenceTimer = MathF.Max(e.SilenceTimer, 6.0f);
                         if (!e.IsBoss) e.StunTimer = MathF.Max(e.StunTimer, 2.2f);
                         e.ArmorBreakTimer = MathF.Max(e.ArmorBreakTimer, 8.0f);
                         CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 4.2f, uCol, aoe: 3.0f, lifesteal: 5.0f);
@@ -5001,7 +5477,7 @@ namespace RiskOfCSharp2.Entities
                 }
                 Run.ShowBanner(isDecadenza
                     ? "ЛАППЛАНД ДЕКАДЕНЦА :: ГРАНД-ФИНАЛ КАРНАВАЛА СИРАКУЗ!"
-                    : "ВОЛЧИЙ ДУХ (WOLF SPIRIT) :: ИСТИННОЕ БЕЗУМИЕ ЛАППЛАНД!", uCol, 2.8f);
+                    : "ВОЛЧИЙ ДУХ (WOLF SPIRIT) :: СТАЯ БЕЛЫХ ВОЛКОВ СПУЩЕНА С ЦЕПИ!", uCol, 2.8f);
             }
             else if (CharKey == "w_arknights")
             {
@@ -5010,14 +5486,17 @@ namespace RiskOfCSharp2.Entities
                 SoundManager.Play("explosion", 1.15f, 0.80f);
                 if (isWisadel)
                 {
-                    WisadelTurretPos = myPos + Run.PlayerForward * 5.0f;
+                    WisadelAncestralCharges = 6;
                     WisadelTurretTimer = 11.0f;
                     Run.Parts.SetUltForm(true);
-                    LapplandFormTimer = 9.0f;
-                    for (int i = 0; i < 8; i++)
+                    WisadelShadows.RemoveAll(s => !IsValid(s));
+                    while (WisadelShadows.Count < 3)
                     {
-                        float ang = (i / 8f) * MathF.PI * 2f;
-                        new OrbitalStrikeFX(myPos + new Vector3(MathF.Cos(ang) * 9.5f, 0, MathF.Sin(ang) * 9.5f), BaseDamage * 3.8f);
+                        float ang = WisadelShadows.Count * 2.09f;
+                        Vector3 sPos = Physics.ResolveHorizontalCollision(myPos + new Vector3(MathF.Cos(ang) * 5.0f, 0, MathF.Sin(ang) * 5.0f), 0.8f, myPos.Y);
+                        var totem = new WisadelShadowTotemEntity(sPos);
+                        WisadelShadows.Add(totem);
+                        Run.StageEntities.Add(totem);
                     }
                 }
                 new VisualFX(myPos + Run.PlayerForward * 4.0f + new Vector3(0, 1.5f, 0), Rgb(255, 55, 75), 16.0f, 0.50f);
@@ -5025,24 +5504,33 @@ namespace RiskOfCSharp2.Entities
                 {
                     if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 18.0f)
                     {
-                        if (!e.IsBoss) e.StunTimer = MathF.Max(e.StunTimer, 2.8f);
+                        if (!e.IsBoss) e.StunTimer = MathF.Max(e.StunTimer, 2.4f);
                         e.ArmorBreakTimer = MathF.Max(e.ArmorBreakTimer, 8.0f);
-                        CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * (isWisadel ? 5.6f : 5.0f), Rgb(255, 65, 75), aoe: 4.0f, lifesteal: 6.0f);
+                        if (!isWisadel)
+                        {
+                            e.D12StickyTimer = 3.0f;
+                            e.D12AccumDmg = MathF.Max(e.D12AccumDmg, BaseDamage * 2.5f);
+                        }
+                        CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * (isWisadel ? 5.2f : 3.2f), Rgb(255, 65, 75), aoe: 4.0f, lifesteal: 6.0f);
                     }
                 }
                 Run.ShowBanner(isWisadel
-                    ? "ВИШАДЕЛЬ :: ВЗРЫВНАЯ ЗАРЯ КАЗДЕЛИ (EXPLOSIVE DAWN)!"
-                    : "МЕГА-БОМБА D12 :: «ТРИ, ДВА, ОДИН — БУ-У-УМ!!»", Rgb(255, 75, 85), 2.8f);
+                    ? "ВИШАДЕЛЬ :: ВЗРЫВНАЯ ЗАРЯ КАЗДЕЛИ (3 ТЕНИ + 6 ЗАРЯДОВ ПРЕДКОВ)!"
+                    : "БОМБА D12 НАКЛЕЕНА (3 СЕК) :: НАНОСИТЕ УРОН ЦЕЛЯМ ДО ДЕТОНАЦИИ!", Rgb(255, 75, 85), 2.8f);
             }
             else if (CharKey == "gold_ship")
             {
                 GoldShipMomentum = 1.0f;
                 GoldShipSpurtTimer = 9.0f;
                 Run.Parts.SetUltForm(true);
-                LapplandFormTimer = 9.0f;
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + 75.0f);
                 float spdScale = GoldShipSpeedScale;
                 new VisualFX(myPos + new Vector3(0, 1.2f, 0), Color.Gold, 15.0f, 0.48f);
+                for (int i = -1; i <= 1; i++)
+                {
+                    Vector3 dropP = myPos + Run.PlayerForward * 9.0f + Run.PlayerEntity.Right * (i * 5.0f);
+                    Run.StageEntities.Add(new GoldShipSkyAnchorEntity(dropP, BaseDamage * 3.2f * spdScale));
+                }
                 foreach (var e in CombatManager.Enemies.ToArray())
                 {
                     if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 15.0f)
@@ -5051,26 +5539,24 @@ namespace RiskOfCSharp2.Entities
                         CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 5.0f * spdScale, Color.Gold, aoe: 3.5f, lifesteal: 6.0f);
                     }
                 }
-                Run.ShowBanner($"ЧУДО АРИМА КИНЭН :: ПОЛНЫЙ ХОД НЕПОТОПЛЯЕМОГО КОРАБЛЯ (x{spdScale:F2})!", Color.Gold, 3.0f);
+                Run.ShowBanner($"ЧУДО АРИМА КИНЭН :: ПОЛНЫЙ ХОД И ТРОЙНОЙ СБРОС ЯКОРЕЙ (x{spdScale:F2})!", Color.Gold, 3.0f);
             }
             else if (CharKey == "pushnoy")
             {
                 PushnoyRockBuffTimer = 9.0f;
-                PushnoyTeslaPos = myPos + Run.PlayerForward * 3.5f;
+                PushnoyTeslaPos = Physics.ResolveHorizontalCollision(myPos + Run.PlayerForward * 3.5f, 0.9f, myPos.Y);
                 PushnoyTeslaTimer = 9.0f;
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + 65.0f);
                 SoundManager.Play("zap", 1.1f, 0.90f);
                 new VisualFX(myPos + new Vector3(0, 1.5f, 0), Color.SkyBlue, 14.0f, 0.45f);
-                for (int i = 0; i < 6; i++)
-                {
-                    float ang = (i / 6f) * MathF.PI * 2f;
-                    new OrbitalStrikeFX(myPos + new Vector3(MathF.Cos(ang) * 8.0f, 0, MathF.Sin(ang) * 8.0f), BaseDamage * 3.8f);
-                }
-                Run.ShowBanner("ГАЛИЛЕО МЕГА-СОЛО :: КАТУШКА ТЕСЛЫ И +45% РОК-ДРАЙВА (9 СЕК)!", Color.Orange, 3.0f);
+                Run.StageEntities.Add(new PushnoyTeslaTowerEntity(PushnoyTeslaPos));
+                Run.ShowBanner("ГАЛИЛЕО МЕГА-СОЛО :: МЕГАВАТТНАЯ БАШНЯ ТЕСЛЫ И +45% РОК-ДРАЙВА!", Color.Orange, 3.0f);
             }
             else if (CharKey == "freddy")
             {
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + 75.0f);
+                FreddyBattery = 0f;
+                FreddyPowerOutageTimer = rVar == 1 ? 6.0f : 4.5f;
                 FreddyBlackoutTimer = rVar == 1 ? 6.0f : 4.5f;
                 SoundManager.Play("boss_roar", 1.1f, 0.85f);
                 new VisualFX(myPos + new Vector3(0, 1.4f, 0), Color.Gold, 15.0f, 0.48f);
@@ -5095,8 +5581,8 @@ namespace RiskOfCSharp2.Entities
                     }
                 }
                 Run.ShowBanner(rVar == 1
-                    ? "IT'S ME :: ПРОБУЖДЕНИЕ ЗОЛОТОГО ФРЕДДИ И ПРИЗЫВ АНИМАТРОНИКОВ!"
-                    : "НОЧНАЯ СМЕНА FAZBEAR :: АНИМАТРОНИКИ ВЫШЛИ НА СЦЕНУ!", Color.Gold, 3.0f);
+                    ? "IT'S ME :: 0% БАТАРЕИ — ЗОЛОТОЙ ФРЕДДИ И АНИМАТРОНИКИ НА СЦЕНЕ!"
+                    : "НОЧНАЯ СМЕНА FAZBEAR :: 0% БАТАРЕИ — МАРШ ТОРЕАДОРА И АНИМАТРОНИКИ!", Color.Gold, 3.0f);
             }
             else if (CharKey == "steve")
             {
@@ -5104,10 +5590,12 @@ namespace RiskOfCSharp2.Entities
                 Run.HealPlayer(Run.PlayerMaxHp * 0.35f);
                 if (rVar == 1)
                 {
-                    DmcDevilTriggerTimer = 8.0f;
+                    SteveBeaconBuffTimer = 10.0f;
                     SteveWood += 3; SteveStone += 3; SteveIron += 2; SteveDiamond += 1;
+                    Vector3 bPos = Physics.ResolveHorizontalCollision(myPos + Run.PlayerForward * 3.2f, 0.9f, myPos.Y);
+                    Run.StageEntities.Add(new SteveBeaconEntity(bPos));
                     new VisualFX(myPos + new Vector3(0, 1.4f, 0), Color.Gold, 12.0f, 0.45f);
-                    Run.ShowBanner("ЗАЧАРОВАННОЕ ЗОЛОТОЕ ЯБЛОКО И МАЯК :: +РЕСУРСЫ И МОЩЬ!", Color.Gold, 2.8f);
+                    Run.ShowBanner("МАЯК СТИВА УСТАНОВЛЕН :: АУРА СПЕШКИ II, СИЛЫ II И +РЕСУРСЫ!", Color.Gold, 2.8f);
                 }
                 else
                 {
@@ -5119,7 +5607,13 @@ namespace RiskOfCSharp2.Entities
                         { hasNearWb = true; break; }
                     if (!hasNearWb)
                         Run.StageEntities.Add(new MinecraftWorkbench(new Vector3(wbPos.X, fy, wbPos.Z)));
-                    new OrbitalStrikeFX(myPos + Run.PlayerForward * 6.5f, BaseDamage * 4.8f);
+                    if (!IsValid(SteveActiveGolem))
+                    {
+                        Vector3 gPos = Physics.ResolveHorizontalCollision(myPos + Run.PlayerForward * 4.8f + Run.PlayerEntity.Right * 2.0f, 1.1f, myPos.Y);
+                        SteveActiveGolem = new SteveIronGolemEntity(gPos);
+                        Run.StageEntities.Add(SteveActiveGolem);
+                    }
+                    else SteveActiveGolem!.Hp = 380f;
                     Program.OpenSteveWorkbench();
                 }
             }
@@ -5137,9 +5631,9 @@ namespace RiskOfCSharp2.Entities
                 foreach (var e in CombatManager.Enemies.ToArray())
                 {
                     if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 16.0f)
-                        CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 4.2f, Color.Gold, aoe: 3.0f, lifesteal: 5.0f);
+                        CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 3.2f, Color.Gold, aoe: 3.0f, lifesteal: 5.0f);
                 }
-                Run.ShowBanner("STAR PLATINUM: THE WORLD! :: ВРЕМЯ ОСТАНОВЛЕНО НА 5 СЕКУНД!", Color.Gold, 3.2f);
+                Run.ShowBanner("STAR PLATINUM: THE WORLD! :: НАКЛАДЫВАЙТЕ УРОН В ОСТАНОВКЕ ВРЕМЕНИ!", Color.Gold, 3.2f);
             }
             else if (CharKey == "vyper")
             {
@@ -5162,7 +5656,6 @@ namespace RiskOfCSharp2.Entities
                 HazeDanceTimer = rVar == 1 ? 5.5f : 4.5f;
                 HazeSmokeTimer = 4.5f;
                 Run.Parts.SetUltForm(true);
-                LapplandFormTimer = HazeDanceTimer;
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + 65.0f);
                 new VisualFX(myPos + new Vector3(0, 1.3f, 0), Rgb(255, 195, 70), 12.0f, 0.42f);
                 Run.ShowBanner("ТАНЕЦ ПУЛЬ (BULLET DANCE) :: ВИХРЬ СВИНЦА И ФИКСАЦИИ НА 360°!", Rgb(255, 195, 70), 2.8f);
@@ -5188,7 +5681,7 @@ namespace RiskOfCSharp2.Entities
                 }
                 else if (dmcForm == 2) // ВЕРГИЛИЙ
                 {
-                    ZaWarudoTimer = MathF.Max(ZaWarudoTimer, 1.6f);
+                    VergilConcentration = 100f;
                     new VisualFX(myPos + new Vector3(0, 1.5f, 0), Rgb(85, 225, 255), 20.0f, 0.52f);
                     for (int i = 0; i < 10; i++)
                     {
@@ -5198,70 +5691,61 @@ namespace RiskOfCSharp2.Entities
                         new LightningBeam(p1, p2, Rgb(95, 225, 255), 0.26f);
                     }
                     foreach (var e in CombatManager.Enemies.ToArray())
-                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 20.0f)
+                    {
+                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 22.0f)
+                        {
+                            e.VergilFreezeTimer = MathF.Max(e.VergilFreezeTimer, 2.4f);
                             CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 5.8f, Rgb(95, 225, 255), aoe: 3.5f, lifesteal: 6.0f);
+                        }
+                    }
                     Run.ShowBanner("ВЕРГИЛИЙ :: JUDGEMENT CUT END — «I AM THE STORM THAT IS APPROACHING!»", Rgb(95, 225, 255), 3.2f);
                 }
                 else // ДАНТЕ
                 {
+                    DanteRoyalGauge = 100f;
                     new VisualFX(myPos + new Vector3(0, 1.5f, 0), Rgb(255, 55, 70), 16.0f, 0.48f);
                     for (int i = 0; i < 8; i++)
                     {
                         float ang = (i / 8f) * MathF.PI * 2f;
-                        new OrbitalStrikeFX(myPos + new Vector3(MathF.Cos(ang) * 9.0f, 0, MathF.Sin(ang) * 9.0f), BaseDamage * 4.2f);
+                        Vector3 p1 = myPos + new Vector3(MathF.Cos(ang) * 12f, 0.6f, MathF.Sin(ang) * 12f);
+                        Vector3 p2 = myPos + new Vector3(MathF.Cos(ang + 2.8f) * 12f, 3.2f, MathF.Sin(ang + 2.8f) * 12f);
+                        new LightningBeam(p1, p2, Rgb(255, 45, 65), 0.30f);
                     }
                     foreach (var e in CombatManager.Enemies.ToArray())
-                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 15.0f)
-                            CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 5.2f, Rgb(255, 55, 70), aoe: 3.5f, lifesteal: 6.0f);
-                    Run.ShowBanner("ДАНТЕ :: SIN DEVIL TRIGGER ПРОБУЖДЁН (SSS — SMOKIN' SEXY STYLE)!", Rgb(255, 65, 80), 3.0f);
+                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 16.0f)
+                            CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 5.8f, Rgb(255, 55, 70), aoe: 3.5f, lifesteal: 6.0f);
+                    Run.ShowBanner("ДАНТЕ :: SIN DEVIL TRIGGER ПРОБУЖДЁН (SSS + 100% ROYAL GAUGE)!", Rgb(255, 65, 80), 3.0f);
                 }
             }
             else if (CharKey == "sanabi")
             {
                 SanabiMomentum = 1.0f;
                 SanabiOverdriveTimer = 9.0f;
-                LapplandFormTimer = 9.0f;
                 Run.Parts.SetUltForm(true);
                 M2Cd = 0f;
                 ShiftCd = 0f;
-                ZaWarudoTimer = MathF.Max(ZaWarudoTimer, 2.2f);
                 Shield = MathF.Min(Run.PlayerMaxHp, Shield + (rVar == 1 ? 100.0f : 85.0f));
                 Run.HealPlayer(Run.PlayerMaxHp * 0.40f);
                 SoundManager.Play("dante_clock", 1.15f, 0.85f);
+                Run.StageEntities.Add(new SanabiCyberSlashZoneEntity(myPos, BaseDamage * (rVar == 1 ? 2.4f : 1.95f)));
 
                 if (rVar == 1)
                 {
-                    // ПОЕЗД МАГО: ПОСЛЕДНИЙ ПРИКАЗ — ковровая бомбардировка и казнь всех врагов вокруг!
                     new VisualFX(myPos + new Vector3(0, 1.6f, 0), Rgb(255, 110, 25), 20.0f, 0.52f);
-                    for (int i = 0; i < 8; i++)
-                    {
-                        float ang = (i / 8f) * MathF.PI * 2f;
-                        Vector3 strikeP = myPos + new Vector3(MathF.Cos(ang) * 9.5f, 0, MathF.Sin(ang) * 9.5f);
-                        new OrbitalStrikeFX(strikeP, BaseDamage * 4.5f);
-                        new LightningBeam(myPos + new Vector3(0, 2.2f, 0), strikeP + new Vector3(0, 1.0f, 0), Rgb(255, 120, 30), 0.30f);
-                    }
                     foreach (var e in CombatManager.Enemies.ToArray())
                     {
                         if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 22.0f)
                         {
                             e.ArmorBreakTimer = MathF.Max(e.ArmorBreakTimer, 8.0f);
                             if (!e.IsBoss) e.StunTimer = MathF.Max(e.StunTimer, 3.0f);
-                            CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 5.8f, Rgb(255, 115, 25), aoe: 4.0f, lifesteal: 8.0f);
+                            CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 5.4f, Rgb(255, 115, 25), aoe: 4.0f, lifesteal: 8.0f);
                         }
                     }
                     Run.ShowBanner("ПОЕЗД МАГО: ПОСЛЕДНИЙ ПРИКАЗ :: «ПРОЩАЙ, МОЯ ДОЧКА МАРИ...»", Rgb(255, 130, 35), 3.5f);
                 }
                 else
                 {
-                    // ПРОТОКОЛ «SANABI»: ОВЕРДРАЙВ МАРИ — кибер-матрица Мари взламывает всех врагов вокруг!
                     new VisualFX(myPos + new Vector3(0, 1.6f, 0), Rgb(70, 235, 255), 18.0f, 0.50f);
-                    for (int i = 0; i < 10; i++)
-                    {
-                        float ang = (i / 10f) * MathF.PI * 2f;
-                        Vector3 p1 = myPos + new Vector3(MathF.Cos(ang) * 14f, 0.6f, MathF.Sin(ang) * 14f);
-                        Vector3 p2 = myPos + new Vector3(MathF.Cos(ang + 2.2f) * 14f, 3.8f, MathF.Sin(ang + 2.2f) * 14f);
-                        new LightningBeam(p1, p2, Rgb(70, 235, 255), 0.26f);
-                    }
                     foreach (var e in CombatManager.Enemies.ToArray())
                     {
                         if (IsValid(e) && !e.IsAlly && Vector3.Distance(e.Position, myPos) <= 20.0f)
@@ -5270,7 +5754,7 @@ namespace RiskOfCSharp2.Entities
                             new LightningBeam(myPos + new Vector3(0, 1.9f, 0), hitP, Rgb(70, 235, 255), 0.28f);
                             e.ArmorBreakTimer = MathF.Max(e.ArmorBreakTimer, 8.0f);
                             if (!e.IsBoss) e.StunTimer = MathF.Max(e.StunTimer, 2.8f);
-                            CombatManager.ApplyPlayerHitEffects(e, hitP, BaseDamage * 5.2f, Rgb(70, 235, 255), aoe: 3.5f, lifesteal: 7.0f);
+                            CombatManager.ApplyPlayerHitEffects(e, hitP, BaseDamage * 4.8f, Rgb(70, 235, 255), aoe: 3.5f, lifesteal: 7.0f);
                         }
                     }
                     Run.ShowBanner("ПРОТОКОЛ «SANABI» :: МАРИ АКТИВИРОВАЛА ПОЛНЫЙ ОВЕРДРАЙВ ЦЕПЬ-РУКИ (9 СЕК)!", Rgb(70, 235, 255), 3.4f);
@@ -5428,10 +5912,13 @@ namespace RiskOfCSharp2.Entities
 
         public void Update(float dt, bool isMoving)
         {
+            float m2Tick = GetExpansionCooldownTickMult("m2");
+            float shTick = GetExpansionCooldownTickMult("shift");
+            float rTick = GetExpansionCooldownTickMult("r");
             M1Cd = MathF.Max(0f, M1Cd - dt);
-            M2Cd = MathF.Max(0f, M2Cd - dt);
-            ShiftCd = MathF.Max(0f, ShiftCd - dt);
-            RCd = MathF.Max(0f, RCd - dt);
+            M2Cd = MathF.Max(0f, M2Cd - dt * m2Tick);
+            ShiftCd = MathF.Max(0f, ShiftCd - dt * shTick);
+            RCd = MathF.Max(0f, RCd - dt * rTick);
             ScoutSpeedBuff = MathF.Max(0f, ScoutSpeedBuff - dt);
             SkillLockTimer = MathF.Max(0f, SkillLockTimer - dt);
             PredatoryTimer = MathF.Max(0f, PredatoryTimer - dt);
@@ -5521,7 +6008,28 @@ namespace RiskOfCSharp2.Entities
                 }
             }
             if (UberTimer > 0f) { UberTimer -= dt; Run.HealPlayer(12.0f * dt); }
-            if (OrgiaTimer > 0f) OrgiaTimer -= dt;
+            if (OrgiaTimer > 0f)
+            {
+                OrgiaTimer -= dt;
+                if (OrgiaTimer <= 0f && CharKey == "aigis")
+                {
+                    AigisOverheatTimer = 2.2f;
+                    SoundManager.Play("flame", 0.85f, 0.85f);
+                    new VisualFX(Run.PlayerPos + new Vector3(0, 1.2f, 0), Color.Orange, 6.5f, 0.35f);
+                    foreach (var e in CombatManager.Enemies.ToArray())
+                    {
+                        if (IsValid(e) && !e.IsAlly && Vector3.Distance(Run.PlayerPos, e.Position) <= 6.5f + e.HitRadius)
+                        {
+                            Vector3 push = e.Position - Run.PlayerPos;
+                            push.Y = 0f;
+                            if (push.LengthSquared() > 0.01f)
+                                e.Position = Physics.ResolveHorizontalCollision(e.Position + Vector3.Normalize(push) * 4.5f, e.HitRadius, e.Y);
+                            CombatManager.ApplyPlayerHitEffects(e, e.Position + new Vector3(0, e.HitHeight, 0), BaseDamage * 2.15f, Color.Orange, aoe: 2.0f, canProc: true);
+                        }
+                    }
+                    Run.ShowBanner("ОХЛАЖДЕНИЕ ЯДРА ЭГИДЫ (2.2 СЕК :: -50% ВХОДЯЩЕГО УРОНА)!", Color.Orange, 1.8f);
+                }
+            }
             if (SlarkShadowTimer > 0f)
             {
                 SlarkShadowTimer -= dt;
@@ -6301,6 +6809,12 @@ namespace RiskOfCSharp2.Entities
                     FpLeftArm.RotationZ = Lerp(FpLeftArm.RotationZ, -inX * 4.0f - idleInspect * 14f, dt * 10.0f);
                 }
             }
+
+            UpdatePack1Skills(dt, isMoving);
+            UpdatePack2Skills(dt, isMoving);
+            UpdateReworkCoreMechanics(dt, isMoving);
+            UpdateReworkPackMechanics(dt, isMoving);
+            UpdateExpansionItems(dt, isMoving);
         }
 
         private void UpdateV1Mechanics(float dt, bool isMoving)
@@ -6393,6 +6907,9 @@ namespace RiskOfCSharp2.Entities
 
         public void TakeDamage(float amount, CombatTarget? attacker = null, string? customSource = null)
         {
+            // Мёртвый игрок и гость-наблюдатель полностью неосязаемы и не могут повторно получать урон или прокать предметы
+            if (Program.IsSpectating || Run.PlayerHp <= 0f)
+                return;
             // Во время катсцены разблокировки персонажа (и 2.5 сек после неё) игрок полностью неуязвим
             if (Program.IsCutsceneInvulnerable)
                 return;
@@ -6403,7 +6920,31 @@ namespace RiskOfCSharp2.Entities
             }
             if (CharKey == "enforcer" && EnforcerParryTimer > 0f)
             {
-                TryParryExternalAttack(amount, Run.PlayerPos + Run.PlayerForward * 3f);
+                TryParryExternalAttack(amount, attacker?.Position ?? (Run.PlayerPos + Run.PlayerForward * 3f));
+                return;
+            }
+            if (CharKey == "dmc_trio" && Data.ProgressData.Instance.GetSelectedSkin("dmc_trio") == 0 && DanteStyle == 3 && DanteRoyalBlockTimer > 0f)
+            {
+                TryParryExternalAttack(amount, attacker?.Position ?? (Run.PlayerPos + Run.PlayerForward * 3f));
+                return;
+            }
+            if (CharKey == "jotaro" && _rng.NextDouble() < 0.18)
+            {
+                SoundManager.Play("parry", 0.80f, 1.30f);
+                new VisualFX(Run.PlayerPos + new Vector3(0, 1.4f, 0), Rgb(195, 115, 255), 2.8f, 0.24f);
+                if (IsValid(attacker) && !attacker!.IsAlly && Vector3.Distance(Run.PlayerPos, attacker.Position) <= 9.0f + attacker.HitRadius)
+                {
+                    new LightningBeam(Run.PlayerPos + new Vector3(0, 1.4f, 0), attacker.Position + new Vector3(0, attacker.HitHeight, 0), Rgb(195, 115, 255), 0.18f);
+                    CombatManager.ApplyPlayerHitEffects(attacker, attacker.Position + new Vector3(0, attacker.HitHeight, 0), BaseDamage * 1.8f, Rgb(195, 115, 255), lifesteal: 4.0f, canProc: true);
+                }
+                Run.ShowBanner("『STAR PLATINUM』 :: АВТО-ОТРАЖЕНИЕ УДАРА!", Rgb(195, 115, 255), 1.0f);
+                return;
+            }
+            if (CharKey == "vyper" && VyperSlideTimer > 0f && _rng.NextDouble() < 0.25)
+            {
+                SoundManager.Play("dash", 0.72f, 1.35f);
+                new VisualFX(Run.PlayerPos + new Vector3(0, 1.1f, 0), Rgb(95, 255, 85), 2.5f, 0.22f);
+                Run.ShowBanner("СКОЛЬЖЕНИЕ ВАЙПЕР :: УКЛОНЕНИЕ ОТ АТАКИ!", Rgb(95, 255, 85), 0.95f);
                 return;
             }
             if (CharKey == "reimu" && !Run.PlayerGrounded)
@@ -6417,6 +6958,8 @@ namespace RiskOfCSharp2.Entities
                 new VisualFX(Run.PlayerPos + new Vector3(0, 1.4f, 0), ZhonyasStasisTimer > 0f ? Color.Gold : Rgb(255, 65, 85), 2.0f, 0.2f);
                 return;
             }
+            if (TryBlockPack1Hit(amount, attacker) || TryBlockPack2Hit(amount, attacker) || TryBlockExpansionItemHit(amount, attacker))
+                return;
 
             int safer = CombatManager.GetItemCount("safer_spaces");
             if (safer > 0 && SaferSpacesTimer <= 0f)
@@ -6437,6 +6980,28 @@ namespace RiskOfCSharp2.Entities
             }
 
             float dmg = amount * GameData.GetActiveDifficulty().PlayerDmgTakenMult;
+            if (CharKey == "aigis" && AigisTetrakarnCharges > 0)
+            {
+                AigisTetrakarnCharges--;
+                dmg *= 0.30f;
+                SoundManager.Play("parry", 0.95f, 1.22f);
+                new VisualFX(Run.PlayerPos + new Vector3(0, 1.35f, 0), Color.Gold, 3.6f, 0.28f);
+                if (IsValid(attacker) && !attacker!.IsAlly)
+                {
+                    float reflDmg = MathF.Max(amount * 2.5f, BaseDamage * 3.2f);
+                    new LightningBeam(Run.PlayerPos + new Vector3(0, 1.4f, 0), attacker.Position + new Vector3(0, attacker.HitHeight, 0), Color.Gold, 0.24f);
+                    CombatManager.ApplyPlayerHitEffects(attacker, attacker.Position + new Vector3(0, attacker.HitHeight, 0), reflDmg, Color.Gold, aoe: 2.0f, canProc: true);
+                }
+                Run.ShowBanner($"ТЕТРАКАРН АФИНЫ :: УДАР ОТРАЖЁН (ОСТАЛОСЬ ЗАРЯДОВ: {AigisTetrakarnCharges})!", Color.Gold, 1.2f);
+            }
+            if (CharKey == "aigis" && AigisOverheatTimer > 0f)
+                dmg *= 0.50f;
+            if (CharKey == "pushnoy" && dmg >= Run.PlayerMaxHp * 0.18f)
+            {
+                dmg *= 0.35f;
+                new VisualFX(Run.PlayerPos + new Vector3(0, 1.3f, 0), Color.SkyBlue, 3.2f, 0.25f);
+                Run.ShowBanner("НЕНЬЮТОНОВСКАЯ ЖИДКОСТЬ :: ТЯЖЁЛЫЙ УДАР ПОГЛОЩЁН (-65%)!", Color.SkyBlue, 1.2f);
+            }
             if (ShieldStance) dmg *= 0.35f;
             if (CharKey == "steve" && SteveArmorTier > 0)
                 dmg *= SteveArmorTier >= 3 ? 0.40f : (SteveArmorTier == 2 ? 0.55f : 0.75f);
@@ -6460,6 +7025,16 @@ namespace RiskOfCSharp2.Entities
             }
             if (PushnoyFluidShieldTimer > 0f)
                 dmg *= 0.55f;
+            dmg = ModifyPack1IncomingDamage(dmg, attacker);
+            dmg = ModifyPack2IncomingDamage(dmg, attacker);
+            dmg = ModifyExpansionItemIncomingDamage(dmg, attacker);
+            if (CharKey == "tidehunter")
+            {
+                dmg = MathF.Max(1.0f, dmg - (6.0f + Run.Stage * 3.0f));
+                TideKrakenDamageAccum += dmg;
+                if (TideKrakenDamageAccum >= Run.PlayerMaxHp * 0.28f)
+                    TriggerKrakenShellAnchorSmash();
+            }
 
             int buckler = CombatManager.GetItemCount("rose_buckler");
             if (buckler > 0) dmg /= (1.0f + 0.15f * buckler);
@@ -6492,11 +7067,19 @@ namespace RiskOfCSharp2.Entities
                 }
             }
 
+            bool hadV2Shield = Shield > 5.0f;
             if (Shield > 0f)
             {
                 float absorbed = MathF.Min(Shield, dmg);
                 Shield -= absorbed;
                 dmg -= absorbed;
+            }
+            if (IsV2Persona && hadV2Shield && Shield <= 0.01f && V2WingEnrageTimer <= 0f)
+            {
+                V2WingEnrageTimer = 5.0f;
+                SoundManager.Play("ult_cast", 0.90f, 1.25f);
+                new VisualFX(Run.PlayerPos + new Vector3(0, 1.35f, 0), Color.Red, 4.8f, 0.32f);
+                Run.ShowBanner("БРОНЯ V2 ПРОБИТА :: КРЫЛЬЯ В ЯРОСТИ (+30% СКОРОСТЬ И +35% СТРЕЛЬБА)!", Color.Red, 2.0f);
             }
 
             int zhonyas = CombatManager.GetItemCount("zhonyas_hourglass");
@@ -6513,13 +7096,30 @@ namespace RiskOfCSharp2.Entities
                 return;
             }
 
+            if (CharKey == "dmc_trio" && Data.ProgressData.Instance.GetSelectedSkin("dmc_trio") == 2 && dmg > 1.0f)
+                VergilConcentration = MathF.Max(0f, VergilConcentration - 22.0f);
+
             if (dmg > 0.5f)
                 SoundManager.Play("player_hurt");
+            Data.ReplayRecorder.AddDamageTaken(dmg);
             Program.RecordPlayerDamageSource(attacker ?? CombatManager.FindNearestHostileAt(Run.PlayerPos), dmg, customSource);
             Program.TriggerDamageFlash(dmg);
             Run.PlayerHp -= dmg;
+            if (CharKey == "freeman" && Run.PlayerHp > 0f && Run.PlayerHp <= Run.PlayerMaxHp * 0.28f && FreemanMorphineCd <= 0f)
+            {
+                FreemanMorphineCd = 25.0f;
+                Run.HealPlayer(Run.PlayerMaxHp * 0.28f);
+                Shield = MathF.Min(Run.PlayerMaxHp, Shield + 45.0f);
+                SoundManager.Play("heal");
+                new VisualFX(Run.PlayerPos + new Vector3(0, 1.3f, 0), Color.Orange, 4.2f, 0.30f);
+                Run.ShowBanner("КОСТЮМ HEV MK.IV :: «ВВЕДЁН МОРФИЙ!» (+HP И ЩИТ)", Color.Orange, 2.4f);
+            }
+            World.CharacterUnlockSystems.OnPlayerTookDamage(Run, dmg);
+            OnExpansionPostHpDamage(dmg, attacker);
             if (Run.PlayerHp <= 0f)
             {
+                if (TryPreventFatalDeathExpansion())
+                    return;
                 if (CharKey == "steve" && SteveHasTotem)
                 {
                     SteveHasTotem = false;

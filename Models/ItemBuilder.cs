@@ -7,7 +7,7 @@ using static RiskOfCSharp2.Core.Utils;
 
 namespace RiskOfCSharp2.Models
 {
-    public static class ItemBuilder
+    public static partial class ItemBuilder
     {
         public static Entity BuildItemMesh(Entity parentEntity, string itemKey)
         {
@@ -981,6 +981,9 @@ namespace RiskOfCSharp2.Models
                 new Entity(parent: root, model: "diamond", scale: new(0.38f, 0.42f, 0.38f), position: new(0, 0.20f, 0), color: Rgb(85, 205, 255), unlit: true);
                 new Entity(parent: root, model: "diamond", scale: new(0.38f, 0.42f, 0.38f), position: new(0, -0.20f, 0), color: Rgb(85, 205, 255), unlit: true);
                 new Entity(parent: root, model: "sphere", scaleUniform: 0.18f, position: new(0, 0, 0), color: Color.Gold, unlit: true);
+            }
+            else if (TryBuildExpansionItemMesh(root, itemKey, itemCol))
+            {
             }
             else
             {

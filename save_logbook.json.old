@@ -1,0 +1,586 @@
+{
+  "player_name": "EinKamerad",
+  "kills": 993,
+  "boss_kills": 5,
+  "max_stage": 1,
+  "unlocked_items": [
+    "syringe",
+    "hoof",
+    "bear",
+    "gasoline",
+    "iron_branch",
+    "sad_onion",
+    "leeching_seed",
+    "infusion",
+    "red_whip",
+    "maelstrom",
+    "behemoth",
+    "clover",
+    "silverash_truesilver",
+    "plasma_shrimp",
+    "polylute",
+    "safer_spaces",
+    "lysate_cell",
+    "desolator_void",
+    "sculk_catalyst",
+    "maw_of_void",
+    "seaborne_ichor",
+    "shaped_glass",
+    "transcendence",
+    "armlet_mordiggian",
+    "originium_prime",
+    "tonic_affliction",
+    "aegis",
+    "sticky_bomb",
+    "topaz_brooch",
+    "razorwire",
+    "dorans_blade",
+    "predatory",
+    "ludens_companion",
+    "monster_tooth",
+    "lens",
+    "crowbar",
+    "kjaro_band",
+    "will_o_wisp",
+    "focus_crystal",
+    "blade_ruined_king",
+    "liandrys_torment",
+    "opal",
+    "tesla_coil",
+    "frost_relic",
+    "tri_tip",
+    "energy_drink",
+    "wax_quill",
+    "alien_head",
+    "statikk_shiv",
+    "backup_mag",
+    "afterburner",
+    "harvester_scythe",
+    "ceremonial_dagger",
+    "bundle_fireworks",
+    "bison_steak",
+    "orirock_cluster",
+    "golden_apple",
+    "ukulele",
+    "ap_rounds",
+    "shattering_justice",
+    "feather",
+    "infinity_edge",
+    "poca_sp_battery",
+    "lunar_pauldron",
+    "damocles",
+    "sheen",
+    "stun_grenade",
+    "elytra_curse",
+    "zhonyas_hourglass",
+    "bandolier",
+    "guillotine",
+    "brimstone",
+    "totem_undying",
+    "atg_missile",
+    "rose_buckler",
+    "ender_pearl",
+    "rabadons_deathcap",
+    "repulsion_armor",
+    "boots_swiftness"
+  ],
+  "unlocked_characters": [
+    "commando",
+    "huntress",
+    "artificer",
+    "buzz",
+    "v1",
+    "sol",
+    "gwen",
+    "enforcer",
+    "scout",
+    "m4a1",
+    "medic",
+    "aigis",
+    "reimu",
+    "mindustry",
+    "slark",
+    "tidehunter",
+    "freeman",
+    "dante",
+    "cheburashka",
+    "ahri",
+    "lappland",
+    "w_arknights",
+    "gold_ship",
+    "pushnoy",
+    "freddy",
+    "steve",
+    "jotaro",
+    "vyper",
+    "haze",
+    "dmc_trio",
+    "sanabi",
+    "jack_o",
+    "apocalypse_bird",
+    "daitaku_helios",
+    "priestess",
+    "binah",
+    "don_quixote",
+    "closure",
+    "robin",
+    "spamton",
+    "komeiji",
+    "susie",
+    "false_son"
+  ],
+  "unlocked_achievements": [
+    "ach_overheal",
+    "ach_demolition",
+    "ach_shield_bearer",
+    "ach_thorns",
+    "ach_doran_start",
+    "ach_frenzy",
+    "ach_arcane_burst",
+    "ach_trophies",
+    "ach_slayer",
+    "ach_first_strike",
+    "ach_fire_band",
+    "ach_wisp_hunter",
+    "ach_close_combat",
+    "ach_carnage",
+    "ach_burn_bright",
+    "ach_untouched",
+    "ach_high_voltage",
+    "ach_blizzard",
+    "ach_bleeder",
+    "ach_marathon",
+    "ach_airborne",
+    "ach_cosmic_mind",
+    "ach_lightning_strike",
+    "ach_secondary_master",
+    "ach_supersonic",
+    "ach_crit_reaper",
+    "ach_ritual_blood",
+    "ach_char_commando",
+    "ach_chest_opener",
+    "ach_char_apocalypse_bird",
+    "ach_bison_hunt",
+    "ach_item_orirock",
+    "ach_char_daitaku_helios",
+    "ach_item_golden_apple",
+    "ach_traveler",
+    "ach_giant_killer",
+    "ach_armor_breaker",
+    "ach_boss",
+    "ach_boss_hunter",
+    "ach_boss_prts",
+    "ach_char_priestess",
+    "ach_lunar_stone",
+    "ach_boss_binah",
+    "ach_char_binah",
+    "ach_char_don_quixote",
+    "ach_char_closure",
+    "ach_stage3",
+    "ach_shock_tactics",
+    "ach_boss_septimus",
+    "ach_char_robin",
+    "ach_stage4",
+    "ach_skill_spam",
+    "ach_char_spamton",
+    "ach_elite_slayer",
+    "ach_char_komeiji",
+    "ach_boss_roaring_knight",
+    "ach_char_susie",
+    "ach_boss_false_son",
+    "ach_char_false_son",
+    "ach_hoarder",
+    "ach_combat_dash",
+    "ach_item_ender_pearl",
+    "ach_arsenal",
+    "ach_tank_hits",
+    "ach_wind_runner"
+  ],
+  "discovered_stages": [
+    "roost",
+    "safe_travels",
+    "acres",
+    "ionia",
+    "sundered",
+    "pvp",
+    "tracen_derby",
+    "aqueduct",
+    "originium_core",
+    "extraction_floor",
+    "sulfur",
+    "rallypoint",
+    "penacony_theater",
+    "terminal_lucidity",
+    "dark_sanctuary",
+    "aphelian",
+    "prime_meridian"
+  ],
+  "unlocked_skins": [
+    "v1_2",
+    "gold_ship_2",
+    "apocalypse_bird_2",
+    "apocalypse_bird_1",
+    "commando_2"
+  ],
+  "unlocked_skills": [
+    "jack_o_m1_1",
+    "sol_s2_m1_1",
+    "v1_m1_1",
+    "gold_ship_m1_1",
+    "slark_m1_1",
+    "mindustry_m1_1",
+    "apocalypse_bird_m1_1",
+    "apocalypse_bird_shift_1",
+    "apocalypse_bird_m2_1",
+    "false_son_m1_1",
+    "bird_trio_m1_1",
+    "spamton_m1_1",
+    "binah_m1_1",
+    "closure_m1_1",
+    "commando_m1_1",
+    "commando_r_1"
+  ],
+  "selected_skins": {
+    "dmc_trio": 0,
+    "dante": 0,
+    "sol": 0,
+    "lappland": 2,
+    "w_arknights": 2,
+    "gold_ship": 0,
+    "bird_trio": 2,
+    "priestess": 0,
+    "closure": 0,
+    "spamton": 0,
+    "susie": 0,
+    "binah": 0,
+    "don_quixote": 0,
+    "komeiji": 1
+  },
+  "selected_loadouts": {
+    "commando": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "artificer": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "huntress": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "buzz": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "v1": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "sol": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "gwen": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "enforcer": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "scout": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "m4a1": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "medic": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "aigis": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "reimu": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "mindustry": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "slark": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "tidehunter": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "freeman": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "dante": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "cheburashka": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ahri": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "lappland": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "w_arknights": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "gold_ship": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "pushnoy": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "freddy": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "steve": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "jotaro": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "vyper": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "haze": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "dmc_trio": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "sanabi": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "jack_o": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "sol_s2": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "lappland_s2": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "w_arknights_s2": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "susie": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "spamton": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "binah": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "don_quixote": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "priestess": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "closure": [
+      1,
+      0,
+      0,
+      0
+    ],
+    "daitaku_helios": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "robin": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "bird_trio": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "apocalypse_bird": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "komeiji": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "false_son": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "bird_trio_s1": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "bird_trio_s2": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "spamton_s2": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "don_quixote_s1": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "don_quixote_s2": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "komeiji_s1": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "selected_difficulty": "rainstorm",
+  "active_artifacts": [
+    "cmd"
+  ],
+  "mithrix_defeated": true,
+  "victories": 0,
+  "lunar_coins": 27
+}
